@@ -949,7 +949,7 @@ class Application(Generic[ApplicationStateType]):
             raise ValueError(
                 BASE_ERROR_MESSAGE
                 + f"Inputs starting with a double underscore ({starting_with_double_underscore}) "
-                f"are reserved for internal use/injected inputs. "
+                f"are reserved for internal use/injected inputs."
                 "Please do not directly pass keys starting with a double underscore."
             )
         inputs = inputs.copy()
@@ -1020,12 +1020,13 @@ class Application(Generic[ApplicationStateType]):
                 return None
             if inputs is None:
                 inputs = {}
+            action_inputs = self._process_inputs(inputs, next_action)
             if _run_hooks:
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "pre_run_step",
                     action=next_action,
                     state=self._state,
-                    inputs=inputs,
+                    inputs=action_inputs,
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
@@ -1040,12 +1041,10 @@ class Application(Generic[ApplicationStateType]):
                     # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
                     # which this is supposed to be its OK).
                     # this delegates hooks to the synchronous version, so we'll call all of them as well
-                    # In this case we allow the self._step to do input processing
-                    return self._step(
-                        inputs=inputs, _run_hooks=False
+                    next_action, result, new_state = self._step(
+                        inputs=action_inputs, _run_hooks=False
                     )  # Skip hooks as we already ran all of them/will run all of them in this function's finally
-                # In this case we want to process inputs because we run the function directly
-                action_inputs = self._process_inputs(inputs, next_action)
+                    return next_action, result, new_state
                 if next_action.single_step:
                     result, new_state = await _arun_single_step_action(
                         next_action, self._state, inputs=action_inputs
