@@ -15,6 +15,22 @@ Actions do the heavy-lifting in a workflow. They should contain all complex comp
 either through a class-based or function-based API. If actions implement ``async def run`` then will be run in an
 asynchronous context (and thus require one of the async application functions).
 
+.. note::
+    When implementing asynchronous actions with ``async def run``, you must also override the ``is_async`` method
+    to return ``True``. This tells the framework to execute the action in an asynchronous context:
+
+    .. code-block:: python
+
+        class AsyncAction(Action):
+            @property
+            def is_async(self) -> bool:
+                return True
+
+            async def run(self, state: State) -> dict:
+                # Async implementation
+                ...
+
+
 Actions have two primary responsibilities:
 
 1. ``run`` -- compute a result

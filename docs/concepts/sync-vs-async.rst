@@ -21,6 +21,31 @@ Burr gives you the ability to write synchronous (standard python) and asynchrono
    * :py:meth:`.run() <.Application.run()>`
    * :py:meth:`.stream_result() <.Application.stream_result()>`
 
+Checklist for Async Applications
+-------------------------------
+
+When building asynchronous applications with Burr, ensure you:
+
+1. **Use async action implementations**:
+   * Implement ``async def run`` methods in your actions
+   * Override the ``is_async`` property to return ``True`` in all async class-based actions
+   * Use ``await`` for all I/O operations inside your actions
+
+2. **Use async builder and application methods**:
+   * Use ``.abuild()`` instead of ``.build()``
+   * Use ``.arun()``, ``.aiterate()``, and ``.astream_result()`` instead of their sync counterparts
+
+3. **Use async hooks and persisters**:
+   * Implement async hooks with ``async def`` methods
+   * Use async persisters (e.g., ``AsyncPGPersister`` instead of ``PGPersister``)
+   * Properly clean up async resources using context managers or explicit cleanup calls
+
+4. **For parallel actions**:
+   * Make ``actions``, ``states``, and ``reduce`` methods async
+   * Override ``is_async`` to return ``True``
+   * Use ``AsyncGenerator`` return types
+   * Use async persisters with connection pools
+
 Comparison
 ----------
 

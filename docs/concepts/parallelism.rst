@@ -617,6 +617,106 @@ To do this, you would:
 3. Join them in parallel, waiting for any user-input if provided
 4. Decide after every step of the first graph whether you want to cancel the second graph or not -- E.G. is the user satisfied.
 
+
+Async Parallelism
+================
+
+Burr also supports asynchronous parallelism. When working in an async context, you need to make a few adjustments to your parallel actions:
+
+1. Make your methods async
+--------------------------
+
+The `action`, `states`, `reduce`, and other methods should be defined as async:
+
+.. code-block:: python
+
+    class AsyncMapActionsAndStatesExample(MapActionsAndStates):
+
+        async def action(self, state: State, inputs: Dict[str, Any]) -> AsyncGenerator[Action, None]:
+            # Yield multiple model components to run in parallel
+            for i, model_config in enumerate(self._model_configs):
+                yield ModelResponse(config=model_config).with_name(f"model_{i}")
+
+        async def states(self, state: State, inputs: Dict[str, Any]) -> AsyncGenerator[State, None]:
+            # Prepare the state with the user query
+            for prompt in [
+                "What is the meaning of life?",
+                "What is the airspeed velocity of an unladen swallow?",
+                "What is the best way to cook a steak?",
+            ]:
+                yield state.update(prompt=prompt)
+
+        async def reduce(self, state: State, states: AsyncGenerator[State, None]) -> State:
+            # Collect all model responses
+            all_responses = []
+            async for sub_state in states:
+                model_key = sub_state.get("model_key")
+                response = sub_state.get(model_key, [])[-1].get("content", "")
+                all_responses.append(response)
+
+            return state.update(ensemble_responses=all_responses)
+
+2. Implement the is_async method
+-------------------------------
+
+You must override the `is_async` method to return `True`:
+
+.. code-block:: python
+
+    class AsyncMapActionsAndStatesExample(MapActionsAndStates):
+
+        @property
+        def is_async(self) -> bool:
+            return True
+
+        # ... other methods ...
+
+3. Use async persisters with connection pools
+--------------------------------------------
+
+When using state persistence with async parallelism, make sure to use the async version of persisters and initialize them with a connection pool:
+
+.. code-block:: python
+
+    from burr.integrations.persisters.b_asyncpg import AsyncPGPersister
+
+    # Create an async persister with a connection pool
+    persister = AsyncPGPersister.from_values(
+        host="localhost",
+        port=5432,
+        user="postgres",
+        password="postgres",
+        database="burr",
+        use_pool=True  # Important for parallelism!
+    )
+
+    app = (
+        ApplicationBuilder()
+        .with_state_persister(persister)
+        .with_action(
+            async_parallel_action=AsyncMapActionsAndStatesExample(),
+        )
+        .abuild()
+    )
+
+Connection pools are crucial for handling concurrent operations. Direct connections cannot be shared across different tasks and may cause errors in concurrent scenarios.
+
+Remember to properly clean up your async persisters when you're done with them:
+
+.. code-block:: python
+
+    # Using as a context manager
+    async with AsyncPGPersister.from_values(..., use_pool=True) as persister:
+        # Use persister here
+
+    # Or manual cleanup
+    persister = AsyncPGPersister.from_values(..., use_pool=True)
+    try:
+        # Use persister here
+    finally:
+        await persister.cleanup()
+
+
 Notes
 =====
 
