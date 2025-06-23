@@ -112,3 +112,11 @@ Requirements for the serializer/deserializer functions:
 
     1. The serializer function needs to return a dictionary.
     2. Both function signatures needs to have a ``**kwargs`` parameter to allow for custom arguments to be passed in. We advise namespacing the kwargs provided to avoid conflicts with other serializers/deserializers.
+
+
+Limitations of State Serialization
+----------------------------------
+
+Currently, it is only possible to override the serialization and deserialization behavior of individual fields within a state.
+Overriding the serialization of the entire state object as a whole is not supported at this time.
+If you need custom handling, you must apply it at the field level.
