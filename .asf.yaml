@@ -1,0 +1,60 @@
+# https://cwiki.apache.org/confluence/display/INFRA/Git+-+.asf.yaml+features
+
+github:
+  description: "Build applications that make decisions (chatbots, agents, simulations, etc...). Monitor, trace, persist, and execute on your own infrastructure."
+  homepage: https://burr.apache.org/
+  labels:
+    - state-management
+    - ai
+    - state-machine
+    - graphs
+    - visibility
+    - persistent-data-structure
+    - hacktoberfest
+    - chatbot-framework
+    - dags
+    - burr
+    - mlops
+    - llms
+    - generative-ai
+    - llmops
+
+  protected_tags:
+    - "v*.*.*"
+
+  dependabot_alerts:  true
+  dependabot_updates: true
+
+  features:
+    # Enable wiki for documentation
+    wiki: true
+    # Enable issue management
+    issues: true
+    # Enable projects for project management boards
+    projects: true
+    # Enable github discussions
+    discussions: true
+
+  enabled_merge_buttons:
+    squash:  true
+    merge:   false
+    rebase:  true
+
+  protected_branches:
+    main:
+      required_status_checks:
+        # strict means "Require branches to be up to date before merging".
+        strict: false
+        # contexts are the names of checks that must pass
+        # contexts:
+      required_pull_request_reviews:
+        dismiss_stale_reviews: false
+        require_code_owner_reviews: false
+        required_approving_review_count: 1
+
+notifications:
+  commits:              commits@burr.apache.org
+  issues:               dev@hamilton.apache.org
+  pullrequests:         dev@hamilton.apache.org
+  discussions:          dev@hamilton.apache.org
+  jobs:                 dev@hamilton.apache.org
