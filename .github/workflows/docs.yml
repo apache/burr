@@ -21,8 +21,8 @@ jobs:
       PR_PATH: pull/${{github.event.number}}
       BASE_URL: https://burr.dagworks.io/pull/${{github.event.number}}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.12'
       - name: Install dependencies
