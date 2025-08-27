@@ -134,7 +134,7 @@ To make the above more concrete, let's look at a basic chatbot:
             state_persister,
             resume_at_next_action=True,
             default_state={"chat_history" : []},
-            default_entrypoint="human_converse
+            default_entrypoint="human_converse"
         )
         .with_state_persister(state_persister)
         .with_identifiers(app_id=app_id)
