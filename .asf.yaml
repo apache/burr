@@ -58,3 +58,10 @@ notifications:
   pullrequests:         notifications@burr.apache.org
   discussions:          notifications@burr.apache.org
   jobs:                 notifications@burr.apache.org
+
+staging:
+  profile: ~
+  whoami: asf-staging
+
+publish:
+  whoami: asf-site
