@@ -19,7 +19,7 @@
 
 import { ActionModel, ApplicationModel, Step } from '../../../api';
 
-import ELK from 'elkjs/lib/elk.bundled.js';
+import dagre from 'dagre';
 import React, { createContext, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import ReactFlow, {
   BaseEdge,
@@ -39,16 +39,14 @@ import { backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
 import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
 
-const elk = new ELK();
+const dagreGraph = new dagre.graphlib.Graph();
 
-const elkOptions = {
-  'elk.algorithm': 'layered',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
-  'elk.spacing.nodeNode': '80',
-  'org.eclipse.elk.alg.layered.options.CycleBreakingStrategy': 'GREEDY',
-  'org.eclipse.elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-  // 'org.eclipse.elk.layered.feedbackEdges': 'true',
-  'org.eclipse.elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP'
+const dagreOptions = {
+  rankdir: 'TB', // Top to bottom layout (equivalent to ELK's UP direction)
+  nodesep: 80, // Node separation (equivalent to elk.spacing.nodeNode)
+  ranksep: 100, // Rank separation (equivalent to elk.layered.spacing.nodeNodeBetweenLayers)
+  marginx: 20,
+  marginy: 20
 };
 
 type ActionNodeData = {
@@ -200,68 +198,56 @@ const getLayoutedElements = (
   edges: EdgeType[],
   options: { [key: string]: string } = {}
 ) => {
-  const isHorizontal = options?.['elk.direction'] === 'RIGHT';
-  const nodeNameMap = nodes.reduce(
-    (acc, node) => {
-      acc[node.id] = node;
-      return acc;
-    },
-    {} as { [key: string]: NodeType }
-  );
-  const edgeNameMap = edges.reduce(
-    (acc, edge) => {
-      acc[edge.id] = edge;
-      return acc;
-    },
-    {} as { [key: string]: EdgeType }
-  );
-  const graph = {
-    id: 'root',
-    layoutOptions: options,
-    children: nodes.map((node) => ({
-      ...node,
-      // Adjust the target and source handle positions based on the layout
-      // direction.
-      targetPosition: isHorizontal ? 'left' : 'top',
-      sourcePosition: isHorizontal ? 'right' : 'bottom',
+  const isHorizontal = options?.['direction'] === 'LR';
+  const direction = isHorizontal ? 'LR' : 'TB';
 
-      // Hardcode a width and height for elk to use when layouting.
+  // Configure dagre graph
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({
+    ...dagreOptions,
+    rankdir: direction
+  });
+
+  // Add nodes to dagre graph
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, {
       width: 150,
       height: 100
-    })),
-    edges: edges.map((edge) => {
-      return {
-        ...edge,
-        sources: [edge.source],
-        targets: [edge.target]
-      };
-    })
-  };
-  return elk.layout(graph).then((layoutedGraph) => ({
-    nodes: (layoutedGraph.children || []).map((node) => {
-      const originalNode = nodeNameMap[node.id];
-      return {
-        ...originalNode,
-        position: {
-          x: node.x as number,
-          y: node.y as number
-        }
-      };
-    }),
-    edges: (layoutedGraph?.edges || []).map((edge) => {
-      return {
-        ...edge,
-        markerEnd: { type: MarkerType.Arrow, width: 20, height: 20 },
-        source: edge.sources[0],
-        target: edge.targets[0],
-        data: {
-          from: edge.sources[0],
-          to: edge.targets[0],
-          condition: edgeNameMap[edge.id].data.condition
-        }
-      };
-    })
+    });
+  });
+
+  // Add edges to dagre graph
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  // Calculate layout
+  dagre.layout(dagreGraph);
+
+  // Apply layout to nodes
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    return {
+      ...node,
+      targetPosition: isHorizontal ? 'left' : 'top',
+      sourcePosition: isHorizontal ? 'right' : 'bottom',
+      position: {
+        x: nodeWithPosition.x - 75, // Center the node (width/2)
+        y: nodeWithPosition.y - 50 // Center the node (height/2)
+      }
+    };
+  });
+
+  // Apply layout to edges
+  const layoutedEdges = edges.map((edge) => ({
+    ...edge,
+    markerEnd: { type: MarkerType.Arrow, width: 20, height: 20 }
   }));
+
+  return Promise.resolve({
+    nodes: layoutedNodes,
+    edges: layoutedEdges
+  });
 };
 
 const convertApplicationToGraph = (stateMachine: ApplicationModel): [NodeType[], EdgeType[]] => {
@@ -341,8 +327,8 @@ export const _Graph = (props: {
   const { fitView } = useReactFlow();
 
   const onLayout = useCallback(
-    ({ direction = 'UP', useInitialNodes = false }): void => {
-      const opts = { 'elk.direction': direction, ...elkOptions };
+    ({ direction = 'TB', useInitialNodes = false }): void => {
+      const opts = { direction };
       const ns = useInitialNodes ? initialNodes : nodes;
       const es = useInitialNodes ? initialEdges : edges;
 
@@ -357,7 +343,7 @@ export const _Graph = (props: {
   );
 
   useLayoutEffect(() => {
-    onLayout({ direction: 'DOWN', useInitialNodes: true });
+    onLayout({ direction: 'TB', useInitialNodes: true });
   }, []);
 
   return (
