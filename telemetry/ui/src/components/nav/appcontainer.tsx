@@ -146,13 +146,13 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
     },
     {
       name: 'Documentation',
-      href: 'https://burr.dagworks.io',
+      href: 'https://burr.apache.org',
       icon: QuestionMarkCircleIcon,
       linkType: 'external'
     },
     {
       name: 'GitHub Discussions',
-      href: 'https://github.com/DAGWorks-Inc/burr/discussions',
+      href: 'https://github.com/apache/burr/discussions',
       icon: GithubLogo,
       linkType: 'external'
     },

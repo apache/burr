@@ -71,7 +71,7 @@ export const ReproduceView = (props: {
         <p>
           To generate a test case for this step, run the following command.
           <a
-            href="https://burr.dagworks.io/examples/guardrails/creating_tests/"
+            href="https://burr.apache.org/examples/guardrails/creating_tests/"
             target="_blank"
             rel="noreferrer"
             className="hover:underline text-dwlightblue"

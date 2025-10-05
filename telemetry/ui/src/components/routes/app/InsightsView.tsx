@@ -518,7 +518,7 @@ export const InsightsView = (props: {
           -- E.G. LLM call data. To instrument, and start collecting, see{' '}
           <a
             className="text-dwlightblue"
-            href={'https://burr.dagworks.io/concepts/additional-visibility/#quickstart'}
+            href={'https://burr.apache.org/concepts/additional-visibility/#quickstart'}
           >
             see docs.
           </a>
