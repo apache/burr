@@ -1,4 +1,0 @@
-recursive-include burr/tracking/server/demo_data *
-recursive-include burr/tracking/server/build *
-recursive-include examples/ *
-global-include *.typed
