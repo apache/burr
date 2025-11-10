@@ -232,11 +232,11 @@ def test_state_keys_returns_list():
     """Test that State.keys() returns a list (fixes #409)"""
     state = State({"a": 1, "b": 2, "c": 3})
     keys = state.keys()
-    
+
     # Should return a list with the correct keys
     assert isinstance(keys, list)
     assert keys == ["a", "b", "c"]
-    
+
     # Test with empty state
     empty_state = State()
     assert empty_state.keys() == []

@@ -22,18 +22,7 @@ import importlib
 import inspect
 import logging
 from functools import cached_property
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Iterator,
-    List,
-    Mapping,
-    Optional,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Dict, Generic, Iterator, Mapping, Optional, TypeVar, Union
 
 from burr.core import serde
 from burr.core.typing import DictBasedTypingSystem, TypingSystem
@@ -473,7 +462,7 @@ class State(Mapping, Generic[StateType]):
 
     def keys(self):
         """Returns a list of the state keys only (without values for cleaner display).
-        
+
         Returns:
             list: A list of state keys
         """
