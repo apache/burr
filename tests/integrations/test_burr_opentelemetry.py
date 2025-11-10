@@ -20,13 +20,18 @@ from unittest.mock import Mock, patch
 
 import pydantic
 import pytest
+from opentelemetry.sdk.trace import Span
+from opentelemetry.trace import SpanContext
 
 from burr.core import serde
 from burr.integrations.opentelemetry import (
     BurrTrackingSpanProcessor,
+    FullSpanContext,
     convert_to_otel_attribute,
     tracker_context,
 )
+from burr.tracking.base import SyncTrackingClient
+from burr.visibility import ActionSpan
 
 
 class SampleModel(pydantic.BaseModel):
@@ -55,16 +60,17 @@ def test_burr_tracking_span_processor_on_start_with_none_tracker():
     processor = BurrTrackingSpanProcessor()
 
     # Mock a span with a parent
-    mock_span = Mock()
+    mock_span = Mock(spec=Span)
     mock_span.parent = Mock()
     mock_span.parent.span_id = 12345
     mock_span.name = "test_span"
 
     # Mock the get_cached_span to return a parent span context
     with patch("burr.integrations.opentelemetry.get_cached_span") as mock_get_cached:
-        mock_parent_context = Mock()
-        mock_parent_context.action_span = Mock()
-        mock_parent_context.action_span.spawn = Mock(return_value=Mock())
+        mock_parent_context = Mock(spec=FullSpanContext)
+        mock_parent_context.action_span = Mock(spec=ActionSpan)
+        mock_spawned_span = Mock(spec=ActionSpan)
+        mock_parent_context.action_span.spawn = Mock(return_value=mock_spawned_span)
         mock_parent_context.partition_key = "test_partition"
         mock_parent_context.app_id = "test_app"
         mock_get_cached.return_value = mock_parent_context
@@ -85,16 +91,16 @@ def test_burr_tracking_span_processor_on_end_with_none_tracker():
     processor = BurrTrackingSpanProcessor()
 
     # Mock a span
-    mock_span = Mock()
-    mock_span_context = Mock()
+    mock_span = Mock(spec=Span)
+    mock_span_context = Mock(spec=SpanContext)
     mock_span_context.span_id = 67890
     mock_span.get_span_context = Mock(return_value=mock_span_context)
     mock_span.attributes = {}
 
     # Mock the get_cached_span to return a cached span
     with patch("burr.integrations.opentelemetry.get_cached_span") as mock_get_cached:
-        mock_cached_span = Mock()
-        mock_cached_span.action_span = Mock()
+        mock_cached_span = Mock(spec=FullSpanContext)
+        mock_cached_span.action_span = Mock(spec=ActionSpan)
         mock_cached_span.action_span.action = "test_action"
         mock_cached_span.action_span.action_sequence_id = 1
         mock_cached_span.app_id = "test_app"
@@ -117,19 +123,23 @@ def test_burr_tracking_span_processor_on_start_with_valid_tracker():
     processor = BurrTrackingSpanProcessor()
 
     # Mock a span with a parent
-    mock_span = Mock()
+    mock_span = Mock(spec=Span)
     mock_span.parent = Mock()
     mock_span.parent.span_id = 12345
     mock_span.name = "test_span"
 
     # Mock tracker
-    mock_tracker = Mock()
+    mock_tracker = Mock(spec=SyncTrackingClient)
 
     # Mock the get_cached_span to return a parent span context
     with patch("burr.integrations.opentelemetry.get_cached_span") as mock_get_cached:
-        mock_parent_context = Mock()
-        mock_parent_context.action_span = Mock()
-        mock_parent_context.action_span.spawn = Mock(return_value=Mock(action="test_action"))
+        mock_parent_context = Mock(spec=FullSpanContext)
+        mock_parent_action_span = Mock(spec=ActionSpan)
+        mock_spawned_span = Mock(spec=ActionSpan)
+        mock_spawned_span.action = "test_action"
+        mock_spawned_span.action_sequence_id = 1
+        mock_parent_action_span.spawn = Mock(return_value=mock_spawned_span)
+        mock_parent_context.action_span = mock_parent_action_span
         mock_parent_context.partition_key = "test_partition"
         mock_parent_context.app_id = "test_app"
         mock_get_cached.return_value = mock_parent_context
@@ -152,19 +162,19 @@ def test_burr_tracking_span_processor_on_end_with_valid_tracker():
     processor = BurrTrackingSpanProcessor()
 
     # Mock a span
-    mock_span = Mock()
-    mock_span_context = Mock()
+    mock_span = Mock(spec=Span)
+    mock_span_context = Mock(spec=SpanContext)
     mock_span_context.span_id = 67890
     mock_span.get_span_context = Mock(return_value=mock_span_context)
     mock_span.attributes = {}
 
     # Mock tracker
-    mock_tracker = Mock()
+    mock_tracker = Mock(spec=SyncTrackingClient)
 
     # Mock the get_cached_span to return a cached span
     with patch("burr.integrations.opentelemetry.get_cached_span") as mock_get_cached:
-        mock_cached_span = Mock()
-        mock_cached_span.action_span = Mock()
+        mock_cached_span = Mock(spec=FullSpanContext)
+        mock_cached_span.action_span = Mock(spec=ActionSpan)
         mock_cached_span.action_span.action = "test_action"
         mock_cached_span.action_span.action_sequence_id = 1
         mock_cached_span.app_id = "test_app"

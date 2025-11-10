@@ -57,6 +57,7 @@ from burr.core.application import (
     _run_reducer,
     _run_single_step_action,
     _run_single_step_streaming_action,
+    _validate_reducer_writes,
     _validate_start,
 )
 from burr.core.graph import Graph, GraphBuilder, Transition
@@ -492,8 +493,6 @@ def test__validate_reducer_writes_with_state_keys_returning_list():
     This is a regression test for a bug where state.keys() could return a list
     instead of a set, causing a TypeError when trying to do set subtraction.
     """
-    from burr.core.application import _validate_reducer_writes
-
     # Create a reducer with some expected writes
     reducer = PassedInAction(
         reads=["input"],
@@ -513,8 +512,6 @@ def test__validate_reducer_writes_with_state_keys_returning_list():
 
 def test__validate_reducer_writes_raises_on_missing_keys():
     """Tests that _validate_reducer_writes raises ValueError when required keys are missing."""
-    from burr.core.application import _validate_reducer_writes
-
     # Create a reducer with some expected writes
     reducer = PassedInAction(
         reads=["input"],
