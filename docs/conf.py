@@ -52,10 +52,6 @@ extensions = [
     "sphinx_toolbox.collapse",
 ]
 
-if os.getenv("GITHUB_ACTIONS"):  # only add googleanalytics if building on GitHub Actions
-    extensions.append("sphinxcontrib.googleanalytics")
-    googleanalytics_id = "G-20Z3J1CR22"
-
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
