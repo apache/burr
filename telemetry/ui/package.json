@@ -20,6 +20,7 @@
     "@uiw/react-json-view": "^2.0.0-alpha.12",
     "clsx": "^2.1.0",
     "dagre": "^0.8.5",
+    "es-abstract": "^1.22.4",
     "fuse.js": "^7.0.0",
     "heroicons": "^2.1.1",
     "react": "^18.2.0",
@@ -33,6 +34,7 @@
     "react-syntax-highlighter": "^15.5.0",
     "reactflow": "^11.10.4",
     "remark-gfm": "^4.0.0",
+    "string.prototype.matchall": "^4.0.10",
     "tailwindcss-question-mark": "^0.4.0",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"

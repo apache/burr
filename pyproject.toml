@@ -1,6 +1,23 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 [build-system]
-requires = ["setuptools >= 61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
 
 [project]
 name = "burr"
@@ -216,21 +233,6 @@ ray = [
   "ray[default]"
 ]
 
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-include = ["burr", "burr.*"]
-
-# we need to ensure this is there...
-[tool.setuptools.package-data]
-burr = [
-  "burr/tracking/server/build/**/*",
-  "burr/tracking/server/demo_data/**/*",
-  "py.typed",
-]
-
-
 [tool.aerich]
 tortoise_orm = "burr.tracking.server.s3.settings.TORTOISE_ORM"
 location = "./burr/tracking/server/s3/migrations"
@@ -254,11 +256,66 @@ burr-test-case = "burr.cli.__main__:cli_test_case"
 name = "burr"
 
 [tool.flit.sdist]
-include = ["LICENSE", "NOTICE", "DISCLAIMER", "burr/tracking/server/build/**/*",
-  "burr/tracking/server/demo_data/**/*",
-    "examples/email-assistant/*",
-    "examples/multi-modal-chatbot/*",
-    "examples/streaming-fastapi/*",
-    "examples/deep-researcher/*",
-  "py.typed",]
-exclude = []
+include = [
+  "LICENSE",
+  "NOTICE",
+  "DISCLAIMER",
+  "scripts/**",
+  "telemetry/ui/**",
+  "examples/__init__.py",
+  "examples/email-assistant/**",
+  "examples/multi-modal-chatbot/**",
+  "examples/streaming-fastapi/**",
+  "examples/deep-researcher/**",
+]
+exclude = [
+  "telemetry/ui/node_modules/**",
+  "telemetry/ui/build/**",
+  "telemetry/ui/dist/**",
+  "telemetry/ui/.cache/**",
+  "telemetry/ui/.next/**",
+  "**/__pycache__/**",
+  "**/*.pyc",
+  ".git/**",
+  ".github/**",
+  "docs/**",
+  # Exclude unwanted examples - flit auto-includes examples/ as a package because of __init__.py,
+  # and exclude patterns take precedence over include patterns. We must explicitly exclude each
+  # unwanted example directory. Only email-assistant, multi-modal-chatbot, streaming-fastapi,
+  # and deep-researcher should be included (see include list above).
+  # NOTE: If you add/remove examples, update this list AND tests/test_release_config.py
+  "examples/README.md",
+  "examples/validate_examples.py",
+  "examples/adaptive-crag/**",
+  "examples/conversational-rag/**",
+  "examples/custom-serde/**",
+  "examples/deployment/**",
+  "examples/hamilton-integration/**",
+  "examples/haystack-integration/**",
+  "examples/hello-world-counter/**",
+  "examples/image-telephone/**",
+  "examples/instructor-gemini-flash/**",
+  "examples/integrations/**",
+  "examples/llm-adventure-game/**",
+  "examples/ml-training/**",
+  "examples/multi-agent-collaboration/**",
+  "examples/openai-compatible-agent/**",
+  "examples/opentelemetry/**",
+  "examples/other-examples/**",
+  "examples/parallelism/**",
+  "examples/pytest/**",
+  "examples/rag-lancedb-ingestion/**",
+  "examples/ray/**",
+  "examples/recursive/**",
+  "examples/simple-chatbot-intro/**",
+  "examples/simulation/**",
+  "examples/streaming-overview/**",
+  "examples/talks/**",
+  "examples/templates/**",
+  "examples/test-case-creation/**",
+  "examples/tool-calling/**",
+  "examples/tracing-and-spans/**",
+  "examples/typed-state/**",
+  "examples/web-server/**",
+  "examples/youtube-to-social-media-post/**",
+]

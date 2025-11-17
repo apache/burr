@@ -27,7 +27,9 @@ import time
 import webbrowser
 from contextlib import contextmanager
 from importlib.resources import files
+from pathlib import Path
 from types import ModuleType
+from typing import Optional
 
 from burr import system, telemetry
 from burr.core.persistence import PersistedStateData
@@ -54,7 +56,7 @@ def _telemetry_if_enabled(event: str):
         telemetry.create_and_send_cli_event(event)
 
 
-def _command(command: str, capture_output: bool, addl_env: dict = None) -> str:
+def _command(command: str, capture_output: bool, addl_env: dict | None = None) -> str:
     """Runs a simple command"""
     if addl_env is None:
         addl_env = {}
@@ -78,7 +80,27 @@ def _command(command: str, capture_output: bool, addl_env: dict = None) -> str:
 
 
 def _get_git_root() -> str:
-    return _command("git rev-parse --show-toplevel", capture_output=True)
+    env_root = os.environ.get("BURR_PROJECT_ROOT")
+    if env_root:
+        return env_root
+    try:
+        return _command("git rev-parse --show-toplevel", capture_output=True)
+    except subprocess.CalledProcessError:
+        package_root = _locate_package_root()
+        if package_root is not None:
+            logger.warning("Not inside a git repository; using package root %s.", package_root)
+            return package_root
+        logger.warning("Not inside a git repository; defaulting to current directory.")
+        return os.getcwd()
+
+
+def _locate_package_root() -> Optional[str]:
+    path = Path(__file__).resolve()
+    for candidate in (path.parent,) + tuple(path.parents):
+        telemetry_dir = candidate / "telemetry" / "ui"
+        if telemetry_dir.exists():
+            return str(candidate)
+    return None
 
 
 def open_when_ready(check_url: str, open_url: str):
@@ -118,13 +140,16 @@ def _build_ui():
     # create a symlink so we can get packages inside it...
     cmd = "rm -rf burr/tracking/server/build"
     _command(cmd, capture_output=False)
-    cmd = "cp -R telemetry/ui/build burr/tracking/server/build"
+    cmd = "mkdir -p burr/tracking/server/build"
+    _command(cmd, capture_output=False)
+    cmd = "cp -a telemetry/ui/build/. burr/tracking/server/build/"
     _command(cmd, capture_output=False)
 
 
 @cli.command()
 def build_ui():
     git_root = _get_git_root()
+    logger.info("UI build: using project root %s", git_root)
     with cd(git_root):
         _build_ui()
 
