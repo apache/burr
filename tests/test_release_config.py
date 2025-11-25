@@ -22,10 +22,19 @@ This ensures the examples include/exclude lists stay in sync with the actual
 examples directory structure.
 """
 
-import tomllib
+import sys
 from pathlib import Path
 
+import pytest
 
+# tomllib is only available in Python 3.11+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    tomllib = None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib requires Python 3.11+")
 def test_examples_include_exclude_coverage():
     """
     Verify that pyproject.toml's [tool.flit.sdist] include/exclude lists cover
