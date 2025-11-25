@@ -279,6 +279,11 @@ exclude = [
   ".git/**",
   ".github/**",
   "docs/**",
+  # Exclude VCS and system files
+  ".gitignore",
+  ".gitmodules",
+  "**/.gitignore",
+  "**/.DS_Store",
   # Exclude unwanted examples - flit auto-includes examples/ as a package because of __init__.py,
   # and exclude patterns take precedence over include patterns. We must explicitly exclude each
   # unwanted example directory. Only email-assistant, multi-modal-chatbot, streaming-fastapi,
