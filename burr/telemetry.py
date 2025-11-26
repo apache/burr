@@ -47,7 +47,11 @@ from urllib import request
 if TYPE_CHECKING:
     from burr.lifecycle import internal
 
-VERSION = importlib.metadata.version("burr")
+try:
+    VERSION = importlib.metadata.version("apache-burr")
+except importlib.metadata.PackageNotFoundError:
+    # Fallback for older installations or development
+    VERSION = importlib.metadata.version("burr")
 
 logger = logging.getLogger(__name__)
 

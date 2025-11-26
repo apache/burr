@@ -164,7 +164,8 @@ def create_release_artifacts(version, build_wheel=False) -> list[str]:
         _fail(f"Error creating source distribution: {e}")
 
     # Find the created tarball in the dist directory.
-    expected_tar_ball = f"dist/burr-{version.lower()}.tar.gz"
+    # Note: flit normalizes hyphens to underscores in filenames
+    expected_tar_ball = f"dist/apache_burr-{version.lower()}.tar.gz"
     tarball_path = glob.glob(expected_tar_ball)
 
     if not tarball_path:
@@ -201,7 +202,8 @@ def create_release_artifacts(version, build_wheel=False) -> list[str]:
             _fail(f"Error creating wheel distribution: {e}")
 
         # Find the created wheel in the dist directory.
-        expected_wheel = f"dist/burr-{version.lower()}-*.whl"
+        # Note: flit normalizes hyphens to underscores in filenames
+        expected_wheel = f"dist/apache_burr-{version.lower()}-*.whl"
         wheel_path = glob.glob(expected_wheel)
 
         if not wheel_path:
@@ -219,8 +221,8 @@ def create_release_artifacts(version, build_wheel=False) -> list[str]:
         # Rename the wheel to apache-burr-{version.lower()}-incubating-{rest}.whl
         # Extract the wheel tags (e.g., py3-none-any.whl)
         original_wheel = os.path.basename(wheel_path[0])
-        # Pattern: burr-{version}-{tags}.whl -> apache-burr-{version}-incubating-{tags}.whl
-        wheel_tags = original_wheel.replace(f"burr-{version.lower()}-", "")
+        # Pattern: apache_burr-{version}-{tags}.whl -> apache-burr-{version}-incubating-{tags}.whl
+        wheel_tags = original_wheel.replace(f"apache_burr-{version.lower()}-", "")
         apache_wheel = f"dist/apache-burr-{version.lower()}-incubating-{wheel_tags}"
         shutil.move(wheel_path[0], apache_wheel)
         print(f"✓ Created wheel: {apache_wheel}")

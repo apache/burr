@@ -20,8 +20,8 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "burr"
-version = "0.40.2"
+name = "apache-burr"
+version = "0.41.0"
 dependencies = [] # yes, there are none
 requires-python = ">=3.9"
 authors = [
@@ -99,38 +99,38 @@ redis = [
 tests = [
   "pytest",
   "pytest-asyncio",
-  "burr[hamilton]",
-  "burr[hamilton]",
+  "apache-burr[hamilton]",
+  "apache-burr[hamilton]",
   "langchain_core",
   "langchain_community",
   "pandas",
   "pydantic[email]",
   "pyarrow",
-  "burr[aiosqlite]",
-  "burr[asyncpg]",
-  "burr[psycopg2]",
-  "burr[pymongo]",
-  "burr[redis]",
-  "burr[opentelemetry]",
-  "burr[haystack]",
-  "burr[ray]"
+  "apache-burr[aiosqlite]",
+  "apache-burr[asyncpg]",
+  "apache-burr[psycopg2]",
+  "apache-burr[pymongo]",
+  "apache-burr[redis]",
+  "apache-burr[opentelemetry]",
+  "apache-burr[haystack]",
+  "apache-burr[ray]"
 ]
 
 documentation = [
-  "burr[tests]",
+  "apache-burr[tests]",
   "sphinx",
   "sphinx-autobuild",
   "myst-nb",
   "furo",
   "sphinx-sitemap",
   "sphinx-toolbox",
-  "burr[aiosqlite]",
-  "burr[asyncpg]",
-  "burr[psycopg2]",
-  "burr[pymongo]",
-  "burr[redis]",
-  "burr[ray]",
-  "burr[streamlit]",
+  "apache-burr[aiosqlite]",
+  "apache-burr[asyncpg]",
+  "apache-burr[psycopg2]",
+  "apache-burr[pymongo]",
+  "apache-burr[redis]",
+  "apache-burr[ray]",
+  "apache-burr[streamlit]",
   "sphinxcontrib-googleanalytics"
 ]
 
@@ -139,7 +139,7 @@ tracking-client = [
 ]
 
 tracking-client-s3 = [
-  "burr[tracking-client]",
+  "apache-burr[tracking-client]",
   "boto3"
 ]
 
@@ -148,7 +148,7 @@ tracking-server-s3 = [
   "aiobotocore",
   "fastapi",
   "tortoise-orm[accel, asyncmy]",
-  "burr[tracking-server]",
+  "apache-burr[tracking-server]",
   "typing-inspect"
 ]
 
@@ -182,16 +182,16 @@ cli = [
 ]
 
 tracking = [
-  "burr[tracking-client]",
-  "burr[tracking-server]",
+  "apache-burr[tracking-client]",
+  "apache-burr[tracking-server]",
 ]
 
 learn = [
-  "burr[tracking,streamlit,graphviz,hamilton,cli,inappexamples]"
+  "apache-burr[tracking,streamlit,graphviz,hamilton,cli,inappexamples]"
 ]
 
 start = [
-  "burr[learn]"
+  "apache-burr[learn]"
 ]
 inappexamples  = [
   "opentelemetry-api",
@@ -208,17 +208,17 @@ examples = [
   "langchain",
   "langchain-community",
   "langchain-openai",
-  "burr[inappexamples]"
+  "apache-burr[inappexamples]"
 ]
 
 # just install everything for developers
 developer = [
-  "burr[streamlit]",
-  "burr[graphviz]",
-  "burr[tracking]",
-  "burr[tests]",
-  "burr[documentation]",
-  "burr[bloat]",
+  "apache-burr[streamlit]",
+  "apache-burr[graphviz]",
+  "apache-burr[tracking]",
+  "apache-burr[tests]",
+  "apache-burr[documentation]",
+  "apache-burr[bloat]",
   "build",
   "twine",
   "pre-commit",

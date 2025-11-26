@@ -328,9 +328,13 @@ async def version() -> dict:
     import pkg_resources
 
     try:
-        version = pkg_resources.get_distribution("burr").version
+        version = pkg_resources.get_distribution("apache-burr").version
     except pkg_resources.DistributionNotFound:
-        version = "unknown"
+        try:
+            # Fallback for older installations or development
+            version = pkg_resources.get_distribution("burr").version
+        except pkg_resources.DistributionNotFound:
+            version = "unknown"
     return {"version": version}
 
 
