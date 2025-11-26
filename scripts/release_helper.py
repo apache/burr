@@ -237,7 +237,7 @@ def create_release_artifacts(version, build_wheel=False) -> list[str]:
 def svn_upload(version, rc_num, archive_files, apache_id):
     """Uploads the artifacts to the ASF dev distribution repository."""
     print("Uploading artifacts to ASF SVN...")
-    svn_path = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}/apache-burr/{version}-incubating-RC{rc_num}"
+    svn_path = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}/{version}-incubating-RC{rc_num}"
 
     try:
         # Create a new directory for the release candidate.
@@ -245,6 +245,7 @@ def svn_upload(version, rc_num, archive_files, apache_id):
             [
                 "svn",
                 "mkdir",
+                "--parents",
                 "-m",
                 f"Creating directory for {version}-incubating-RC{rc_num}",
                 svn_path,
@@ -313,8 +314,11 @@ https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/KEYS
 
 Please download, verify, and test the release candidate.
 
-For testing, please run some of the examples, scripts/qualify.sh has
-a sampling of them to run.
+For testing use your best judgement. Any of the following will suffice
+
+1. Build/run the UI following the instructions in scripts/README.md
+2. Run the tests in tests/
+3. Import into a jupyter notebook and play around
 
 The vote will run for a minimum of 72 hours.
 Please vote:
@@ -427,7 +431,7 @@ def main():
     # Upload artifacts
     # NOTE: You MUST have your SVN client configured to use your Apache ID and have permissions.
     if dry_run:
-        svn_url = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}/apache-burr/{version}-incubating-RC{rc_num}"
+        svn_url = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}/{version}-incubating-RC{rc_num}"
         print(f"\n[DRY RUN] Would upload artifacts to: {svn_url}")
     else:
         svn_url = svn_upload(version, rc_num, archive_files, apache_id)
