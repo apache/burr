@@ -1,3 +1,22 @@
+<!--
+     Licensed to the Apache Software Foundation (ASF) under one
+     or more contributor license agreements.  See the NOTICE file
+     distributed with this work for additional information
+     regarding copyright ownership.  The ASF licenses this file
+     to you under the Apache License, Version 2.0 (the
+     "License"); you may not use this file except in compliance
+     with the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing,
+     software distributed under the License is distributed on an
+     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     KIND, either express or implied.  See the License for the
+     specific language governing permissions and limitations
+     under the License.
+-->
+
 # Burr Release Scripts
 
 This directory contains helper scripts to automate the Apache release workflow.
@@ -19,17 +38,20 @@ All packaging configuration lives in `pyproject.toml`:
 From the repo root:
 
 ```bash
-python scripts/release_helper.py --apache-id <your-id> --rc-num 0 [--dry-run]
+python scripts/release_helper.py <version> <rc-num> <apache-id> [--dry-run] [--build-wheel]
 ```
 
 Example:
 
 ```bash
 # Dry run (no git tag or SVN upload)
-python scripts/release_helper.py --apache-id myid --rc-num 0 --dry-run
+python scripts/release_helper.py 0.41.0 0 myid --dry-run
 
 # Real release
-python scripts/release_helper.py --apache-id myid --rc-num 0
+python scripts/release_helper.py 0.41.0 0 myid
+
+# With optional wheel
+python scripts/release_helper.py 0.41.0 0 myid --build-wheel
 ```
 
 **What it does:**
@@ -44,9 +66,9 @@ python scripts/release_helper.py --apache-id myid --rc-num 0
 7. Uploads to Apache SVN (unless `--dry-run`)
 
 **Output:**
-- `dist/burr-<version>.tar.gz` — source-only tarball
-- `dist/apache-burr-<version>-incubating.tar.gz` — ASF-branded tarball
-- Signature (`.asc`) and checksum (`.sha512`) files
+- `dist/apache-burr-<version>-incubating.tar.gz` — ASF-branded source tarball
+- `dist/apache-burr-<version>-incubating.tar.gz.asc` — GPG signature
+- `dist/apache-burr-<version>-incubating.tar.gz.sha512` — SHA512 checksum
 
 ## 2. Test the Source Release (Voter Simulation)
 
@@ -70,7 +92,7 @@ This script:
 ```bash
 cd /tmp
 tar -xzf /path/to/dist/apache-burr-<version>-incubating.tar.gz
-cd burr-<version>
+cd apache-burr-<version>-incubating
 
 # Verify source contents
 ls scripts/          # Build scripts should be present
@@ -132,15 +154,19 @@ python scripts/build_artifacts.py wheel [--clean]
    - Does NOT include files outside `burr/` (e.g., `telemetry/ui/`, `scripts/`, `examples/`)
 5. Verifies `.whl` file was created
 
-**Output:** `dist/burr-<version>-py3-none-any.whl` (includes bundled UI)
+**Output:** `dist/apache_burr-<version>-py3-none-any.whl` (includes bundled UI)
+
+**Note:** Flit normalizes the package name `apache-burr` to `apache_burr` (underscore) in the filename.
 
 ## 4. Upload to PyPI
 
 After building the wheel:
 
 ```bash
-twine upload dist/burr-<version>-py3-none-any.whl
+twine upload dist/apache_burr-<version>-py3-none-any.whl
 ```
+
+**Note:** For PyPI, you may want to publish as `burr` instead of `apache-burr`. See the dual distribution strategy documentation.
 
 ## Package Contents Reference
 
@@ -171,7 +197,7 @@ flit build --format sdist           # Build from [tool.flit.sdist] config
 
 ---
 
-### Wheel (`burr-{version}-py3-none-any.whl`)
+### Wheel (`apache_burr-{version}-py3-none-any.whl`)
 
 **Controlled by:** What exists in `burr/` directory when `flit build --format wheel` runs
 
