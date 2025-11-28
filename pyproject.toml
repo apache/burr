@@ -49,7 +49,7 @@ or stability of the code, it does indicate that the project has yet to be
 fully endorsed by the ASF.
 """
 readme = "README.md"
-#license = {file = "LICENSE.txt"}
+license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -254,6 +254,7 @@ burr-test-case = "burr.cli.__main__:cli_test_case"
 
 [tool.flit.module]
 name = "burr"
+
 
 [tool.flit.sdist]
 include = [
