@@ -136,16 +136,215 @@ def _clean_ui_build():
         print("✓ UI build directory cleaned.\n")
 
 
+def _replace_symlinks_with_copies():
+    """
+    Replace symlinked example files/directories with actual copies before building.
+    Returns a dict mapping paths to their symlink targets (if they were symlinks),
+    so they can be restored later.
+    """
+    # Files and directories from pyproject.toml lines 266-270 that might be symlinks
+    example_paths = [
+        "examples/__init__.py",
+        "examples/email-assistant",
+        "examples/multi-modal-chatbot",
+        "examples/streaming-fastapi",
+        "examples/deep-researcher",
+    ]
+
+    symlink_info = {}  # Maps path -> (was_symlink: bool, symlink_target: str or None, is_dir: bool)
+
+    for path in example_paths:
+        if not os.path.exists(path):
+            continue
+
+        if os.path.islink(path):
+            # It's a symlink - we need to replace it with a copy
+            # Store the original symlink target as read (may be relative)
+            original_symlink_target = os.readlink(path)
+
+            # Resolve relative symlink targets to absolute paths for copying
+            if os.path.isabs(original_symlink_target):
+                resolved_target = original_symlink_target
+            else:
+                # Resolve relative to the directory containing the symlink
+                symlink_dir = os.path.dirname(os.path.abspath(path))
+                resolved_target = os.path.join(symlink_dir, original_symlink_target)
+                resolved_target = os.path.normpath(resolved_target)
+
+            print(f"Found symlink: {path} -> {original_symlink_target}")
+            print("  Replacing with copy...")
+
+            # Verify the symlink target exists
+            if not os.path.exists(resolved_target):
+                print(f"  ✗ Warning: Symlink target does not exist: {resolved_target}")
+                symlink_info[path] = (False, None, False)
+                continue
+
+            is_directory = os.path.isdir(resolved_target)
+
+            # Remove the symlink
+            os.remove(path)
+
+            if is_directory:
+                # For directories, use copytree
+                shutil.copytree(resolved_target, path, dirs_exist_ok=True)
+            else:
+                # For files, use copy2 to preserve metadata
+                shutil.copy2(resolved_target, path)
+
+            # Store the original symlink target (as it was originally read)
+            symlink_info[path] = (True, original_symlink_target, is_directory)
+            print("  ✓ Replaced symlink with copy.\n")
+        else:
+            # Not a symlink, nothing to do
+            symlink_info[path] = (False, None, False)
+
+    return symlink_info
+
+
+def _restore_symlinks(symlink_info):
+    """
+    Restore symlinks that were replaced with copies.
+    symlink_info: dict from _replace_symlinks_with_copies()
+    """
+    for path, (was_symlink, symlink_target, is_directory) in symlink_info.items():
+        if was_symlink and symlink_target:
+            if os.path.exists(path) and not os.path.islink(path):
+                # Remove the copy and restore the symlink
+                print(f"Restoring symlink: {path} -> {symlink_target}")
+                try:
+                    if is_directory:
+                        shutil.rmtree(path)
+                    else:
+                        os.remove(path)
+                    os.symlink(symlink_target, path)
+                    print("  ✓ Symlink restored.\n")
+                except Exception as exc:
+                    print(f"  ✗ Error restoring symlink: {exc}\n")
+
+
+def _copy_examples_to_burr():
+    """
+    Copy example directories into burr/examples/ so they're included in the wheel.
+    Flit wheels only package what's in the burr/ module directory.
+    If burr/examples exists (as symlink or directory), remove it first to ensure
+    we copy actual files, not symlinks.
+    Returns tuple: (copied: bool, was_symlink: bool, symlink_target: str or None)
+    """
+    burr_examples_dir = "burr/examples"
+    source_examples_dir = "examples"
+
+    if not os.path.exists(source_examples_dir):
+        print(f"Warning: {source_examples_dir} does not exist. Skipping copy.\n")
+        return (False, False, None)
+
+    # Check if burr/examples exists and if it's a symlink - we'll need to restore it later
+    was_symlink = False
+    symlink_target = None
+    if os.path.exists(burr_examples_dir):
+        if os.path.islink(burr_examples_dir):
+            was_symlink = True
+            symlink_target = os.readlink(burr_examples_dir)
+            print(f"Removing existing {burr_examples_dir} symlink (-> {symlink_target})...")
+            os.remove(burr_examples_dir)
+        else:
+            print(f"Removing existing {burr_examples_dir} directory...")
+            shutil.rmtree(burr_examples_dir)
+        print(f"  ✓ Removed existing {burr_examples_dir}\n")
+
+    print(
+        f"Copying examples from {source_examples_dir} to {burr_examples_dir} for wheel packaging..."
+    )
+
+    # Create burr/examples directory
+    os.makedirs(burr_examples_dir, exist_ok=True)
+
+    # Copy __init__.py if it exists
+    init_file = os.path.join(source_examples_dir, "__init__.py")
+    if os.path.exists(init_file):
+        shutil.copy2(init_file, os.path.join(burr_examples_dir, "__init__.py"))
+
+    # Copy the specific example directories from pyproject.toml
+    example_dirs = [
+        "email-assistant",
+        "multi-modal-chatbot",
+        "streaming-fastapi",
+        "deep-researcher",
+    ]
+
+    for example_dir in example_dirs:
+        source_path = os.path.join(source_examples_dir, example_dir)
+        dest_path = os.path.join(burr_examples_dir, example_dir)
+
+        if os.path.exists(source_path):
+            if os.path.isdir(source_path):
+                shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source_path, dest_path)
+            print(f"  ✓ Copied {example_dir}")
+
+    print(f"✓ Examples copied to {burr_examples_dir}.\n")
+    return (True, was_symlink, symlink_target)
+
+
+def _remove_examples_from_burr(was_symlink=False, symlink_target=None):
+    """
+    Remove the examples directory from burr/ after building the wheel.
+    If it was originally a symlink, restore it.
+    """
+    burr_examples_dir = "burr/examples"
+    if os.path.exists(burr_examples_dir):
+        print(f"Removing {burr_examples_dir} after wheel build...")
+        shutil.rmtree(burr_examples_dir)
+        print(f"  ✓ Removed {burr_examples_dir}.\n")
+
+        # Restore the original symlink if it existed
+        if was_symlink and symlink_target:
+            print(f"Restoring symlink: {burr_examples_dir} -> {symlink_target}")
+            try:
+                os.symlink(symlink_target, burr_examples_dir)
+                print("  ✓ Symlink restored.\n")
+            except Exception as exc:
+                print(f"  ✗ Error restoring symlink: {exc}\n")
+
+
 def _build_wheel() -> bool:
     print("Building wheel distribution with 'flit build --format wheel'...")
+
+    # Replace symlinked directories with copies before building
+    symlink_info = _replace_symlinks_with_copies()
+
+    # Copy examples into burr/ so they're included in the wheel
+    examples_copied, examples_was_symlink, examples_symlink_target = _copy_examples_to_burr()
+
     try:
         env = os.environ.copy()
         env["FLIT_USE_VCS"] = "0"
         subprocess.run(["flit", "build", "--format", "wheel"], check=True, env=env)
         print("✓ Wheel build completed successfully.\n")
+
+        # Remove examples from burr/ after successful build (and restore symlink if needed)
+        if examples_copied:
+            _remove_examples_from_burr(examples_was_symlink, examples_symlink_target)
+
+        # Restore symlinks after successful build
+        _restore_symlinks(symlink_info)
         return True
     except subprocess.CalledProcessError as exc:
         print(f"✗ Error building wheel: {exc}")
+        # Remove examples from burr/ even on error (and restore symlink if needed)
+        if examples_copied:
+            _remove_examples_from_burr(examples_was_symlink, examples_symlink_target)
+        # Restore symlinks even on error
+        _restore_symlinks(symlink_info)
+        return False
+    except Exception as exc:
+        # Remove examples from burr/ on any other error (and restore symlink if needed)
+        if examples_copied:
+            _remove_examples_from_burr(examples_was_symlink, examples_symlink_target)
+        # Restore symlinks on any other error
+        print(f"✗ Unexpected error building wheel: {exc}")
+        _restore_symlinks(symlink_info)
         return False
 
 
