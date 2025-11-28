@@ -327,9 +327,12 @@ Checklist for reference:
 [ ] Download links are valid.
 [ ] Checksums and signatures.
 [ ] LICENSE/NOTICE files exist
-[ ] No unexpected binary files
+[ ] LICENSE/NOTICE files exist in convenience packages
+[ ] No unexpected binary files in source
+[ ] No unexpected binary files in convenience packages
 [ ] All source files have ASF headers
 [ ] Can compile from source
+[ ] Build script recreates convenience packages (contents need to match)
 
 On behalf of the Apache {PROJECT_SHORT_NAME} PPMC,
 [Your Name]
