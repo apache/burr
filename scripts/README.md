@@ -102,7 +102,7 @@ ls burr/tracking/server/build/  # Should NOT exist (no pre-built UI)
 
 # Create clean environment
 python -m venv venv && source venv/bin/activate
-pip install -e .
+pip install -e ".[cli]"
 pip install flit
 
 # Build artifacts and wheel (see step 3)
@@ -110,6 +110,25 @@ python scripts/build_artifacts.py all --clean
 ls dist/*.whl
 deactivate
 ```
+
+Alternatively, instead of manually creating the `venv` and installing burr with `pip install`, you can use
+`uv` and use simplified development workflow of uv you can  run the command directly:
+
+```bash
+uv run scripts/build_artifacts.py all --clean
+ls dist/*.whl
+```
+
+This will automatically:
+
+* download the right python version if you do not have python installed
+* create virtual environment in local `.venv` directory
+* activates the venv
+* installs `burr` in editable mode with `dev` dependency group (that contains `cli` extra, `developer` extra
+  and `flit` package.
+* deactivates the venv
+
+Next time when you run `uv run` it will also automatically sync the environment with latest `pyproject.toml`
 
 ## 3. Build Artifacts and Wheel
 

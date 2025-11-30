@@ -47,6 +47,22 @@ Next you'll want to ``cd`` into the directory and install
     cd burr
     pip install -e ".[developer]"
 
+You can also use dependency group:
+
+.. code-block:: bash
+
+    pip install -e . --group dev
+
+or, if you use ``uv``:
+
+.. code-block:: bash
+
+    uv sync
+
+The latter command will automatically create and install virtual env if one does not exist and will
+automatically install the project in editable mode with all developer dependencies defined in dev
+dependency group.
+
 This will install all potential dependencies. Burr will work with ``python >=3.9``.
 
 ------------------

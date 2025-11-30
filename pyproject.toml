@@ -252,6 +252,12 @@ burr-admin-build-ui = "burr.cli.__main__:cli_build_ui"
 burr-admin-generate-demo-data = "burr.cli.__main__:cli_generate_demo_data"
 burr-test-case = "burr.cli.__main__:cli_test_case"
 
+[dependency-groups]
+dev = [
+  "apache-burr[cli]",
+  "flit",
+]
+
 [tool.flit.module]
 name = "burr"
 

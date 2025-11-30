@@ -66,7 +66,6 @@ This installs the dependencies to run the burr CLI, i.e. `burr --help`.
 
 This installs all the dependencies for developing locally.
 
-
 .. code-block:: bash
 
     pip install "burr[documentation]"
