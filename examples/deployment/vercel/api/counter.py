@@ -109,4 +109,3 @@ class handler(BaseHTTPRequestHandler):
         error_body = json.dumps({'error': message})
         self.wfile.write(error_body.encode('utf-8'))
 
-        
