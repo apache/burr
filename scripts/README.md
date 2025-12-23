@@ -17,6 +17,33 @@
      under the License.
 -->
 
+# Policy on source versus distribution
+
+Apache Burr is an apache-incubating project. As such, we intend to follow all apache guidelines to
+both the spirit (and when applicable) the letter.
+
+That said, there is occasional ambiguity. Thus we aim to clarify with a reasonable and consistently maintained
+approach. The question that we found most ambiguous when determining our release process is
+1. What counts as source code, and should thus be included in the "sdist" (the source-only distribution)
+2. What should be included in the build?
+
+Specifically, we set the following guidelines:
+
+| | Counted as "source" | Included in build | Reasoning |
+|---|---|---|---|
+| Build Scripts | ✓ | ✗ | This is counted as licensed source code but not included in the build. These are only meant to be consumed by developers/pod members. |
+| Source code | ✓ | ✓ | These are counted as licensed source code and included in the build. |
+| Tests (integration and unit) | ✓ | ✗ | We expect users/PMC to download the source distribution, build from source, run the tests, and validate. Thus we include in source. |
+| READMEs | ✓ | ✓ | Standard project metadata files (README.md, LICENSE, NOTICE, DISCLAIMER) are included in both source distribution and embedded in wheel metadata. |
+| Documentation | ✗ | ✗ | We do not include this with the distribution -- it is part of the git repository, but not specifically included in the sdist of the build. |
+| Deployment templates | ✓ | ✓ | Convenience deployment templates are included in source and build as they are referred to by specific utility commands for deploying that are included in source. |
+| Built artifacts (UI, etc...) | ✗ | ✓ | These are not source, but these are included through a build process in the distributed wheel. Notable is the built npm packages, etc... |
+| Examples (by default required for demo server) | ✓ | ✓ | We have four examples (see pyproject.toml) required by the demo server which can be run by a single command -- we count these as source, specifically, as they are needed for execution. While all demos are centrally maintained and vetted, these are specially considered as components of the source distribution (and vetted+tested to a higher degree). |
+| Other examples | ✗ | ✗ | These we *do not* consider source and do not include in the build distribution. Specifically these serve more as documentation than source (so we align with practices for documentation above). It is feasible that these will end up in a specific, separate repository in the future for burr examples + documentation. |
+
+
+
+
 # Burr Release Scripts
 
 This directory contains helper scripts to automate the Apache release workflow.
