@@ -146,7 +146,7 @@ def is_telemetry_enabled() -> bool:
             logger.info(
                 "Note: Burr collects completely anonymous data about usage. "
                 "This will help us improve Burr over time. "
-                "See https://github.com/dagworks-inc/burr#usage-analytics--data-privacy for details."
+                "See https://burr.apache.org/reference/telemetry/ for details."
             )
         call_counter += 1
         if call_counter > MAX_COUNT_SESSION:
