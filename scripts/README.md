@@ -29,17 +29,17 @@ approach. The question that we found most ambiguous when determining our release
 
 Specifically, we set the following guidelines:
 
-| | Counted as "source" | Included in build | Reasoning |
-|---|---|---|---|
-| Build Scripts | ✓ | ✗ | This is counted as licensed source code but not included in the build. These are only meant to be consumed by developers/pod members. |
-| Source code | ✓ | ✓ | These are counted as licensed source code and included in the build. |
-| Tests (integration and unit) | ✓ | ✗ | We expect users/PMC to download the source distribution, build from source, run the tests, and validate. Thus we include in source. |
-| READMEs | ✓ | ✓ | Standard project metadata files (README.md, LICENSE, NOTICE, DISCLAIMER) are included in both source distribution and embedded in wheel metadata. |
-| Documentation | ✗ | ✗ | We do not include this with the distribution -- it is part of the git repository, but not specifically included in the sdist of the build. |
-| Deployment templates | ✓ | ✓ | Convenience deployment templates are included in source and build as they are referred to by specific utility commands for deploying that are included in source. |
-| Built artifacts (UI, etc...) | ✗ | ✓ | These are not source, but these are included through a build process in the distributed wheel. Notable is the built npm packages, etc... |
-| Examples (by default required for demo server) | ✓ | ✓ | We have four examples (see pyproject.toml) required by the demo server which can be run by a single command -- we count these as source, specifically, as they are needed for execution. While all demos are centrally maintained and vetted, these are specially considered as components of the source distribution (and vetted+tested to a higher degree). |
-| Other examples | ✗ | ✗ | These we *do not* consider source and do not include in the build distribution. Specifically these serve more as documentation than source (so we align with practices for documentation above). It is feasible that these will end up in a specific, separate repository in the future for burr examples + documentation. |
+| | source (to vote on) -- tar.gz | sdist -- source used to build | whl file | Reasoning |
+|---|---|---|---|---|
+| Build Scripts | ✓ | ✓ | ✗ | Included in tar.gz and sdist as they are needed to reproduce the build, but not in the whl. These are only meant to be consumed by developers/pod members. |
+| Library Source code | ✓ | ✓ | ✓ | Core library source code is included in all three distributions: tar.gz, sdist, and whl. |
+| Tests (integration and unit) | ✓ | ✓ | ✗ | We expect users/PMC to download the source distribution, build from source, run the tests, and validate. Thus we include in the tar.gz and sdist, but not in the whl. |
+| READMEs | ✓ | ✓ | ✓ | Standard project metadata files (README.md, LICENSE, NOTICE, DISCLAIMER) are included in all three distributions: tar.gz, sdist, and whl. |
+| Documentation | ✓ | ✗ | ✗ | Documentation source is included in the tar.gz for voters to review, but not in the sdist or whl as it is not needed for building or using the package. |
+| Deployment templates | ✓ | ✓ | ✓ | Convenience deployment templates are included in tar.gz, sdist, and whl as they are referred to by specific utility commands for deploying that are included in source. |
+| Built artifacts (UI, etc...) | ✗ | ✗ | ✓ | These are not source code and are only included in the whl. They are created through a build process from the UI source. Notable examples include the built npm packages. |
+| Examples (by default required for demo server) | ✓ | ✓ | ✓ | We have four examples (see pyproject.toml) required by the demo server which can be run by a single command. These are included in tar.gz, sdist, and whl as they are needed for the demo functionality. |
+| Other examples | ✓ | ✗ | ✗ | These are included in the tar.gz for voters to review but not included in the sdist or whl as they are not needed to build or run the package. They serve more as documentation. |
 
 
 
