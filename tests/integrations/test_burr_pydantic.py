@@ -185,6 +185,10 @@ def _fn_with_no_return_type(state: OriginalModel):
     ...
 
 
+def _fn_with_untyped_state_arg(state) -> OriginalModel:
+    ...
+
+
 def _fn_correct_same_itype_otype(state: OriginalModel, input_1: int) -> OriginalModel:
     ...
 
@@ -200,11 +204,19 @@ def _fn_correct_diff_itype_otype(state: OriginalModel, input_1: int) -> NestedMo
         (_fn_with_incorrect_state_arg, ValueError),
         (_fn_with_incorrect_return_type, ValueError),
         (_fn_with_no_return_type, ValueError),
+        (_fn_with_untyped_state_arg, ValueError),
     ],
 )
 def test__validate_and_extract_signature_types_error(fn, expected_exception):
     with pytest.raises(expected_exception=expected_exception):
         _validate_and_extract_signature_types(fn)
+
+
+def test__validate_and_extract_signature_types_untyped_state_error_message():
+    """Test that the error message is informative when state is not type-annotated."""
+    with pytest.raises(ValueError) as excinfo:
+        _validate_and_extract_signature_types(_fn_with_untyped_state_arg)
+    assert "'state' parameter must be annotated" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
