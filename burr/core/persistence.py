@@ -33,6 +33,13 @@ try:
 except ImportError:
     Self = None
 
+# Error message template for uninitialized SQLitePersister
+_UNINITIALIZED_PERSISTER_ERROR = (
+    "Uninitialized persister: table '{table_name}' does not exist. "
+    "Make sure to call .initialize() on the persister before passing it "
+    "to the ApplicationBuilder."
+)
+
 
 class PersistedStateData(TypedDict):
     partition_key: str
@@ -454,9 +461,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         except sqlite3.OperationalError as e:
             if "no such table" in str(e):
                 raise RuntimeError(
-                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
-                    f"Make sure to call .initialize() on the persister before passing it "
-                    f"to the ApplicationBuilder."
+                    _UNINITIALIZED_PERSISTER_ERROR.format(table_name=self.table_name)
                 ) from e
             raise
         app_ids = [row[0] for row in cursor.fetchall()]
@@ -509,9 +514,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         except sqlite3.OperationalError as e:
             if "no such table" in str(e):
                 raise RuntimeError(
-                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
-                    f"Make sure to call .initialize() on the persister before passing it "
-                    f"to the ApplicationBuilder."
+                    _UNINITIALIZED_PERSISTER_ERROR.format(table_name=self.table_name)
                 ) from e
             raise
         row = cursor.fetchone()
@@ -578,9 +581,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         except sqlite3.OperationalError as e:
             if "no such table" in str(e):
                 raise RuntimeError(
-                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
-                    f"Make sure to call .initialize() on the persister before passing it "
-                    f"to the ApplicationBuilder."
+                    _UNINITIALIZED_PERSISTER_ERROR.format(table_name=self.table_name)
                 ) from e
             raise
         self.connection.commit()
