@@ -444,12 +444,21 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         )
 
         cursor = self.connection.cursor()
-        cursor.execute(
-            f"SELECT DISTINCT app_id FROM {self.table_name} "
-            f"WHERE partition_key = ? "
-            f"ORDER BY created_at DESC",
-            (partition_key,),
-        )
+        try:
+            cursor.execute(
+                f"SELECT DISTINCT app_id FROM {self.table_name} "
+                f"WHERE partition_key = ? "
+                f"ORDER BY created_at DESC",
+                (partition_key,),
+            )
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                raise RuntimeError(
+                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
+                    f"Make sure to call .initialize() on the persister before passing it "
+                    f"to the ApplicationBuilder."
+                ) from e
+            raise
         app_ids = [row[0] for row in cursor.fetchall()]
         return app_ids
 
@@ -475,27 +484,36 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         )
         logger.debug("Loading %s, %s, %s", partition_key, app_id, sequence_id)
         cursor = self.connection.cursor()
-        if app_id is None:
-            # get latest for all app_ids
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = ? "
-                f"ORDER BY CREATED_AT DESC LIMIT 1",
-                (partition_key,),
-            )
-        elif sequence_id is None:
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = ? AND app_id = ? "
-                f"ORDER BY sequence_id DESC LIMIT 1",
-                (partition_key, app_id),
-            )
-        else:
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = ? AND app_id = ? AND sequence_id = ?",
-                (partition_key, app_id, sequence_id),
-            )
+        try:
+            if app_id is None:
+                # get latest for all app_ids
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = ? "
+                    f"ORDER BY CREATED_AT DESC LIMIT 1",
+                    (partition_key,),
+                )
+            elif sequence_id is None:
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = ? AND app_id = ? "
+                    f"ORDER BY sequence_id DESC LIMIT 1",
+                    (partition_key, app_id),
+                )
+            else:
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = ? AND app_id = ? AND sequence_id = ?",
+                    (partition_key, app_id, sequence_id),
+                )
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                raise RuntimeError(
+                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
+                    f"Make sure to call .initialize() on the persister before passing it "
+                    f"to the ApplicationBuilder."
+                ) from e
+            raise
         row = cursor.fetchone()
         if row is None:
             return None
@@ -551,11 +569,20 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         )
         cursor = self.connection.cursor()
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        cursor.execute(
-            f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
-            f"VALUES (?, ?, ?, ?, ?, ?)",
-            (partition_key, app_id, sequence_id, position, json_state, status),
-        )
+        try:
+            cursor.execute(
+                f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
+                (partition_key, app_id, sequence_id, position, json_state, status),
+            )
+        except sqlite3.OperationalError as e:
+            if "no such table" in str(e):
+                raise RuntimeError(
+                    f"Uninitialized persister: table '{self.table_name}' does not exist. "
+                    f"Make sure to call .initialize() on the persister before passing it "
+                    f"to the ApplicationBuilder."
+                ) from e
+            raise
         self.connection.commit()
 
     def cleanup(self):

@@ -94,6 +94,38 @@ def test_sqlite_persistence_is_initialized_true_new_connection(tmp_path):
     p2.cleanup()
 
 
+def test_sqlite_persister_load_without_initialize_raises_runtime_error():
+    """Test that calling load() without initialize() raises a clear RuntimeError."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    try:
+        with pytest.raises(RuntimeError, match="Uninitialized persister"):
+            persister.load("partition_key", "app_id")
+    finally:
+        persister.cleanup()
+
+
+def test_sqlite_persister_save_without_initialize_raises_runtime_error():
+    """Test that calling save() without initialize() raises a clear RuntimeError."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    try:
+        with pytest.raises(RuntimeError, match="Uninitialized persister"):
+            persister.save(
+                "partition_key", "app_id", 1, "position", State({"key": "value"}), "completed"
+            )
+    finally:
+        persister.cleanup()
+
+
+def test_sqlite_persister_list_app_ids_without_initialize_raises_runtime_error():
+    """Test that calling list_app_ids() without initialize() raises a clear RuntimeError."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    try:
+        with pytest.raises(RuntimeError, match="Uninitialized persister"):
+            persister.list_app_ids("partition_key")
+    finally:
+        persister.cleanup()
+
+
 @pytest.mark.parametrize(
     "method_name,kwargs",
     [
