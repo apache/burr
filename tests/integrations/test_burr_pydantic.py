@@ -16,7 +16,7 @@
 # under the License.
 
 import asyncio
-from typing import AsyncGenerator, Generator, List, Optional, Tuple
+from typing import AsyncGenerator, Generator, List, Optional, Tuple, Union
 
 import pydantic
 import pytest
@@ -758,3 +758,52 @@ async def test_end_to_end_pydantic_streaming_async(tmpdir):
     assert state.data.count == 20
     assert isinstance(result, IntermediateModel)
     assert result.result == 20
+
+
+class StreamTypeModel1(BaseModel):
+    value: int
+
+
+class StreamTypeModel2(BaseModel):
+    message: str
+
+
+def test_streaming_pydantic_action_union_stream_type():
+    """Test that stream_type accepts union types like Union[Model1, Model2]."""
+    union_type = Union[StreamTypeModel1, StreamTypeModel2]
+
+    @pydantic_streaming_action(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=union_type,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel, total_count: int
+    ) -> Generator[
+        Tuple[Union[StreamTypeModel1, StreamTypeModel2], Optional[AppStateModel]], None, None
+    ]:
+        for i in range(total_count):
+            if i % 2 == 0:
+                yield StreamTypeModel1(value=i), None
+            else:
+                yield StreamTypeModel2(message=f"step_{i}"), None
+            state.count = i
+        state.times_called += 1
+        yield StreamTypeModel1(value=state.count), state
+
+    assert hasattr(act, "bind")
+    action_function = getattr(act, FunctionBasedAction.ACTION_FUNCTION, None)
+    assert action_function is not None
+    gen = action_function.fn(
+        State(dict(count=0, times_called=0), typing_system=PydanticTypingSystem(AppStateModel)),
+        total_count=4,
+    )
+    result = list(gen)
+    assert len(result) == 5
+    assert isinstance(result[0][0], StreamTypeModel1)
+    assert isinstance(result[1][0], StreamTypeModel2)
+    assert isinstance(result[2][0], StreamTypeModel1)
+    assert isinstance(result[3][0], StreamTypeModel2)
+    assert isinstance(result[-1][1], State)

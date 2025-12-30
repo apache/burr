@@ -264,7 +264,7 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+PartialType = Union[Type[pydantic.BaseModel], Type[dict], type, "types.UnionType"]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -285,12 +285,10 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[PartialType],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
-) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
-]:
+) -> Tuple[Type[pydantic.BaseModel], Type[pydantic.BaseModel], PartialType]:
     if stream_type is None:
         # TODO -- derive from the signature
         raise ValueError(f"stream_type is required for function: {fn.__qualname__}")
