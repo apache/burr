@@ -62,6 +62,18 @@ if TYPE_CHECKING:
     except ImportError:
         pass
 
+try:
+    UnionType = types.UnionType
+except AttributeError:  # py<3.10
+    UnionType = None
+
+if typing.TYPE_CHECKING:
+    StreamingPydanticType = Any
+else:
+    StreamingPydanticType = Union[Type["BaseModel"], Type[dict]]
+    if UnionType is not None:
+        StreamingPydanticType = Union[Type["BaseModel"], Type[dict], UnionType]
+
 
 class Function(abc.ABC):
     """Interface to represent the 'computing' part of an action"""
@@ -1309,7 +1321,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict]],
+        stream_type: "StreamingPydanticType",
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
