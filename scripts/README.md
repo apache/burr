@@ -59,6 +59,10 @@ Prerequisites:
 - Apache RAT jar for license checking (optional)
 
 ```bash
+# Install build dependencies
+pip install flit
+pip install -e ".[cli]"  # Installs burr-admin-build-ui command
+
 # Verify GPG setup
 gpg --list-secret-keys
 
