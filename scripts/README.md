@@ -19,7 +19,7 @@
 
 # Policy on source versus distribution
 
-Apache Burr is an apache-incubating project. As such, we intend to follow all apache guidelines to
+Apache Burr is an apache-incubating project. As such, we intend to follow all Apache guidelines to
 both the spirit (and when applicable) the letter.
 
 That said, there is occasional ambiguity. Thus we aim to clarify with a reasonable and consistently maintained
@@ -77,20 +77,27 @@ Creates the three required distributions: git archive (voting artifact), sdist (
 Main release script: `scripts/apache_release.py`
 
 ```bash
-# Full release build (creates all artifacts, signs, checksums)
-python scripts/apache_release.py all --version 0.41.0 --rc-num 0
+# Full release build (creates all artifacts, signs, checksums, and generates vote email)
+# Note: version, rc_num, and apache_id are POSITIONAL arguments
+python scripts/apache_release.py all 0.41.0 0 your_apache_id
 
 # Individual steps
-python scripts/apache_release.py archive --version 0.41.0 --rc-num 0  # Git archive
-python scripts/apache_release.py sdist --version 0.41.0 --rc-num 0    # Source dist
-python scripts/apache_release.py wheel --version 0.41.0 --rc-num 0    # Wheel dist
-python scripts/apache_release.py sign --version 0.41.0 --rc-num 0     # Sign + checksum all
+python scripts/apache_release.py archive 0.41.0 0      # Git archive
+python scripts/apache_release.py sdist 0.41.0 0        # Source dist
+python scripts/apache_release.py wheel 0.41.0 0        # Wheel dist
 
-# Skip UI build (if already built)
-python scripts/apache_release.py all --version 0.41.0 --rc-num 0 --skip-ui-build
+# Upload to SVN
+python scripts/apache_release.py upload 0.41.0 0 your_apache_id
+python scripts/apache_release.py upload 0.41.0 0 your_apache_id --dry-run  # Test first
+
+# Verify artifacts locally
+python scripts/apache_release.py verify 0.41.0 0
+
+# Skip upload step in 'all' command
+python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 ```
 
-Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files.
+Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. Install from the whl file to test it out after runnig the `wheel` subcommand.
 
 ## Verification
 
@@ -98,15 +105,28 @@ Validate artifacts before uploading or voting. Checks GPG signatures, SHA512 che
 
 Verification script: `scripts/verify_apache_artifacts.py`
 
+### Prerequisites
+
+For license verification, you'll need Apache RAT. Download it from:
+
+```bash
+# Download Apache RAT jar
+curl -O https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.15/apache-rat-0.15.jar
+```
+
+Or download manually from: https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.15/
+
+### Running Verification
+
 ```bash
 # Verify signatures and checksums
 python scripts/verify_apache_artifacts.py signatures
 
 # Verify licenses (requires Apache RAT)
-python scripts/verify_apache_artifacts.py licenses --rat-jar /path/to/apache-rat-0.15.jar
+python scripts/verify_apache_artifacts.py licenses --rat-jar apache-rat-0.15.jar
 
 # Verify everything
-python scripts/verify_apache_artifacts.py all --rat-jar /path/to/apache-rat-0.15.jar
+python scripts/verify_apache_artifacts.py all --rat-jar apache-rat-0.15.jar
 
 # Inspect artifact contents
 python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
