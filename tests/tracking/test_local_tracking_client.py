@@ -310,7 +310,7 @@ def test_fork_children_have_correct_partition_key(tmpdir):
 
 
 def test_multi_fork_tracking_client(tmpdir):
-    """This is more of an end-to-end test. We shoudl probably break it out
+    """This is more of an end-to-end test. We should probably break it out
     into smaller tests but the local tracking client being used as a persister is
     a bit of a complex case, and we don't want to get lost in the details.
     """

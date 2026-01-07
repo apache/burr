@@ -1066,7 +1066,7 @@ def test__run_multistep_streaming_action():
     result = None
     for result, state in generator:
         if last_result < 1:
-            # Otherwise you hit floating poit comparison problems
+            # Otherwise you hit floating point comparison problems
             assert result["count"] > last_result
         last_result = result["count"]
     assert result == {"count": 1}
@@ -1098,7 +1098,7 @@ def test__run_multistep_streaming_action_callbacks():
     result = None
     for result, state in generator:
         if last_result < 1:
-            # Otherwise you hit floating poit comparison problems
+            # Otherwise you hit floating point comparison problems
             assert result["count"] > last_result
         last_result = result["count"]
     assert result == {"count": 1}
@@ -1122,7 +1122,7 @@ async def test__run_multistep_streaming_action_async():
     result = None
     async for result, state in generator:
         if last_result < 1:
-            # Otherwise you hit floating poit comparison problems
+            # Otherwise you hit floating point comparison problems
             assert result["count"] > last_result
         last_result = result["count"]
     assert result == {"count": 1}
@@ -1153,7 +1153,7 @@ async def test__run_multistep_streaming_action_async_callbacks():
     result = None
     async for result, state in generator:
         if last_result < 1:
-            # Otherwise you hit floating poit comparison problems
+            # Otherwise you hit floating point comparison problems
             assert result["count"] > last_result
         last_result = result["count"]
     assert result == {"count": 1}
@@ -2129,7 +2129,7 @@ def test_iterate_with_inputs():
     )
     gen = app.iterate(
         halt_after=["result"], inputs={"additional_increment": 10}
-    )  # make it go quicly to the end
+    )  # make it go quickly to the end
     while True:
         try:
             action, result, state = next(gen)
@@ -2926,7 +2926,7 @@ def test_stream_result_halt_after_run_through_final_non_streaming():
     )
     action, streaming_container = app.stream_result(halt_after=["counter_final_non_streaming"])
     results = list(streaming_container)
-    assert len(results) == 0  # nothing to steram
+    assert len(results) == 0  # nothing to stream
     result, state = streaming_container.get()
     assert result["count"] == state["count"] == 11
     assert len(action_tracker.pre_called) == 11
@@ -3020,7 +3020,7 @@ def test_stream_result_halt_before():
     )
     action, streaming_container = app.stream_result(halt_after=[], halt_before=["counter_final"])
     results = list(streaming_container)
-    assert len(results) == 0  # nothing to steram
+    assert len(results) == 0  # nothing to stream
     result, state = streaming_container.get()
     assert action.name == "counter_final"  # halt before this one
     assert result is None
