@@ -1,3 +1,26 @@
+# Python marker file
 .*py\.typed
-apache_burr-.*/burr/examples
+
+# JSON Lines data files
 .*\.jsonl
+
+# Git and version control config
+\.gitignore
+\.gitmodules
+\.rat-excludes
+
+# Jupyter notebooks (JSON format, cannot practically add headers)
+.*\.ipynb
+
+# Data files (CSV - not source code)
+.*\.csv
+
+# Text files (documentation/data files, not source code)
+.*\.txt
+
+# Build and tool config files
+.*\.bat
+robots\.txt
+
+# Examples pattern (legacy - keeping for compatibility)
+apache_burr-.*/burr/examples

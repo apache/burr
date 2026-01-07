@@ -280,7 +280,8 @@ def _check_licenses_with_rat(
         print("  Extracting archive...")
         try:
             with tarfile.open(artifact_path, "r:gz") as tar:
-                tar.extractall(extract_dir)
+                # Use data filter for Python 3.12+ to avoid deprecation warning
+                tar.extractall(extract_dir, filter="data")
             print("    ✓ Extracted to temp directory")
         except Exception as e:
             print(f"    ✗ Error extracting archive: {e}")
@@ -360,11 +361,22 @@ def _check_licenses_with_rat(
 
             for resource in root.findall(".//resource"):
                 name = resource.get("name", "unknown")
-                license_approval = resource.get("license-approval", "true")
-                license_family = resource.get("license-family-name", "")
 
-                if license_approval == "false" or license_family == "Unknown":
-                    if license_family == "Unknown" or not license_family:
+                # Get license approval and family from child elements
+                license_approval_elem = resource.find("license-approval")
+                license_family_elem = resource.find("license-family")
+
+                license_approval = (
+                    license_approval_elem.get("name", "true")
+                    if license_approval_elem is not None
+                    else "true"
+                )
+                license_family = (
+                    license_family_elem.get("name", "") if license_family_elem is not None else ""
+                )
+
+                if license_approval == "false" or license_family == "Unknown license":
+                    if license_family == "Unknown license" or not license_family:
                         unknown_licenses.append(name)
                     else:
                         unapproved_licenses.append(name)
