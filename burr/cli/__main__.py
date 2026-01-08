@@ -132,7 +132,8 @@ def cli():
     pass
 
 
-def _build_ui():
+def run_build_ui_bash_commands():
+    """Execute the bash commands to build UI artifacts."""
     cmd = "npm install --prefix telemetry/ui"
     _command(cmd, capture_output=False)
     cmd = "npm run build --prefix telemetry/ui"
@@ -146,12 +147,13 @@ def _build_ui():
     _command(cmd, capture_output=False)
 
 
-@cli.command()
+@cli.command(name="build-ui")
 def build_ui():
+    """Build the UI artifacts from source."""
     git_root = _get_git_root()
     logger.info("UI build: using project root %s", git_root)
     with cd(git_root):
-        _build_ui()
+        run_build_ui_bash_commands()
 
 
 BACKEND_MODULES = {
@@ -246,7 +248,7 @@ def build_and_publish(prod: bool, no_wipe_dist: bool):
     git_root = _get_git_root()
     with cd(git_root):
         logger.info("Building UI -- this may take a bit...")
-        _build_ui()
+        build_ui()
         logger.info("Built UI!")
         if not no_wipe_dist:
             logger.info("Wiping dist/ directory for a clean publish.")

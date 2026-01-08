@@ -401,7 +401,7 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
 
 
 def _build_ui_artifacts() -> None:
-    """Build UI artifacts using burr-admin-build-ui."""
+    """Build UI artifacts using burr's build function."""
     print("Building UI artifacts...")
 
     ui_build_dir = "burr/tracking/server/build"
@@ -410,18 +410,16 @@ def _build_ui_artifacts() -> None:
     if os.path.exists(ui_build_dir):
         shutil.rmtree(ui_build_dir)
 
-    # Check for burr-admin-build-ui
-    if shutil.which("burr-admin-build-ui") is None:
-        _fail("burr-admin-build-ui not found. Install with: pip install -e .[cli]")
-
-    # Build UI
-    env = os.environ.copy()
-    env["BURR_PROJECT_ROOT"] = os.getcwd()
-
+    # Import and call burr's build UI function directly
+    print("  Running burr's UI build...")
     try:
-        subprocess.run(["burr-admin-build-ui"], check=True, env=env, capture_output=True)
+        from burr.cli.__main__ import run_build_ui_bash_commands
+
+        run_build_ui_bash_commands()
         print("  ✓ UI artifacts built successfully")
-    except subprocess.CalledProcessError as e:
+    except ImportError as e:
+        _fail(f"Could not import burr's build function. Make sure you're in the project root: {e}")
+    except Exception as e:
         _fail(f"Error building UI: {e}")
 
     # Verify
