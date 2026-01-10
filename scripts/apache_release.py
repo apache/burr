@@ -79,6 +79,46 @@ def _print_step(step_num: int, total: int, description: str) -> None:
     print("-" * 80)
 
 
+def _run_command(
+    cmd: list[str],
+    description: str,
+    error_message: str,
+    success_message: Optional[str] = None,
+    capture_output: bool = True,
+    **kwargs,
+) -> subprocess.CompletedProcess:
+    """Run a subprocess command with consistent error handling and output.
+
+    Args:
+        cmd: Command and arguments as list
+        description: What we're doing (printed before running)
+        error_message: Error message prefix if command fails
+        success_message: Optional success message (printed after if provided)
+        capture_output: Whether to capture stdout/stderr (default True)
+        **kwargs: Additional arguments to pass to subprocess.run
+
+    Returns:
+        CompletedProcess instance
+    """
+    if description:
+        print(f"  {description}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=capture_output,
+            text=True,
+            **kwargs,
+        )
+        if success_message:
+            print(f"    ✓ {success_message}")
+        return result
+    except subprocess.CalledProcessError as e:
+        error_detail = f": {e.stderr}" if capture_output and e.stderr else ""
+        _fail(f"{error_message}{error_detail}")
+
+
 # ============================================================================
 # Environment Validation
 # ============================================================================
@@ -200,14 +240,13 @@ def _sign_artifact(artifact_path: str) -> tuple[str, str]:
     checksum_path = f"{artifact_path}.sha512"
 
     # GPG signature
-    try:
-        subprocess.run(
-            ["gpg", "--armor", "--output", signature_path, "--detach-sig", artifact_path],
-            check=True,
-        )
-        print(f"  ✓ Created GPG signature: {signature_path}")
-    except subprocess.CalledProcessError as e:
-        _fail(f"Error signing artifact: {e}")
+    _run_command(
+        ["gpg", "--armor", "--output", signature_path, "--detach-sig", artifact_path],
+        description="",
+        error_message="Error signing artifact",
+        capture_output=False,
+    )
+    print(f"  ✓ Created GPG signature: {signature_path}")
 
     # SHA512 checksum
     sha512_hash = hashlib.sha512()
@@ -306,22 +345,21 @@ def _create_git_archive(version: str, rc_num: str, output_dir: str = "dist") -> 
     archive_path = os.path.join(output_dir, archive_name)
     prefix = f"apache-burr-{version}-incubating/"
 
-    try:
-        subprocess.run(
-            [
-                "git",
-                "archive",
-                "HEAD",
-                f"--prefix={prefix}",
-                "--format=tar.gz",
-                "--output",
-                archive_path,
-            ],
-            check=True,
-        )
-        print(f"  ✓ Created git archive: {archive_path}")
-    except subprocess.CalledProcessError as e:
-        _fail(f"Error creating git archive: {e}")
+    _run_command(
+        [
+            "git",
+            "archive",
+            "HEAD",
+            f"--prefix={prefix}",
+            "--format=tar.gz",
+            "--output",
+            archive_path,
+        ],
+        description="",
+        error_message="Error creating git archive",
+        capture_output=False,
+    )
+    print(f"  ✓ Created git archive: {archive_path}")
 
     file_size = os.path.getsize(archive_path)
     print(f"  ✓ Archive size: {file_size:,} bytes")
@@ -359,20 +397,15 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     _remove_ui_build_artifacts()
     _check_git_working_tree()
 
-    print("  Running flit build --format sdist...")
-    try:
-        env = os.environ.copy()
-        env["FLIT_USE_VCS"] = "0"
-        subprocess.run(
-            ["flit", "build", "--format", "sdist"],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        print("    ✓ flit sdist created successfully")
-    except subprocess.CalledProcessError as e:
-        _fail(f"Failed to build sdist: {e.stderr}")
+    env = os.environ.copy()
+    env["FLIT_USE_VCS"] = "0"
+    _run_command(
+        ["flit", "build", "--format", "sdist"],
+        description="Running flit build --format sdist...",
+        error_message="Failed to build sdist",
+        success_message="flit sdist created successfully",
+        env=env,
+    )
 
     # Find and rename sdist
     expected_pattern = f"dist/apache_burr-{version.lower()}.tar.gz"
@@ -401,26 +434,46 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
 
 
 def _build_ui_artifacts() -> None:
-    """Build UI artifacts using burr's build function."""
+    """Build UI artifacts (npm build + copy to burr/tracking/server/build).
+
+    This replicates the logic from burr.cli.__main__.run_build_ui_bash_commands()
+    without requiring burr to be installed.
+    """
     print("Building UI artifacts...")
 
+    ui_source_dir = "telemetry/ui"
     ui_build_dir = "burr/tracking/server/build"
 
     # Clean existing UI build
     if os.path.exists(ui_build_dir):
         shutil.rmtree(ui_build_dir)
 
-    # Import and call burr's build UI function directly
-    print("  Running burr's UI build...")
-    try:
-        from burr.cli.__main__ import run_build_ui_bash_commands
+    # Install npm dependencies
+    _run_command(
+        ["npm", "install", "--prefix", ui_source_dir],
+        description="Installing npm dependencies...",
+        error_message="npm install failed",
+        success_message="npm dependencies installed",
+    )
 
-        run_build_ui_bash_commands()
-        print("  ✓ UI artifacts built successfully")
-    except ImportError as e:
-        _fail(f"Could not import burr's build function. Make sure you're in the project root: {e}")
+    # Build UI with npm
+    _run_command(
+        ["npm", "run", "build", "--prefix", ui_source_dir],
+        description="Building UI with npm...",
+        error_message="npm build failed",
+        success_message="npm build completed",
+    )
+
+    # Copy build artifacts
+    print("  Copying build artifacts...")
+    os.makedirs(ui_build_dir, exist_ok=True)
+    ui_output = os.path.join(ui_source_dir, "build")
+
+    try:
+        shutil.copytree(ui_output, ui_build_dir, dirs_exist_ok=True)
+        print("    ✓ Build artifacts copied")
     except Exception as e:
-        _fail(f"Error building UI: {e}")
+        _fail(f"Failed to copy build artifacts: {e}")
 
     # Verify
     if not os.path.exists(ui_build_dir) or not os.listdir(ui_build_dir):
@@ -503,13 +556,13 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
         env = os.environ.copy()
         env["FLIT_USE_VCS"] = "0"
 
-        subprocess.run(
+        _run_command(
             ["flit", "build", "--format", "wheel"],
+            description="",
+            error_message="Wheel build failed",
+            success_message="Wheel built successfully",
             env=env,
-            check=True,
-            capture_output=True,
         )
-        print("    ✓ Wheel built successfully")
 
         # Find the wheel
         wheel_pattern = f"dist/apache_burr-{version}*.whl"
@@ -523,8 +576,6 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
 
         return wheel_path
 
-    except subprocess.CalledProcessError as e:
-        _fail(f"Wheel build failed: {e}")
     finally:
         # Always restore symlinks
         if copied:
