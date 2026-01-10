@@ -99,6 +99,39 @@ python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. Install from the whl file to test it out after runnig the `wheel` subcommand.
 
+## For Voters: Verifying a Release
+
+If you're voting on a release, follow these steps to verify the release candidate:
+
+### Quick Start
+
+```bash
+# 1. Download and extract the source archive
+wget https://dist.apache.org/repos/dist/dev/incubator/burr/{VERSION}-incubating-RC{N}/apache-burr-{VERSION}-incubating.tar.gz
+tar -xzf apache-burr-{VERSION}-incubating.tar.gz
+cd apache-burr-{VERSION}-incubating/
+
+# 2. Verify signatures and checksums
+python scripts/verify_apache_artifacts.py signatures
+
+# 3. Install build dependencies
+pip install flit
+
+# 4. Build the wheel from source
+python scripts/apache_release.py wheel {VERSION} {RC_NUM}
+
+# 5. Install and test the wheel
+pip install dist/apache_burr-{VERSION}-py3-none-any.whl
+python -c "import burr; print('Burr version:', burr.__version__)"
+burr --version  # Test CLI
+
+# 6. (Optional) Run tests
+pip install -e ".[tests]"
+pytest tests/
+```
+
+See the "Verification" section below for more detailed verification steps.
+
 ## Verification
 
 Validate artifacts before uploading or voting. Checks GPG signatures, SHA512 checksums, archive integrity, and license compliance with Apache RAT. The `list-contents` command is useful for inspecting what's actually packaged in each artifact.
