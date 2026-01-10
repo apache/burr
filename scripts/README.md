@@ -120,15 +120,12 @@ pip install flit
 # 4. Build the wheel from source
 python scripts/apache_release.py wheel {VERSION} {RC_NUM}
 
-# 5. Install and test the wheel
-pip install dist/apache_burr-{VERSION}-py3-none-any.whl
-python -c "import burr; print('Burr version:', burr.__version__)"
-burr --version  # Test CLI
-
-# 6. (Optional) Run tests
-pip install -e ".[tests]"
-pytest tests/
+# 5. Install and run the wheel
+pip install "dist/apache_burr-{VERSION}-py3-none-any.whl[learn]"
+burr
 ```
+
+You can run tests, etc... from here
 
 See the "Verification" section below for more detailed verification steps.
 

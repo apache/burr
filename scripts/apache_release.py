@@ -711,18 +711,14 @@ The artifacts for this release candidate can be found at:
 The Git tag to be voted upon is:
 {tag}
 
-Release artifacts are signed with your GPG key. The KEYS file is available at:
+Release artifacts are signed with the release manager's GPG key. The KEYS file is available at:
 https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/KEYS
 
 Please download, verify, and test the release candidate.
 
-Some ideas to verify the release:
-1. Build from source - see README in scripts/ directory for instructions
-2. Install the wheel using pip to test functionality
-3. Run license verification using the verify_apache_artifacts.py script or manually check
-   - Verify checksums and signatures match
-   - Check LICENSE/NOTICE files are present
-   - Ensure all source files have Apache headers
+For detailed step-by-step instructions on how to verify this release, please see the
+"For Voters: Verifying a Release" section in the scripts/README.md file within the
+source archive.
 
 The vote will run for a minimum of 72 hours.
 Please vote:
