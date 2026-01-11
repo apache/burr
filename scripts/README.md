@@ -103,31 +103,87 @@ Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha
 
 If you're voting on a release, follow these steps to verify the release candidate:
 
-### Quick Start
+### Complete Verification Workflow
 
 ```bash
-# 1. Download and extract the source archive
-wget https://dist.apache.org/repos/dist/dev/incubator/burr/{VERSION}-incubating-RC{N}/apache-burr-{VERSION}-incubating.tar.gz
-tar -xzf apache-burr-{VERSION}-incubating.tar.gz
-cd apache-burr-{VERSION}-incubating/
+# Set version and RC number (example: 0.41.0 RC3)
+export VERSION=0.41.0
+export RC=3
 
-# 2. Verify signatures and checksums
-python scripts/verify_apache_artifacts.py signatures
+# 1. Download all artifacts from SVN
+svn export https://dist.apache.org/repos/dist/dev/incubator/burr/${VERSION}-incubating-RC${RC}/ burr-rc${RC}
+cd burr-rc${RC}
 
-# 3. Install build dependencies
+# 2. Import KEYS file and verify all GPG signatures
+wget https://downloads.apache.org/incubator/burr/KEYS
+gpg --import KEYS
+
+# Verify git archive signature
+gpg --verify apache-burr-${VERSION}-incubating.tar.gz.asc apache-burr-${VERSION}-incubating.tar.gz
+
+# Verify sdist signature
+gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VERSION}-incubating-sdist.tar.gz
+
+# Verify wheel signature
+gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
+
+# 3. Verify all SHA512 checksums
+echo "$(cat apache-burr-${VERSION}-incubating.tar.gz.sha512)  apache-burr-${VERSION}-incubating.tar.gz" | sha512sum -c -
+echo "$(cat apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512)  apache-burr-${VERSION}-incubating-sdist.tar.gz" | sha512sum -c -
+echo "$(cat apache_burr-${VERSION}-py3-none-any.whl.sha512)  apache_burr-${VERSION}-py3-none-any.whl" | sha512sum -c -
+
+# 4. Extract the source archive
+tar -xzf apache-burr-${VERSION}-incubating.tar.gz
+cd apache-burr-${VERSION}-incubating/
+
+# 5. Install build dependencies
 pip install flit
 
-# 4. Build the wheel from source
-python scripts/apache_release.py wheel {VERSION} {RC_NUM}
+# 6. Build the wheel from source (this also builds the UI)
+python scripts/apache_release.py wheel ${VERSION} ${RC}
 
-# 5. Install and run the wheel
-pip install "dist/apache_burr-{VERSION}-py3-none-any.whl[learn]"
+# 7. Install and test the wheel you just built -- play with the UI
+pip install "dist/apache_burr-${VERSION}-py3-none-any.whl[learn]"
 burr
+
 ```
 
-You can run tests, etc... from here
+Note that the script currently signs the file with a signature. We will be adding the ability to bypass that, but if you want to build from scratch you can follow this process:
 
-See the "Verification" section below for more detailed verification steps.
+
+```bash
+# 1. Build UI
+cd telemetry/ui
+npm install
+npm run build
+cd ../..
+
+# 2. Copy UI build to the right place
+mkdir -p burr/tracking/server/build
+cp -a telemetry/ui/build/. burr/tracking/server/build/
+
+# 3. Handle examples (replace symlink with actual files)
+rm burr/examples  # Remove symlink
+mkdir burr/examples
+cp examples/__init__.py burr/examples/
+cp -r examples/email-assistant burr/examples/
+cp -r examples/multi-modal-chatbot burr/examples/
+cp -r examples/streaming-fastapi burr/examples/
+cp -r examples/deep-researcher burr/examples/
+
+# 4. Build wheel
+flit build --format wheel
+
+# 5. Restore symlink
+rm -rf burr/examples
+ln -s ../examples burr/examples
+```
+
+Then use the wheel at `dist/apache_burr-0.41.0-py3-none-any.whl`
+
+
+
+See the "Verification" section below for more detailed verification steps including license checking.
 
 ## Verification
 
