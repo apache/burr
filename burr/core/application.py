@@ -2424,6 +2424,7 @@ class ApplicationBuilder(Generic[StateType]):
         fork_from_app_id: str = None,
         fork_from_partition_key: str = None,
         fork_from_sequence_id: int = None,
+        override_state_values: Optional[dict] = None,
     ) -> "ApplicationBuilder[StateType]":
         """Initializes the application we will build from some prior state object.
 
@@ -2460,6 +2461,7 @@ class ApplicationBuilder(Generic[StateType]):
         self.fork_from_app_id = fork_from_app_id
         self.fork_from_partition_key = fork_from_partition_key
         self.fork_from_sequence_id = fork_from_sequence_id
+        self.override_state_values = override_state_values
         return self
 
     def with_state_persister(
@@ -2614,6 +2616,9 @@ class ApplicationBuilder(Generic[StateType]):
             # there was something
             last_position = load_result["position"]
             self.state = load_result["state"]
+            if getattr(self, "override_state_values", None):
+                self.state = self.state.update(**self.override_state_values)
+
             self.sequence_id = load_result["sequence_id"]
             status = load_result["status"]
             if self.resume_at_next_action:
