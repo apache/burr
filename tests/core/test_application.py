@@ -3725,3 +3725,29 @@ def test_application__process_control_flow_params():
     assert sorted(halt_after) == ["test_action", "test_action_2"]
     assert halt_before == ["test_action"]
     assert inputs == {}
+
+def test_initialize_from_applies_override_state_values():
+    from burr.core.application import ApplicationBuilder
+    from burr.core.state import State
+    from burr.core.persistence import BaseStateLoader
+
+    class FakeStateLoader(BaseStateLoader):
+        def load(self, partition_key, app_id, sequence_id):
+            return {
+                "state": State({"x": 1}),
+                "position": None,
+                "sequence_id": 0,
+                "status": "completed",
+            }
+
+    builder = ApplicationBuilder().initialize_from(
+        initializer=FakeStateLoader(),
+        resume_at_next_action=False,
+        default_state={},
+        default_entrypoint="_start",
+        override_state_values={"x": 100},
+    )
+
+    app = builder.build()
+
+    assert app.state["x"] == 100
