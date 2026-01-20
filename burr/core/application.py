@@ -2616,7 +2616,7 @@ class ApplicationBuilder(Generic[StateType]):
             # there was something
             last_position = load_result["position"]
             self.state = load_result["state"]
-            if getattr(self, "override_state_values", None):
+            if self.override_state_values:
                 self.state = self.state.update(**self.override_state_values)
 
             self.sequence_id = load_result["sequence_id"]
