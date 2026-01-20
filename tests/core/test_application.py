@@ -23,6 +23,14 @@ import typing
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional, Tuple, Union
 
+from burr.core.application import ApplicationBuilder
+from burr.core.state import State
+from burr.core.persistence import (
+    BaseStatePersister,
+    BaseStateLoader,
+    PersistedStateData,
+)
+
 import pytest
 
 from burr.core import State
@@ -3727,10 +3735,6 @@ def test_application__process_control_flow_params():
     assert inputs == {}
 
 def test_initialize_from_applies_override_state_values():
-    from burr.core.application import ApplicationBuilder
-    from burr.core.state import State
-    from burr.core.persistence import BaseStateLoader
-
     class FakeStateLoader(BaseStateLoader):
         def load(self, partition_key, app_id, sequence_id):
             return {
@@ -3740,12 +3744,24 @@ def test_initialize_from_applies_override_state_values():
                 "status": "completed",
             }
 
-    builder = ApplicationBuilder().initialize_from(
-        initializer=FakeStateLoader(),
-        resume_at_next_action=False,
-        default_state={},
-        default_entrypoint="_start",
-        override_state_values={"x": 100},
+        def list_app_ids(self, partition_key):
+            return []
+
+    @action(reads=[], writes=[])
+    def noop(state: State) -> State:
+        return state
+
+    builder = (
+        ApplicationBuilder()
+        .initialize_from(
+            initializer=FakeStateLoader(),
+            resume_at_next_action=False,
+            default_state={},
+            default_entrypoint="noop",
+            override_state_values={"x": 100},
+        )
+        .with_actions(noop)
+        .with_transitions()
     )
 
     app = builder.build()
