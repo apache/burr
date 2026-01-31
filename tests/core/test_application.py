@@ -23,14 +23,6 @@ import typing
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional, Tuple, Union
 
-from burr.core.application import ApplicationBuilder
-from burr.core.state import State
-from burr.core.persistence import (
-    BaseStatePersister,
-    BaseStateLoader,
-    PersistedStateData,
-)
-
 import pytest
 
 from burr.core import State
@@ -71,6 +63,7 @@ from burr.core.application import (
 from burr.core.graph import Graph, GraphBuilder, Transition
 from burr.core.persistence import (
     AsyncDevNullPersister,
+    BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
     PersistedStateData,
@@ -3733,6 +3726,7 @@ def test_application__process_control_flow_params():
     assert sorted(halt_after) == ["test_action", "test_action_2"]
     assert halt_before == ["test_action"]
     assert inputs == {}
+
 
 def test_initialize_from_applies_override_state_values():
     class FakeStateLoader(BaseStateLoader):
