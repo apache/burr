@@ -171,7 +171,7 @@ def llm_function_response(
     :return:
     """
     response = llm_client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4o-mini",
         messages=message_history,
         tools=tool_function_specs,
         tool_choice="auto",
