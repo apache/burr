@@ -140,7 +140,7 @@ def _exercise_agent(messages: list, sender: str, agent, name: str, tracer: Trace
 
 
 # Define the actual agents via langchain
-llm = ChatOpenAI(model="gpt-4-1106-preview")
+llm = ChatOpenAI(model="gpt-4o-mini")
 research_agent = create_agent(
     llm,
     [tavily_tool],
