@@ -343,9 +343,9 @@ def _create_git_archive(version: str, rc_num: str, output_dir: str = "dist") -> 
 
     os.makedirs(output_dir, exist_ok=True)
 
-    archive_name = f"apache-burr-{version}-incubating.tar.gz"
+    archive_name = f"apache-burr-{version}-incubating-src.tar.gz"
     archive_path = os.path.join(output_dir, archive_name)
-    prefix = f"apache-burr-{version}-incubating/"
+    prefix = f"apache-burr-{version}-incubating-src/"
 
     _run_command(
         [

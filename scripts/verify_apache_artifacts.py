@@ -24,7 +24,7 @@ Checks signatures, checksums, licenses, and archive integrity.
 
 Usage:
     # List contents of an artifact
-    python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
+    python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
 
     # Verify signatures and checksums
     python scripts/verify_apache_artifacts.py signatures
@@ -653,7 +653,7 @@ def main():
         epilog="""
 Examples:
   # List contents of a specific artifact
-  python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
+  python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
   python scripts/verify_apache_artifacts.py list-contents dist/apache_burr-0.41.0-py3-none-any.whl
 
   # Verify signatures and checksums only
