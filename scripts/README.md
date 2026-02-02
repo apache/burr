@@ -54,6 +54,7 @@ Specifically, we set the following guidelines:
 Prerequisites:
 - Python 3.9+
 - `flit` for building (`pip install flit`)
+- `twine` for package validation (`pip install twine`)
 - GPG key configured for signing
 - Node.js + npm for UI builds
 - Apache RAT jar for license checking (optional)
@@ -97,7 +98,7 @@ python scripts/apache_release.py verify 0.41.0 0
 python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 ```
 
-Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. Install from the whl file to test it out after runnig the `wheel` subcommand.
+Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
 
 ## For Voters: Verifying a Release
 
