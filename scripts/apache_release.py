@@ -134,10 +134,10 @@ def _validate_environment_for_command(args) -> None:
     command_requirements = {
         "archive": ["git", "gpg"],
         "sdist": ["git", "gpg", "flit"],
-        "wheel": ["git", "gpg", "flit", "node", "npm"],
+        "wheel": ["git", "gpg", "flit", "node", "npm", "twine"],
         "upload": ["git", "gpg", "svn"],
-        "all": ["git", "gpg", "flit", "node", "npm", "svn"],
-        "verify": ["git", "gpg"],
+        "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
+        "verify": ["git", "gpg", "twine"],
     }
 
     required_tools = command_requirements.get(args.command, ["git", "gpg"])
@@ -165,6 +165,8 @@ def _validate_environment_for_command(args) -> None:
         for tool in missing_tools:
             if tool == "flit":
                 print(f"  • {tool}: Install with 'pip install flit'")
+            elif tool == "twine":
+                print(f"  • {tool}: Install with 'pip install twine'")
             elif tool in ["node", "npm"]:
                 print(f"  • {tool}: Install from https://nodejs.org/")
             else:
@@ -616,6 +618,21 @@ def _verify_wheel(wheel_path: str) -> bool:
         return False
 
 
+def _verify_wheel_with_twine(wheel_path: str) -> bool:
+    """Verify wheel metadata and package validity using twine."""
+    print(f"  Verifying wheel with twine: {os.path.basename(wheel_path)}")
+
+    _run_command(
+        ["twine", "check", wheel_path],
+        description="",
+        error_message="Twine metadata validation failed",
+        success_message="Twine check passed",
+    )
+
+    print("    ✓ Wheel metadata is valid")
+    return True
+
+
 # ============================================================================
 # Upload to Apache SVN
 # ============================================================================
@@ -786,12 +803,16 @@ def cmd_wheel(args) -> bool:
 
     wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
 
-    print("\nSigning wheel...")
-    _sign_artifact(wheel_path)
+    print("\nVerifying wheel with twine...")
+    if not _verify_wheel_with_twine(wheel_path):
+        _fail("Twine verification failed!")
 
-    print("\nVerifying wheel...")
+    print("\nVerifying wheel contents...")
     if not _verify_wheel(wheel_path):
         _fail("Wheel verification failed!")
+
+    print("\nSigning wheel...")
+    _sign_artifact(wheel_path)
 
     if not _verify_artifact_complete(wheel_path):
         _fail("Wheel signature/checksum verification failed!")
@@ -872,6 +893,8 @@ def cmd_all(args) -> bool:
     # Step 3: Build wheel
     _print_step(3, 4, "Building wheel")
     wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
+    if not _verify_wheel_with_twine(wheel_path):
+        _fail("Twine verification failed!")
     _sign_artifact(wheel_path)
     if not _verify_wheel(wheel_path) or not _verify_artifact_complete(wheel_path):
         _fail("Wheel verification failed!")
