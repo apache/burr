@@ -622,15 +622,24 @@ def _verify_wheel_with_twine(wheel_path: str) -> bool:
     """Verify wheel metadata and package validity using twine."""
     print(f"  Verifying wheel with twine: {os.path.basename(wheel_path)}")
 
-    _run_command(
-        ["twine", "check", wheel_path],
-        description="",
-        error_message="Twine metadata validation failed",
-        success_message="Twine check passed",
-    )
-
-    print("    ✓ Wheel metadata is valid")
-    return True
+    try:
+        subprocess.run(
+            ["twine", "check", wheel_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print("    ✓ Twine check passed")
+        print("    ✓ Wheel metadata is valid")
+        return True
+    except subprocess.CalledProcessError as e:
+        print("\n❌ Twine metadata validation failed\n")
+        print("Twine output:")
+        if e.stdout:
+            print(e.stdout)
+        if e.stderr:
+            print(e.stderr)
+        _fail("Wheel failed twine validation - see output above for details")
 
 
 # ============================================================================
