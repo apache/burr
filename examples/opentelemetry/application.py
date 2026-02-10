@@ -56,7 +56,8 @@ def _get_openai_client():
 
 
 @trace()
-def _query_openai(prompt: str, model: str = "gpt-4", chat_history: Optional[list] = None):
+def _query_openai(prompt: str, model: str = "gpt-4o-mini", chat_history: Optional[list] = None):
+
     chat_history = chat_history or []
     client = _get_openai_client()
     result = client.chat.completions.create(
@@ -80,7 +81,7 @@ def decide_mode(state: State, __tracer: TracerFactory) -> Tuple[dict, State]:
         "the mode would be 'generate_image'. If the prompt is 'what is the capital of France', the mode would be 'answer_question'."
         "If none of these modes apply, please respond with 'unknown'."
     )
-    content = _query_openai(prompt, model="gpt-4o")
+    content = _query_openai(prompt, model="gpt-4o-mini")
     mode = content.lower()
     if mode not in MODES:
         mode = "unknown"
@@ -104,7 +105,7 @@ def prompt_for_more(state: State) -> Tuple[dict, State]:
 def chat_response(
     state: State,
     prepend_prompt: str,
-    model: str = "gpt-4o",
+    model: str = "gpt-4o-mini",
 ) -> State:
     chat_history = state["chat_history"].copy()
     chat_history_to_send = chat_history[:-1]
