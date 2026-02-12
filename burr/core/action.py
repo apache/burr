@@ -49,6 +49,56 @@ else:
     from typing import Self
 
 from burr.core.state import State
+
+def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
+    try:
+        source = inspect.getsource(fn)
+    except OSError:
+        return  # skip if source unavailable
+    
+    # detect actual state parameter name
+    sig = inspect.signature(fn)
+    state_param_name = None
+
+    for name, param in sig.parameters.items():
+        if param.annotation is State:
+            state_param_name = name
+            break
+
+    if state_param_name is None:
+        return
+
+
+    import textwrap
+    tree = ast.parse(textwrap.dedent(source))
+
+    declared = set(declared_reads)
+    violations = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_Subscript(self, node):
+            if (
+                isinstance(node.value, ast.Name)
+                and node.value.id == state_param_name
+
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)
+            ):
+                key = node.slice.value
+                if key not in declared:
+                    violations.append(key)
+            self.generic_visit(node)
+
+    Visitor().visit(tree)
+
+    if violations:
+        raise ValueError(
+            f"Action reads undeclared state keys: {violations}. "
+            f"Declared reads: {declared_reads}"
+        )
+
+
+
 from burr.core.typing import ActionSchema
 
 # This is here to make accessing the pydantic actions easier
@@ -628,6 +678,8 @@ class FunctionBasedAction(SingleStepAction):
         self._fn = fn
         self._reads = reads
         self._writes = writes
+        _validate_declared_reads(self._originating_fn, self._reads)
+
         self._bound_params = bound_params if bound_params is not None else {}
         self._inputs = (
             derive_inputs_from_fn(self._bound_params, self._fn)
@@ -1106,9 +1158,13 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
         :param writes:
         """
         super(FunctionBasedStreamingAction, self).__init__()
+        self._originating_fn = originating_fn if originating_fn is not None else fn
         self._fn = fn
         self._reads = reads
         self._writes = writes
+        _validate_declared_reads(self._originating_fn, self._reads)
+
+
         self._bound_params = bound_params if bound_params is not None else {}
         self._inputs = (
             derive_inputs_from_fn(self._bound_params, self._fn)
@@ -1118,7 +1174,7 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
                 [item for item in input_spec[1] if item not in self._bound_params],
             )
         )
-        self._originating_fn = originating_fn if originating_fn is not None else fn
+        # self._originating_fn = originating_fn if originating_fn is not None else fn
         self._schema = schema
         self._tags = tags if tags is not None else []
 
