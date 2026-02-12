@@ -1174,7 +1174,7 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
                 [item for item in input_spec[1] if item not in self._bound_params],
             )
         )
-        # self._originating_fn = originating_fn if originating_fn is not None else fn
+       
         self._schema = schema
         self._tags = tags if tags is not None else []
 
