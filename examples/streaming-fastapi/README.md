@@ -35,7 +35,7 @@ or do one of the following:
 3. Generate a poem
 4. Prompt for more
 
-It will use an LLM to decide which to do. It streams back text using async streaming in Burr. Read more about how that is implemented [here](https://burr.dagworks.io/concepts/streaming-actions/).
+It will use an LLM to decide which to do. It streams back text using async streaming in Burr. Read more about how that is implemented [here](https://burr.apache.org/concepts/streaming-actions/).
 
 Note that, even though not every response is streaming (E.G. unsafe response, which is hardcoded), they are modeled as streaming to make interaction with the app simpler.
 
@@ -59,7 +59,7 @@ Navigate to the [streaming example](http://localhost:7241/demos/streaming-chatbo
 
 ## Streaming in Burr
 
-Read more [here](https://burr.dagworks.io/concepts/streaming-actions/)
+Read more [here](https://burr.apache.org/concepts/streaming-actions/)
 To use streaming in Burr, you write your actions as a generator. If you're using the function-based API (as we do in this example),
 the function should yield a tuple, consisting of:
 1. The result (intermediate or final)

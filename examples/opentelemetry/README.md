@@ -29,4 +29,4 @@ We have two modes:
 See [notebook.ipynb](./notebook.ipynb) for a simple overview.
 See [application.py](./application.py) for the full code
 
-See the [documentation](https://burr.dagworks.io/concepts/additional-visibility/#open-telemetry) for more info
+See the [documentation](https://burr.apache.org/concepts/additional-visibility/#open-telemetry) for more info

@@ -19,7 +19,7 @@
 
 # ML Training
 
-This is a WIP! Please contribute back if you have ideas. You can track the associated issue [here](https://github.com/DAGWorks-Inc/burr/issues/138).
+This is a WIP! Please contribute back if you have ideas. You can track the associated issue [here](https://github.com/apache/burr/issues/138).
 
 A machine learning training system can easily be modeled as a state machine.
 
@@ -52,7 +52,7 @@ you can use Burr hooks to log metrics, visualize, etc... at each step. This allo
 
 While some models are trained in a single-shot and shipped to production, many require human input.
 Burr can be used to express training, then checkpoint/pause the state while a human is evaluating it,
-and have their input (e.g. go/no-go) passed in as an [input parameter](https://burr.dagworks.io/concepts/actions/#runtime-inputs).
+and have their input (e.g. go/no-go) passed in as an [input parameter](https://burr.apache.org/concepts/actions/#runtime-inputs).
 
 Note that this still requires a scheduling tool (say a task executor that runs until the next human input is needed),
 but that task executor does not need to be complicated (all it needs to do is run a job when prompted, and possibly on a chron schedule).

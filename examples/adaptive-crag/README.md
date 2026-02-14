@@ -38,4 +38,4 @@ We stop after `ask_assistant` to get the next `query` for `router`.
 ## Adaptive-CRAG 🧪
 ![statemachine](statemachine.png)
 
-We have some of the core concepts from the [Burr Docs](https://burr.dagworks.io/concepts/) in a folder and we will add that to a `LanceDB` table for Hybrid Search. You can add as many tables as you want. Each table will be a different route for the `router`.
+We have some of the core concepts from the [Burr Docs](https://burr.apache.org/concepts/) in a folder and we will add that to a `LanceDB` table for Hybrid Search. You can add as many tables as you want. Each table will be a different route for the `router`.

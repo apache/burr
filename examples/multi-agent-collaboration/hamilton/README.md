@@ -27,7 +27,7 @@ With Hamilton the prompts can be found in the module [`func_agent.py`](func_agen
 
 The Hamilton code creates the following dataflow:
 
-![dataflow](https://github.com/DAGWorks-Inc/burr/assets/2328071/24822ee5-f05b-4fa4-95e7-daa23969cfff)
+![dataflow](https://github.com/apache/burr/assets/2328071/24822ee5-f05b-4fa4-95e7-daa23969cfff)
 
 
 # Tracing
