@@ -19,8 +19,9 @@
 Vercel Serverless Function for counter application
 Endpoint: /api/counter
 """
-from http.server import BaseHTTPRequestHandler
 import json
+from http.server import BaseHTTPRequestHandler
+
 from app import counter_app
 
 
@@ -39,11 +40,11 @@ class handler(BaseHTTPRequestHandler):
         """
         try:
             # Read request body
-            content_length = int(self.headers.get('Content-Length', 0))
+            content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
             # Parse JSON payload
-            data = json.loads(body.decode('utf-8'))
+            data = json.loads(body.decode("utf-8"))
 
             # Extract parameter (equivalent to Lambda's event["body"]["number"])
             count_up_to = int(data.get("number", 0))
@@ -59,7 +60,7 @@ class handler(BaseHTTPRequestHandler):
 
             # Return success response with serialized state
             self.send_json_response(200, state.serialize())
-            
+
         except json.JSONDecodeError:
             self.send_error_response(400, "Invalid JSON format")
         except ValueError as e:
@@ -70,6 +71,7 @@ class handler(BaseHTTPRequestHandler):
             # Log error for debugging
             print(f"Error in counter handler: {str(e)}")
             import traceback
+
             traceback.print_exc()
             self.send_error_response(500, "Internal server error")
 
@@ -102,16 +104,16 @@ class handler(BaseHTTPRequestHandler):
             data: Response data (dict, list, or any JSON-serializable object)
         """
         self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json')
+        self.send_header("Content-Type", "application/json")
         self.end_headers()
-        
+
         if isinstance(data, (dict, list)):
             response_body = json.dumps(data, ensure_ascii=False)
         else:
             response_body = str(data)
-        
-        self.wfile.write(response_body.encode('utf-8'))
-    
+
+        self.wfile.write(response_body.encode("utf-8"))
+
     def send_error_response(self, status_code, message):
         """Send error response to client.
 
@@ -120,9 +122,8 @@ class handler(BaseHTTPRequestHandler):
             message: Error message string to include in response body
         """
         self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json')
+        self.send_header("Content-Type", "application/json")
         self.end_headers()
-        
-        error_body = json.dumps({'error': message})
-        self.wfile.write(error_body.encode('utf-8'))
 
+        error_body = json.dumps({"error": message})
+        self.wfile.write(error_body.encode("utf-8"))

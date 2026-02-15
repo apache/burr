@@ -54,6 +54,7 @@ Specifically, we set the following guidelines:
 Prerequisites:
 - Python 3.9+
 - `flit` for building (`pip install flit`)
+- `twine` for package validation (`pip install twine`)
 - GPG key configured for signing
 - Node.js + npm for UI builds
 - Apache RAT jar for license checking (optional)
@@ -97,7 +98,7 @@ python scripts/apache_release.py verify 0.41.0 0
 python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 ```
 
-Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. Install from the whl file to test it out after runnig the `wheel` subcommand.
+Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
 
 ## For Voters: Verifying a Release
 
@@ -119,7 +120,7 @@ wget https://downloads.apache.org/incubator/burr/KEYS
 gpg --import KEYS
 
 # Verify git archive signature
-gpg --verify apache-burr-${VERSION}-incubating.tar.gz.asc apache-burr-${VERSION}-incubating.tar.gz
+gpg --verify apache-burr-${VERSION}-incubating-src.tar.gz.asc apache-burr-${VERSION}-incubating-src.tar.gz
 
 # Verify sdist signature
 gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VERSION}-incubating-sdist.tar.gz
@@ -128,13 +129,13 @@ gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VE
 gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
 
 # 3. Verify all SHA512 checksums
-echo "$(cat apache-burr-${VERSION}-incubating.tar.gz.sha512)  apache-burr-${VERSION}-incubating.tar.gz" | sha512sum -c -
+echo "$(cat apache-burr-${VERSION}-incubating-src.tar.gz.sha512)  apache-burr-${VERSION}-incubating-src.tar.gz" | sha512sum -c -
 echo "$(cat apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512)  apache-burr-${VERSION}-incubating-sdist.tar.gz" | sha512sum -c -
 echo "$(cat apache_burr-${VERSION}-py3-none-any.whl.sha512)  apache_burr-${VERSION}-py3-none-any.whl" | sha512sum -c -
 
 # 4. Extract the source archive
-tar -xzf apache-burr-${VERSION}-incubating.tar.gz
-cd apache-burr-${VERSION}-incubating/
+tar -xzf apache-burr-${VERSION}-incubating-src.tar.gz
+cd apache-burr-${VERSION}-incubating-src/
 
 # 5. Install build dependencies
 pip install flit
@@ -215,7 +216,7 @@ python scripts/verify_apache_artifacts.py licenses --rat-jar apache-rat-0.15.jar
 python scripts/verify_apache_artifacts.py all --rat-jar apache-rat-0.15.jar
 
 # Inspect artifact contents
-python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
+python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
 python scripts/verify_apache_artifacts.py list-contents dist/apache_burr-0.41.0-py3-none-any.whl
 ```
 
