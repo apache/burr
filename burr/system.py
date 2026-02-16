@@ -29,3 +29,21 @@ else:
 
 def now():
     return datetime.datetime.now(utc)
+
+
+# Added support for multiple LLMs and frameworks
+class LLMFrameworkConfig:
+    def __init__(self, llm_name, framework_name):
+        self.llm_name = llm_name
+        self.framework_name = framework_name
+
+    def get_llm_name(self):
+        return self.llm_name
+
+    def get_framework_name(self):
+        return self.framework_name
+
+
+# Example usage of LLMFrameworkConfig
+llm_config = LLMFrameworkConfig("OpenAI GPT-3", "PyTorch")
+print(f"LLM: {llm_config.get_llm_name()}, Framework: {llm_config.get_framework_name()}")
