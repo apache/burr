@@ -29,6 +29,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 concurrency: ci-${{ github.ref }}
 
