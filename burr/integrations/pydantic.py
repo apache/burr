@@ -51,8 +51,10 @@ PydanticActionFunction = Callable[..., Union[pydantic.BaseModel, Awaitable[pydan
 
 def model_to_dict(model: pydantic.BaseModel, include: Optional[List[str]] = None) -> dict:
     """Utility function to convert a pydantic model to a dictionary."""
-    keys = model.model_fields.keys()
-    keys = keys if include is None else [item for item in include if item in model.model_fields]
+    keys = type(model).model_fields.keys()
+    keys = (
+        keys if include is None else [item for item in include if item in type(model).model_fields]
+    )
     return {key: getattr(model, key) for key in keys}
 
 
