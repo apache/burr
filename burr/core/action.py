@@ -21,6 +21,7 @@ import builtins
 import copy
 import inspect
 import sys
+import textwrap
 import types
 import typing
 from collections.abc import AsyncIterator
@@ -50,12 +51,16 @@ else:
 
 from burr.core.state import State
 
+
 def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
+    if not declared_reads:
+        return
+
     try:
         source = inspect.getsource(fn)
     except OSError:
         return  # skip if source unavailable
-    
+
     # detect actual state parameter name
     sig = inspect.signature(fn)
     state_param_name = None
@@ -68,8 +73,6 @@ def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
     if state_param_name is None:
         return
 
-
-    import textwrap
     tree = ast.parse(textwrap.dedent(source))
 
     declared = set(declared_reads)
@@ -80,7 +83,6 @@ def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
             if (
                 isinstance(node.value, ast.Name)
                 and node.value.id == state_param_name
-
                 and isinstance(node.slice, ast.Constant)
                 and isinstance(node.slice.value, str)
             ):
@@ -96,7 +98,6 @@ def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
             f"Action reads undeclared state keys: {violations}. "
             f"Declared reads: {declared_reads}"
         )
-
 
 
 from burr.core.typing import ActionSchema
@@ -1164,7 +1165,6 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
         self._writes = writes
         _validate_declared_reads(self._originating_fn, self._reads)
 
-
         self._bound_params = bound_params if bound_params is not None else {}
         self._inputs = (
             derive_inputs_from_fn(self._bound_params, self._fn)
@@ -1174,7 +1174,7 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
                 [item for item in input_spec[1] if item not in self._bound_params],
             )
         )
-       
+
         self._schema = schema
         self._tags = tags if tags is not None else []
 

@@ -823,3 +823,58 @@ def test_non_existent_bound_parameters():
     required, optional = derive_inputs_from_fn(bound_params, fn)
     assert required == []
     assert optional == []
+
+
+def test_undeclared_state_read_raises_error():
+    with pytest.raises(ValueError):
+
+        @action(reads=["foo"], writes=[])
+        def bad_action(state: State):
+            _ = state["bar"]
+            return {}, state
+
+
+def test_declared_state_read_passes():
+    @action(reads=["foo"], writes=[])
+    def good_action(state: State):
+        _ = state["foo"]
+        return {}, state
+
+
+def test_multiple_undeclared_reads_interleaved():
+    with pytest.raises(ValueError) as exc:
+
+        @action(reads=["foo"], writes=[])
+        def bad_action(state: State):
+            _ = state["foo"]
+            _ = state["bar"]
+            _ = state["baz"]
+            return {}, state
+
+    message = str(exc.value)
+    assert "bar" in message
+    assert "baz" in message
+
+
+def test_pydantic_action_not_impacted():
+    try:
+        from pydantic import BaseModel
+    except ImportError:
+        pytest.skip("pydantic not installed")
+
+    class MyState(BaseModel):
+        foo: str
+
+    @action.pydantic(
+        reads=["foo"],
+        writes=["foo"],
+        state_input_type=MyState,
+        state_output_type=MyState,
+    )
+    def good_action(state: MyState):
+        return {"foo": state.foo}
+
+    # ensure decoration didn't raise and action is creatable
+    from burr.core.action import create_action
+
+    create_action(good_action, name="test")
