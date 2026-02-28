@@ -15,13 +15,23 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# Production environment configuration
+# Replace ACCOUNT_ID with your AWS account ID for s3_bucket_name
 
-def __getattr__(name: str):
-    """Lazy load Bedrock integration to avoid requiring boto3 unless used."""
-    if name == "BedrockAction":
-        from burr.integrations.bedrock import BedrockAction
-        return BedrockAction
-    if name == "BedrockStreamingAction":
-        from burr.integrations.bedrock import BedrockStreamingAction
-        return BedrockStreamingAction
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+aws_region  = "us-east-1"
+environment = "prod"
+
+s3_bucket_name = "burr-tracking-logs-prod-ACCOUNT_ID"
+sqs_queue_name = "burr-s3-events-prod"
+
+enable_sqs = true
+
+log_retention_days      = 90
+snapshot_retention_days = 30
+
+sqs_message_retention_seconds  = 1209600
+sqs_visibility_timeout_seconds = 300
+sqs_receive_wait_time_seconds   = 20
+sqs_max_receive_count           = 3
+
+enable_bedrock = false

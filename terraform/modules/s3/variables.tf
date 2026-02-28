@@ -15,13 +15,24 @@
 # specific language governing permissions and limitations
 # under the License.
 
+variable "bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
+}
 
-def __getattr__(name: str):
-    """Lazy load Bedrock integration to avoid requiring boto3 unless used."""
-    if name == "BedrockAction":
-        from burr.integrations.bedrock import BedrockAction
-        return BedrockAction
-    if name == "BedrockStreamingAction":
-        from burr.integrations.bedrock import BedrockStreamingAction
-        return BedrockStreamingAction
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+variable "lifecycle_rules" {
+  description = "List of lifecycle rules for the bucket"
+  type = list(object({
+    id              = string
+    prefix          = string
+    enabled         = bool
+    expiration_days = number
+    noncurrent_days = optional(number)
+  }))
+}
+
+variable "tags" {
+  description = "Tags to apply to resources"
+  type        = map(string)
+  default     = {}
+}

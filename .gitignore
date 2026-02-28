@@ -193,3 +193,10 @@ burr/tracking/server/build
 examples/*/statemachine
 examples/*/*/statemachine
 .vscode
+
+# Terraform (see also terraform/.gitignore)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/.terraform.tfstate.lock.info
+terraform/*.tfplan

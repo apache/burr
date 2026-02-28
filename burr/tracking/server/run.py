@@ -29,6 +29,7 @@ from burr.log_setup import setup_logging
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
+    EventDrivenBackendMixin,
     IndexingBackendMixin,
     SnapshottingBackendMixin,
 )
@@ -128,6 +129,8 @@ initialized = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+
     # Download if it does it
     # For now we do this before the lifespan
     await download_snapshot()
@@ -135,6 +138,9 @@ async def lifespan(app: FastAPI):
     await backend.lifespan(app).__anext__()
     await sync_index()  # this will trigger the repeat every N seconds
     await save_snapshot()  # this will trigger the repeat every N seconds
+    # BIP-0042: Start SQS consumer for event-driven tracking when configured
+    if isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven():
+        asyncio.create_task(backend.start_sqs_consumer())
     global initialized
     initialized = True
     yield
@@ -172,12 +178,18 @@ app_spec = get_app_spec()
 logger = logging.getLogger(__name__)
 
 if app_spec.indexing:
-    update_interval = backend.update_interval_milliseconds() / 1000 if app_spec.indexing else None
-    sync_index = repeat_every(
-        seconds=backend.update_interval_milliseconds() / 1000,
-        wait_first=True,
-        logger=logger,
-    )(sync_index)
+    # BIP-0042: Only use polling when not in event-driven (SQS) mode
+    if not (
+        isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven()
+    ):
+        update_interval = (
+            backend.update_interval_milliseconds() / 1000 if app_spec.indexing else None
+        )
+        sync_index = repeat_every(
+            seconds=backend.update_interval_milliseconds() / 1000,
+            wait_first=True,
+            logger=logger,
+        )(sync_index)
 
 if app_spec.snapshotting:
     snapshot_interval = (

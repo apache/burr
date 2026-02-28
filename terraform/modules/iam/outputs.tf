@@ -15,13 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
+output "role_arn" {
+  description = "ARN of the IAM role"
+  value       = aws_iam_role.burr_server.arn
+}
 
-def __getattr__(name: str):
-    """Lazy load Bedrock integration to avoid requiring boto3 unless used."""
-    if name == "BedrockAction":
-        from burr.integrations.bedrock import BedrockAction
-        return BedrockAction
-    if name == "BedrockStreamingAction":
-        from burr.integrations.bedrock import BedrockStreamingAction
-        return BedrockStreamingAction
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+output "role_name" {
+  description = "Name of the IAM role"
+  value       = aws_iam_role.burr_server.name
+}

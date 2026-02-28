@@ -16,5 +16,6 @@
 # under the License.
 
 from .client import LocalTrackingClient
+from .s3client import S3TrackingClient
 
-__all__ = ["LocalTrackingClient"]
+__all__ = ["LocalTrackingClient", "S3TrackingClient"]

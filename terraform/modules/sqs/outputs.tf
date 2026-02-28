@@ -15,13 +15,27 @@
 # specific language governing permissions and limitations
 # under the License.
 
+output "queue_id" {
+  description = "URL of the SQS queue"
+  value       = aws_sqs_queue.main.id
+}
 
-def __getattr__(name: str):
-    """Lazy load Bedrock integration to avoid requiring boto3 unless used."""
-    if name == "BedrockAction":
-        from burr.integrations.bedrock import BedrockAction
-        return BedrockAction
-    if name == "BedrockStreamingAction":
-        from burr.integrations.bedrock import BedrockStreamingAction
-        return BedrockStreamingAction
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+output "queue_url" {
+  description = "URL of the SQS queue"
+  value       = aws_sqs_queue.main.url
+}
+
+output "queue_arn" {
+  description = "ARN of the SQS queue"
+  value       = aws_sqs_queue.main.arn
+}
+
+output "dlq_url" {
+  description = "URL of the dead letter queue"
+  value       = aws_sqs_queue.dlq.url
+}
+
+output "dlq_arn" {
+  description = "ARN of the dead letter queue"
+  value       = aws_sqs_queue.dlq.arn
+}
