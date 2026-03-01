@@ -66,7 +66,7 @@ resource "aws_iam_role_policy" "s3" {
 }
 
 data "aws_iam_policy_document" "sqs_least_privilege" {
-  count = var.enable_sqs && var.sqs_queue_arn != "" ? 1 : 0
+  count = var.enable_sqs ? 1 : 0
 
   statement {
     sid    = "SQSConsume"
@@ -81,7 +81,7 @@ data "aws_iam_policy_document" "sqs_least_privilege" {
 }
 
 resource "aws_iam_role_policy" "sqs" {
-  count  = var.enable_sqs && var.sqs_queue_arn != "" ? 1 : 0
+  count  = var.enable_sqs ? 1 : 0
   name   = "${var.role_name}-sqs"
   role   = aws_iam_role.burr_server.id
   policy = data.aws_iam_policy_document.sqs_least_privilege[0].json
