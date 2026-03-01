@@ -22,6 +22,7 @@ import { Dialog, Disclosure, Transition } from '@headlessui/react';
 import {
   ComputerDesktopIcon,
   Square2StackIcon,
+  SquaresPlusIcon,
   QuestionMarkCircleIcon,
   XMarkIcon,
   ChatBubbleLeftEllipsisIcon,
@@ -99,6 +100,12 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
       name: 'Projects',
       href: '/projects',
       icon: Square2StackIcon,
+      linkType: 'internal'
+    },
+    {
+      name: 'Graph Builder',
+      href: '/graph-builder',
+      icon: SquaresPlusIcon,
       linkType: 'internal'
     },
     {
@@ -395,13 +402,12 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
           <ToggleOpenButton open={sidebarOpen} toggleSidebar={toggleSidebar} />
         </div>
 
-        {/* This is a bit hacky -- just quickly prototyping and these margins were the ones that worked! */}
-        <main className={`py-14 -my-1 ${sidebarOpen ? 'lg:pl-72' : 'lg:pl-5'} h-full`}>
-          <div className="flex items-center px-5 sm:px-7 lg:px-9 pb-8 -my-4">
+        <main className={`${sidebarOpen ? 'lg:pl-72' : 'lg:pl-5'} h-full flex flex-col`}>
+          <div className="flex items-center px-5 sm:px-7 lg:px-9 h-14 flex-shrink-0">
             <BreadCrumb />
           </div>
-          <div className="flex h-full flex-col">
-            <div className="px-4 sm:px-6 lg:px-2 max-h-full h-full flex-1"> {props.children}</div>
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 sm:px-6 lg:px-2 h-full flex-1 min-h-0">{props.children}</div>
           </div>
         </main>
       </div>

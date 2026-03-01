@@ -21,7 +21,8 @@ import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
 import React, { createContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   BaseEdge,
   Controls,
   EdgeProps,
@@ -32,9 +33,9 @@ import ReactFlow, {
   getBezierPath,
   useNodes,
   useReactFlow
-} from 'reactflow';
+} from '@xyflow/react';
 
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 import { backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
 import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
@@ -143,14 +144,16 @@ export const ActionActionEdge = ({
   data
 }: EdgeProps) => {
   const nodes = useNodes();
-  data = data as EdgeData;
+  const edgeData = data as EdgeData | undefined;
   const { highlightedActions: previousActions, currentAction } =
     React.useContext(NodeStateProvider);
   const allActionsInPath = [...(previousActions || []), ...(currentAction ? [currentAction] : [])];
   const containsFrom = allActionsInPath.some(
-    (action) => action.step_start_log.action === data.from
+    (action) => action.step_start_log.action === edgeData?.from
   );
-  const containsTo = allActionsInPath.some((action) => action.step_start_log.action === data.to);
+  const containsTo = allActionsInPath.some(
+    (action) => action.step_start_log.action === edgeData?.to
+  );
   const shouldHighlight = containsFrom && containsTo;
   // Memoized: highlight changes re-render every edge, and pathfinding must not rerun then.
   // See https://github.com/apache/burr/issues/833
@@ -165,7 +168,8 @@ export const ActionActionEdge = ({
         targetY,
         nodes
       });
-      if (getSmartEdgeResponse !== null) {
+      // v4 returns an Error (instead of null) when no route is found; fall back to bezier.
+      if (!(getSmartEdgeResponse instanceof Error)) {
         return getSmartEdgeResponse.svgPathString;
       }
     }
@@ -373,7 +377,7 @@ export const _Graph = (props: {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          edgesUpdatable={false}
+          edgesReconnectable={false}
           nodesDraggable={false}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

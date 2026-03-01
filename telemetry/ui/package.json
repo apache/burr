@@ -7,7 +7,7 @@
     "@heroicons/react": "^2.1.1",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@testing-library/react": "^13.4.0",
-    "@tisoap/react-flow-smart-edge": "^3.0.0",
+    "@tisoap/react-flow-smart-edge": "^4.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
@@ -25,7 +25,7 @@
     "react-router-dom": "^6.22.1",
     "react-select": "^5.8.1",
     "react-syntax-highlighter": "^15.5.0",
-    "reactflow": "^11.10.4",
+    "@xyflow/react": "^12.0.0",
     "remark-gfm": "^4.0.0",
     "tailwindcss-question-mark": "^0.4.0",
     "typescript": "~6.0.2"
