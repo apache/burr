@@ -586,7 +586,6 @@ const GraphBuilder: React.FC<GraphBuilderProps> = ({ initialGraph }) => {
 
     const errors = ExampleLoader.validateExample(selectedExample);
     if (errors.length > 0) {
-      console.error('Example validation failed:', errors);
       return;
     }
 
