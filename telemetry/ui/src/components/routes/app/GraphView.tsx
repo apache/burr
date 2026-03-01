@@ -20,8 +20,9 @@
 import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
-import React, { createContext, useLayoutEffect, useRef, useState } from 'react';
-import ReactFlow, {
+import React, { createContext, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import {
+  ReactFlow,
   BaseEdge,
   Controls,
   EdgeProps,
@@ -30,14 +31,12 @@ import ReactFlow, {
   Position,
   ReactFlowProvider,
   getBezierPath,
-  useNodes,
   useReactFlow
-} from 'reactflow';
+} from '@xyflow/react';
 
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 import { backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
-import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
 
 const dagreGraph = new dagre.graphlib.Graph();
 
@@ -149,38 +148,26 @@ export const ActionActionEdge = ({
   markerEnd,
   data
 }: EdgeProps) => {
-  const nodes = useNodes();
-  data = data as EdgeData;
+  const edgeData = data as EdgeData | undefined;
   const { highlightedActions: previousActions, currentAction } =
     React.useContext(NodeStateProvider);
   const allActionsInPath = [...(previousActions || []), ...(currentAction ? [currentAction] : [])];
   const containsFrom = allActionsInPath.some(
-    (action) => action.step_start_log.action === data.from
+    (action) => action.step_start_log.action === edgeData?.from
   );
-  const containsTo = allActionsInPath.some((action) => action.step_start_log.action === data.to);
+  const containsTo = allActionsInPath.some(
+    (action) => action.step_start_log.action === edgeData?.to
+  );
   const shouldHighlight = containsFrom && containsTo;
-  const getSmartEdgeResponse = getSmartEdge({
-    sourcePosition,
-    targetPosition,
+
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
+    sourcePosition,
     targetX,
     targetY,
-    nodes
+    targetPosition
   });
-  let edgePath = null;
-  if (getSmartEdgeResponse !== null) {
-    edgePath = getSmartEdgeResponse.svgPathString;
-  } else {
-    edgePath = getBezierPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition
-    })[0];
-  }
 
   const style = {
     markerColor: shouldHighlight ? 'black' : 'gray',
@@ -188,7 +175,7 @@ export const ActionActionEdge = ({
   };
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} label={'test'} />
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
     </>
   );
 };
@@ -359,7 +346,7 @@ export const _Graph = (props: {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          edgesUpdatable={false}
+          edgesReconnectable={false}
           nodesDraggable={false}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

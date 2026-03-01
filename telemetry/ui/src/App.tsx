@@ -33,6 +33,7 @@ import { AnnotationsViewContainer } from './components/routes/app/AnnotationsVie
 import { DeepResearcherWithTelemetry } from './examples/DeepResearcher';
 import { BuilderView } from './components/routes/builder/BuilderView';
 import { WorkspaceSelector } from './components/routes/workspace/WorkspaceSelector';
+import GraphBuilder from './components/routes/graph-builder/components/GraphBuilder';
 
 /**
  * Basic application. We have an AppContainer -- this has a breadcrumb and a sidebar.
@@ -70,6 +71,7 @@ const App = () => {
             <Route path="/builder" element={<BuilderView />} />
             <Route path="/builder/:projectId/:appId" element={<BuilderView />} />
             <Route path="/workspace" element={<WorkspaceSelector />} />
+            <Route path="/graph-builder" element={<GraphBuilder />} />
             <Route path="*" element={<Navigate to="/projects" />} />
           </Routes>
         </AppContainer>
