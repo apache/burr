@@ -20,7 +20,7 @@
 import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
-import React, { createContext, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useLayoutEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   BaseEdge,
