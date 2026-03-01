@@ -16,12 +16,14 @@
 # under the License.
 
 # Production environment configuration
-# Replace ACCOUNT_ID with your AWS account ID for s3_bucket_name
+# Bucket name is auto-generated: burr-tracking-{env}-{region}-{account_id}-{random}
+# account_id: leave empty to auto-fetch from AWS credentials, or set explicitly
 
 aws_region  = "us-east-1"
 environment = "prod"
 
-s3_bucket_name = "burr-tracking-logs-prod-ACCOUNT_ID"
+# account_id = ""   # Optional. Empty = auto-fetch. Or set: account_id = "123456789012"
+
 sqs_queue_name = "burr-s3-events-prod"
 
 enable_sqs = true
@@ -35,3 +37,6 @@ sqs_receive_wait_time_seconds   = 20
 sqs_max_receive_count           = 3
 
 enable_bedrock = false
+
+# Optional: receive email when messages land in DLQ
+# dlq_alarm_notification_emails = ["ops@example.com"]

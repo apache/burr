@@ -40,6 +40,16 @@ output "sqs_dlq_url" {
   value       = var.enable_sqs ? module.sqs[0].dlq_url : null
 }
 
+output "dlq_alarm_arn" {
+  description = "ARN of the CloudWatch alarm for DLQ messages"
+  value       = var.enable_sqs ? aws_cloudwatch_metric_alarm.dlq_messages[0].arn : null
+}
+
+output "dlq_alarm_sns_topic_arn" {
+  description = "ARN of the SNS topic for DLQ alarm notifications"
+  value       = var.enable_sqs ? aws_sns_topic.dlq_alarm[0].arn : null
+}
+
 output "iam_role_arn" {
   description = "ARN of the IAM role for Burr server"
   value       = module.iam.role_arn

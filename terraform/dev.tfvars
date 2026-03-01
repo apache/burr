@@ -16,12 +16,14 @@
 # under the License.
 
 # Development environment configuration
-# Replace ACCOUNT_ID with your AWS account ID for s3_bucket_name
+# Bucket name is auto-generated: burr-tracking-{env}-{region}-{account_id}-{random}
+# account_id: leave empty to auto-fetch from AWS credentials, or set explicitly
 
 aws_region  = "us-east-1"
 environment = "dev"
 
-s3_bucket_name = "burr-tracking-logs-dev-ACCOUNT_ID"
+# account_id = ""   # Optional. Empty = auto-fetch. Or set: account_id = "123456789012"
+
 sqs_queue_name = "burr-s3-events-dev"
 
 # S3 only (polling mode) - simpler for dev; set to true for event-driven

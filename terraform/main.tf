@@ -23,6 +23,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0"
+    }
   }
 }
 
@@ -33,10 +37,21 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
+}
+
+locals {
+  region_short   = replace(data.aws_region.current.name, "-", "")
+  account_id     = var.account_id != "" ? var.account_id : data.aws_caller_identity.current.account_id
+  auto_bucket    = "burr-tracking-${var.environment}-${local.region_short}-${local.account_id}-${random_id.bucket_suffix.hex}"
+  bucket_name    = var.s3_bucket_name != "" ? var.s3_bucket_name : local.auto_bucket
+}
+
 module "s3" {
   source = "./modules/s3"
 
-  bucket_name = var.s3_bucket_name
+  bucket_name = local.bucket_name
   tags        = local.common_tags
 
   lifecycle_rules = [
@@ -108,6 +123,45 @@ resource "aws_s3_bucket_notification" "burr_logs" {
   }
 
   depends_on = [aws_sqs_queue_policy.s3_notifications]
+}
+
+resource "aws_sns_topic" "dlq_alarm" {
+  count = var.enable_sqs ? 1 : 0
+
+  name              = "${var.environment}-burr-dlq-alarm"
+  display_name     = "Burr DLQ Alarm - ${var.environment}"
+  tags             = local.common_tags
+}
+
+resource "aws_sns_topic_subscription" "dlq_alarm_email" {
+  count = var.enable_sqs && length(var.dlq_alarm_notification_emails) > 0 ? length(var.dlq_alarm_notification_emails) : 0
+
+  topic_arn = aws_sns_topic.dlq_alarm[0].arn
+  protocol  = "email"
+  endpoint  = var.dlq_alarm_notification_emails[count.index]
+}
+
+resource "aws_cloudwatch_metric_alarm" "dlq_messages" {
+  count = var.enable_sqs ? 1 : 0
+
+  alarm_name          = "${var.environment}-burr-dlq-messages"
+  alarm_description   = "Alarm when messages appear in Burr SQS dead letter queue"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+
+  alarm_actions = [aws_sns_topic.dlq_alarm[0].arn]
+  ok_actions    = [aws_sns_topic.dlq_alarm[0].arn]
+
+  dimensions = {
+    QueueName = module.sqs[0].dlq_name
+  }
+
+  tags = local.common_tags
 }
 
 module "iam" {

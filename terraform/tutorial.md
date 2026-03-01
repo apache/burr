@@ -2,12 +2,25 @@
 
 This tutorial explains how to deploy Apache Burr tracking infrastructure on AWS using Terraform. All Terraform code lives in the `terraform/` folder. It covers deployment with S3 only (polling mode), with S3 and SQS (event-driven mode), and local development without AWS.
 
+## Quick Start
+
+```bash
+cd terraform
+terraform init
+terraform apply -var-file=dev.tfvars    # S3 only, polling mode
+# or
+terraform apply -var-file=prod.tfvars   # S3 + SQS, event-driven + DLQ alarm
+```
+
+Bucket names are auto-generated. After apply, run `terraform output burr_environment_variables` and set those on your Burr server.
+
 ## Overview
 
 The Terraform configuration provisions:
 
-- **S3 bucket**: Stores Burr application logs and database snapshots (always created for AWS deployment)
+- **S3 bucket**: Stores Burr application logs and database snapshots. Name is auto-generated (`burr-tracking-{env}-{region}-{account_id}-{random}`) when not specified.
 - **SQS queue** (optional): Receives S3 event notifications for real-time tracking; controlled by `enable_sqs`
+- **CloudWatch alarm + SNS**: Alerts when messages land in the dead letter queue; optional email subscriptions
 - **IAM role**: Least-privilege permissions for the Burr server
 
 ## Directory Structure
@@ -16,11 +29,11 @@ All code is in `terraform/`:
 
 ```
 terraform/
-├── main.tf           # Root module wiring S3, SQS, IAM
+├── main.tf           # Root module: S3, SQS, CloudWatch alarm, SNS, IAM
 ├── variables.tf      # Input variables
 ├── outputs.tf        # Output values
 ├── dev.tfvars       # Development: S3 only (enable_sqs = false)
-├── prod.tfvars      # Production: S3 + SQS (enable_sqs = true)
+├── prod.tfvars      # Production: S3 + SQS + DLQ alarm (enable_sqs = true)
 ├── tutorial.md      # This file
 └── modules/
     ├── s3/          # S3 bucket with versioning, encryption, lifecycle
@@ -32,28 +45,19 @@ terraform/
 
 - Terraform >= 1.0
 - AWS CLI configured with credentials
-- AWS account ID (for unique S3 bucket names)
 
-Get your AWS account ID:
-
-```bash
-aws sts get-caller-identity --query Account --output text
-```
+No manual bucket naming required; names are auto-generated. `account_id` is fetched from AWS credentials when not set. For a custom bucket name, set `s3_bucket_name` in your tfvars.
 
 ## Using tfvars Files
 
-| File        | Mode              | enable_sqs | Resources created        |
-|-------------|-------------------|------------|--------------------------|
-| dev.tfvars  | S3 only (polling) | false      | S3 bucket, IAM role      |
-| prod.tfvars | S3 + SQS (event)  | true       | S3 bucket, SQS queue, IAM |
+| File        | Mode              | enable_sqs | Resources created                                      |
+|-------------|-------------------|------------|--------------------------------------------------------|
+| dev.tfvars  | S3 only (polling) | false      | S3 bucket, IAM role                                    |
+| prod.tfvars | S3 + SQS (event)  | true       | S3 bucket, SQS queue, DLQ, CloudWatch alarm, SNS, IAM |
 
 ### Development (dev.tfvars) - S3 Only
 
-Uses S3 polling mode (no SQS). Edit and replace `ACCOUNT_ID` in `s3_bucket_name`:
-
-```
-s3_bucket_name = "burr-tracking-logs-dev-123456789012"
-```
+Uses S3 polling mode (no SQS). Bucket name is auto-generated (`burr-tracking-{env}-{region}-{account_id}-{random}`). Override with `s3_bucket_name = "my-bucket"` in tfvars if needed.
 
 Deploy:
 
@@ -66,11 +70,7 @@ terraform apply -var-file=dev.tfvars
 
 ### Production (prod.tfvars) - S3 + SQS
 
-Uses event-driven mode with SQS. Edit and replace `ACCOUNT_ID`:
-
-```
-s3_bucket_name = "burr-tracking-logs-prod-123456789012"
-```
+Uses event-driven mode with SQS. Bucket name is auto-generated (`burr-tracking-{env}-{region}-{account_id}-{random}`). A CloudWatch alarm fires when messages land in the DLQ.
 
 Deploy:
 
@@ -147,11 +147,24 @@ burr --no-open
 |----------|-------------|---------|
 | aws_region | AWS region | us-east-1 |
 | environment | Environment name (dev, prod) | dev |
-| s3_bucket_name | S3 bucket name (must be globally unique) | (required) |
+| account_id | AWS account ID. Empty = auto-fetch from credentials | "" |
+| s3_bucket_name | S3 bucket name. Empty = auto-generated (env, region, account_id, random) | "" |
 | enable_sqs | Create SQS for event-driven tracking | true |
+| sqs_queue_name | Name of the SQS queue | burr-s3-events |
 | log_retention_days | Days to retain logs in S3 | 90 |
 | snapshot_retention_days | Days to retain DB snapshots | 30 |
 | enable_bedrock | Add Bedrock IAM permissions | false |
+| dlq_alarm_notification_emails | Emails to notify when DLQ has messages (confirm via AWS email) | [] |
+
+## CloudWatch DLQ Alarm and SNS Notifications
+
+When SQS is enabled, a CloudWatch alarm fires when messages appear in the dead letter queue. An SNS topic is created for notifications. To receive email alerts, add your addresses to `dlq_alarm_notification_emails` in your tfvars:
+
+```
+dlq_alarm_notification_emails = ["ops@example.com", "oncall@example.com"]
+```
+
+Each email will receive a confirmation request from AWS; you must confirm the subscription before alerts are delivered. To use Slack or other endpoints, subscribe them to the SNS topic ARN (see `terraform output dlq_alarm_sns_topic_arn`) after apply.
 
 ## Outputs
 
@@ -160,6 +173,9 @@ After apply, useful outputs:
 ```bash
 terraform output s3_bucket_name
 terraform output sqs_queue_url
+terraform output sqs_dlq_url
+terraform output dlq_alarm_arn
+terraform output dlq_alarm_sns_topic_arn
 terraform output burr_environment_variables
 ```
 
@@ -187,8 +203,12 @@ aws s3api list-object-versions --bucket BUCKET_NAME --output json | jq -r '.Vers
 
 ## Troubleshooting
 
-**S3 bucket name already exists**: S3 bucket names are globally unique. Use your account ID or a random suffix.
+**S3 bucket name already exists**: S3 bucket names are globally unique. With auto-generation, each apply gets a new random suffix. For a fixed name, set `s3_bucket_name` explicitly.
 
 **SQS policy errors**: Ensure the S3 bucket notification depends on the queue policy. The Terraform handles this with `depends_on`.
 
 **Burr server not receiving events**: Verify BURR_SQS_QUEUE_URL is set and the IAM role has sqs:ReceiveMessage. Check CloudWatch for the SQS consumer.
+
+**DLQ alarm firing**: Messages in the DLQ mean the Burr server failed to process S3 events (e.g. crashed, timeout). Check the DLQ in the AWS Console, inspect failed messages, and fix the root cause. Confirm SNS email subscriptions via the link AWS sends.
+
+**No email from DLQ alarm**: Check your spam folder for the SNS confirmation email. Subscriptions are pending until confirmed.

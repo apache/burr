@@ -27,9 +27,16 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "s3_bucket_name" {
-  description = "Name of the S3 bucket for Burr logs"
+variable "account_id" {
+  description = "AWS account ID for bucket name. Leave empty to auto-fetch from AWS credentials."
   type        = string
+  default     = ""
+}
+
+variable "s3_bucket_name" {
+  description = "Name of the S3 bucket for Burr logs. If empty, auto-generated from environment, region, and random suffix."
+  type        = string
+  default     = ""
 }
 
 variable "enable_sqs" {
@@ -88,6 +95,12 @@ variable "enable_bedrock" {
 
 variable "bedrock_model_arns" {
   description = "List of specific Bedrock model ARNs for least privilege. Empty uses foundation-model/*"
+  type        = list(string)
+  default     = []
+}
+
+variable "dlq_alarm_notification_emails" {
+  description = "Email addresses to notify when messages land in the DLQ. Empty = no email subscriptions."
   type        = list(string)
   default     = []
 }
