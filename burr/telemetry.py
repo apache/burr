@@ -23,12 +23,25 @@ any external code that imports from it (e.g. ``telemetry.disable_telemetry()``)
 will continue to work without error.
 """
 
+import warnings
+
 
 def disable_telemetry():
     """No-op. Telemetry has been removed."""
-    pass
+    warnings.warn(
+        "disable_telemetry() is deprecated and will be removed in a future release. "
+        "Telemetry has been removed from Burr per ASF policy.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
 
 def is_telemetry_enabled() -> bool:
     """Always returns False. Telemetry has been removed."""
+    warnings.warn(
+        "is_telemetry_enabled() is deprecated and will be removed in a future release. "
+        "Telemetry has been removed from Burr per ASF policy.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return False
