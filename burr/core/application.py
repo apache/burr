@@ -44,7 +44,7 @@ from typing import (
     cast,
 )
 
-from burr import system, telemetry, visibility
+from burr import system, visibility
 from burr.common import types as burr_types
 from burr.core import persistence, validation
 from burr.core.action import (
@@ -851,8 +851,6 @@ class Application(Generic[ApplicationStateType]):
             spawning_parent_pointer=spawning_parent_pointer,
         )
 
-    # @telemetry.capture_function_usage # todo -- capture usage when we break this up into one that isn't called internally
-    # This will be doable when we move sequence ID to the beginning of the function https://github.com/DAGWorks-Inc/burr/pull/73
     @_call_execute_method_pre_post(ExecuteMethod.step)
     def step(self, inputs: Optional[Dict[str, Any]] = None) -> Optional[Tuple[Action, dict, State]]:
         """Performs a single step, advancing the state machine along.
@@ -1012,8 +1010,6 @@ class Application(Generic[ApplicationStateType]):
             )
         return processed_inputs
 
-    # @telemetry.capture_function_usage
-    # ditto with step()
     @_call_execute_method_pre_post(ExecuteMethod.astep)
     async def astep(
         self, inputs: Optional[Dict[str, Any]] = None
@@ -1198,7 +1194,6 @@ class Application(Generic[ApplicationStateType]):
         )
         return prior_action, result, self._state
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.iterate)
     def iterate(
         self,
@@ -1245,7 +1240,6 @@ class Application(Generic[ApplicationStateType]):
                 break
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.aiterate)
     async def aiterate(
         self,
@@ -1277,7 +1271,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.run)
     def run(
         self,
@@ -1306,7 +1299,6 @@ class Application(Generic[ApplicationStateType]):
                 result = e.value
                 return result
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.arun)
     async def arun(
         self,
@@ -1338,7 +1330,6 @@ class Application(Generic[ApplicationStateType]):
             pass
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
 
-    @telemetry.capture_function_usage
     def stream_result(
         self,
         halt_after: list[str],
@@ -1590,7 +1581,6 @@ class Application(Generic[ApplicationStateType]):
             generator, self._state, process_result, callback
         )
 
-    @telemetry.capture_function_usage
     async def astream_result(
         self,
         halt_after: list[str],
@@ -1863,7 +1853,6 @@ class Application(Generic[ApplicationStateType]):
             generator, self._state, process_result, callback
         )
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.stream_iterate)
     def stream_iterate(
         self,
@@ -1907,7 +1896,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.astream_iterate)
     async def astream_iterate(
         self,
@@ -1941,7 +1929,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
-    @telemetry.capture_function_usage
     def visualize(
         self,
         output_file_path: Optional[str] = None,
@@ -2730,7 +2717,6 @@ class ApplicationBuilder(Generic[StateType]):
             state_initializer=self.state_initializer,
         )
 
-    @telemetry.capture_function_usage
     def build(self) -> Application[StateType]:
         """Builds the application for synchronous runs.
 
@@ -2770,7 +2756,6 @@ class ApplicationBuilder(Generic[StateType]):
 
         return self._build_common()
 
-    @telemetry.capture_function_usage
     async def abuild(self) -> Application[StateType]:
         """Builds the application for asynchronous runs.
 
