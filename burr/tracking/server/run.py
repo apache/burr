@@ -141,7 +141,17 @@ async def lifespan(app: FastAPI):
     await backend.lifespan(app).__anext__()
 
 
-app = FastAPI(lifespan=lifespan)
+def create_burr_ui_app() -> FastAPI:
+    return FastAPI(lifespan=lifespan)
+
+app = create_burr_ui_app()
+
+def mount_burr_ui(parent_app: FastAPI, path: str = "/burr") -> None:
+    """
+    Mount the Burr UI inside another FastAPI app.
+    """
+    ui_app = create_burr_ui_app()
+    parent_app.mount(path, ui_app, name="burr-ui")
 
 
 @app.get("/ready")
