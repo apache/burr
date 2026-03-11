@@ -267,7 +267,9 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+# Support Union types like MyModel1 | MyModel2 for stream_type
+# Allow any type hint that could be a BaseModel, dict, or Union of BaseModels
+PartialType = typing.Any  # Relaxed to support Union[Type[BaseModel], ...] combinations
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -288,11 +290,11 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[typing.Any],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel], Type[pydantic.BaseModel], typing.Any
 ]:
     if stream_type is None:
         # TODO -- derive from the signature
