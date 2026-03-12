@@ -41,6 +41,7 @@ export type { BackendSpec } from './models/BackendSpec';
 export type { BeginEntryModel } from './models/BeginEntryModel';
 export type { BeginSpanModel } from './models/BeginSpanModel';
 export { ChatItem } from './models/ChatItem';
+export type { CounterState } from './models/CounterState';
 export { ChildApplicationModel } from './models/ChildApplicationModel';
 export type { DraftInit } from './models/DraftInit';
 export { EmailAssistantState } from './models/EmailAssistantState';
