@@ -131,3 +131,25 @@ This will print the URL to access the Burr UI web app.
     from google.colab import output
     output.serve_kernel_port_as_window(7241) # this will open a new window
     output.serve_kernel_port_as_iframe(7241) # this will inline in an iframe
+
+---------------------------------------------
+Mount Burr UI inside an existing FastAPI app
+---------------------------------------------
+
+You can embed the Burr UI inside an existing FastAPI application using the
+``mount_burr_ui`` helper.
+
+Example:
+
+.. code-block:: python
+
+    from fastapi import FastAPI
+    from burr.tracking.server.run import mount_burr_ui
+
+    app = FastAPI()
+
+    # Mount Burr UI under /burr
+    mount_burr_ui(app, path="/burr")
+
+This allows you to run the Burr tracking UI alongside your own FastAPI
+application in the same server process.
