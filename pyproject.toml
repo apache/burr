@@ -98,7 +98,8 @@ tests = [
   "apache-burr[redis]",
   "apache-burr[opentelemetry]",
   "apache-burr[haystack]",
-  "apache-burr[ray]"
+  "apache-burr[ray]",
+  "apache-burr[bedrock]"
 ]
 
 documentation = [
@@ -125,6 +126,10 @@ tracking-client = [
 
 tracking-client-s3 = [
   "apache-burr[tracking-client]",
+  "boto3"
+]
+
+bedrock = [
   "boto3"
 ]
 

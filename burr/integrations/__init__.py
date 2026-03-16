@@ -14,3 +14,14 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # in the License.
+
+
+def __getattr__(name: str):
+    """Lazy load Bedrock integration to avoid requiring boto3 unless used."""
+    if name == "BedrockAction":
+        from burr.integrations.bedrock import BedrockAction
+        return BedrockAction
+    if name == "BedrockStreamingAction":
+        from burr.integrations.bedrock import BedrockStreamingAction
+        return BedrockStreamingAction
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
