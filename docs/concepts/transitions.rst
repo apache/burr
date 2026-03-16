@@ -54,6 +54,36 @@ Conditions have a few APIs, but the most common are the three convenience functi
     )
 
 
+``when()`` also supports comparison operators via Django-style ``__`` suffixes:
+
+.. code-block:: python
+
+    from burr.core import when
+    with_transitions(
+        ("check", "adult", when(age__gte=18)),       # age >= 18
+        ("check", "child", when(age__lt=18)),         # age < 18
+        ("check", "valid", when(score__gt=0, score__lte=100)),  # 0 < score <= 100
+        ("check", "active", when(status__in=["active", "pending"])),  # membership
+        ("check", "tagged", when(tags__contains="python")),  # collection contains value
+        ("check", "clean", when(status__notin=["banned", "suspended"])),  # not in
+        ("check", "changed", when(status__ne="initial")),  # not equal
+    )
+
+Available operators:
+
+- ``key=value`` — exact equality (default, unchanged)
+- ``key__eq=value`` — explicit equality
+- ``key__ne=value`` — not equal
+- ``key__gt=value`` — greater than
+- ``key__gte=value`` — greater than or equal
+- ``key__lt=value`` — less than
+- ``key__lte=value`` — less than or equal
+- ``key__in=[values]`` — value is in the given collection
+- ``key__notin=[values]`` — value is not in the given collection
+- ``key__contains=value`` — collection/string in state contains the value
+
+Multiple keyword arguments are ANDed together. For more complex expressions, use ``expr()``.
+
 Conditions are evaluated in the order they are specified, and the first one that evaluates to True will be the transition that is selected
 when determining which action to run next. If no condition evaluates to ``True``, the application execution will stop early.
 

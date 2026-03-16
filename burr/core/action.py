@@ -423,26 +423,98 @@ class Condition(Function):
     def reads(self) -> list[str]:
         return self._keys
 
+    _OPERATORS = {
+        "eq": ("==", lambda a, b: a == b),
+        "ne": ("!=", lambda a, b: a != b),
+        "lt": ("<", lambda a, b: a < b),
+        "lte": ("<=", lambda a, b: a <= b),
+        "gt": (">", lambda a, b: a > b),
+        "gte": (">=", lambda a, b: a >= b),
+        "in": ("in", lambda a, b: a in b),
+        "notin": ("not in", lambda a, b: a not in b),
+        "contains": ("contains", lambda a, b: b in a),
+    }
+
+    @classmethod
+    def _parse_kwarg(cls, kwarg_key: str, value):
+        """Parse a kwarg key into (state_key, operator_symbol, comparison_func, explicit).
+
+        Supports Django-style lookups: ``key__gte=10`` parses as key >= 10.
+        Plain ``key=value`` defaults to equality (implicit).
+
+        Returns a tuple of (state_key, symbol, func, explicit) where explicit
+        indicates whether an operator suffix was present.
+        """
+        for suffix, (symbol, func) in cls._OPERATORS.items():
+            dunder = f"__{suffix}"
+            if kwarg_key.endswith(dunder):
+                state_key = kwarg_key[: -len(dunder)]
+                if not state_key:
+                    raise ValueError(
+                        f"Invalid when() key: '{kwarg_key}' — " f"no state key before '__{suffix}'"
+                    )
+                return state_key, symbol, func, True
+        return kwarg_key, "=", lambda a, b: a == b, False
+
     @classmethod
     def when(cls, **kwargs):
-        """Returns a condition that checks if the given keys are in the
-        state and equal to the given values.
+        """Returns a condition that checks state values using optional operators.
 
         You can also refer to this as ``from burr.core import when`` in the API.
 
-        :param kwargs: Keyword arguments of keys and values to check -- will be an AND condition
-        :return: A condition that checks if the given keys are in the state and equal to the given values
+        Basic equality (unchanged from original)::
+
+            when(foo="bar")            # state["foo"] == "bar"
+            when(foo="bar", baz="qux") # state["foo"] == "bar" AND state["baz"] == "qux"
+
+        Comparison operators via ``__`` suffix::
+
+            when(age__gt=18)           # state["age"] > 18
+            when(age__gte=18)          # state["age"] >= 18
+            when(age__lt=18)           # state["age"] < 18
+            when(age__lte=18)          # state["age"] <= 18
+            when(age__ne=0)            # state["age"] != 0
+            when(age__eq=18)           # state["age"] == 18  (explicit)
+
+        Membership operators::
+
+            when(status__in=["a", "b"])     # state["status"] in ["a", "b"]
+            when(status__notin=["x", "y"])  # state["status"] not in ["x", "y"]
+            when(tags__contains="python")   # "python" in state["tags"]
+
+        Multiple conditions are ANDed together::
+
+            when(age__gte=18, status="active")  # age >= 18 AND status == "active"
+
+        :param kwargs: Keyword arguments with optional ``__operator`` suffixes
+        :return: A condition that checks all specified constraints (AND)
         """
-        keys = list(kwargs.keys())
+        parsed = []
+        for kwarg_key, value in kwargs.items():
+            state_key, symbol, func, explicit = cls._parse_kwarg(kwarg_key, value)
+            parsed.append((state_key, symbol, func, value, explicit))
+
+        state_keys = list(dict.fromkeys(p[0] for p in parsed))
 
         def condition_func(state: State) -> bool:
-            for key, value in kwargs.items():
-                if state.get(key) != value:
+            for state_key, _symbol, func, value, _explicit in parsed:
+                if not func(state.get(state_key), value):
                     return False
             return True
 
-        name = f"{', '.join(f'{key}={value}' for key, value in sorted(kwargs.items()))}"
-        return Condition(keys, condition_func, name=name)
+        name_parts = []
+        for state_key, symbol, _func, value, explicit in sorted(parsed, key=lambda p: p[0]):
+            if not explicit:
+                # Backward-compatible format: key=value (no repr, no spaces)
+                name_parts.append(f"{state_key}={value}")
+            elif symbol.isalnum() or " " in symbol:
+                # Word operators like "in", "not in", "contains"
+                name_parts.append(f"{state_key} {symbol} {value!r}")
+            else:
+                # Symbol operators like >=, !=, etc.
+                name_parts.append(f"{state_key}{symbol}{value!r}")
+        name = ", ".join(name_parts)
+        return Condition(state_keys, condition_func, name=name)
 
     def __repr__(self):
         return f"condition: {self._name}"
