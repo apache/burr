@@ -22,7 +22,6 @@ import pydantic
 from fastapi import APIRouter
 
 from burr.core import Application, ApplicationBuilder, Result, default, expr
-from burr.core.action import action
 from burr.tracking import LocalTrackingClient
 
 """This file represents a simple counter API backed with Burr.
