@@ -67,6 +67,8 @@ Conditions have a few APIs, but the most common are the three convenience functi
         ("check", "tagged", when(tags__contains="python")),  # collection contains value
         ("check", "clean", when(status__notin=["banned", "suspended"])),  # not in
         ("check", "changed", when(status__ne="initial")),  # not equal
+        ("check", "missing", when(value__is=None)),  # identity check
+        ("check", "present", when(value__isnot=None)),  # not-identity check
     )
 
 Available operators:
@@ -81,6 +83,8 @@ Available operators:
 - ``key__in=[values]`` — value is in the given collection
 - ``key__notin=[values]`` — value is not in the given collection
 - ``key__contains=value`` — collection/string in state contains the value
+- ``key__is=value`` — identity check (``is``), useful for ``None``/``True``/``False``
+- ``key__isnot=value`` — negated identity check (``is not``)
 
 Multiple keyword arguments are ANDed together. For more complex expressions, use ``expr()``.
 

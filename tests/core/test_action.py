@@ -166,6 +166,14 @@ def test_condition_when_complex():
         ({"tags__contains": "go"}, {"tags": ["python", "java"]}, False),
         ({"text__contains": "hello"}, {"text": "say hello world"}, True),
         ({"text__contains": "goodbye"}, {"text": "say hello world"}, False),
+        # __is (identity)
+        ({"value__is": None}, {"value": None}, True),
+        ({"value__is": None}, {"value": 0}, False),
+        ({"value__is": True}, {"value": True}, True),
+        ({"value__is": True}, {"value": 1}, False),
+        # __isnot (not identity)
+        ({"value__isnot": None}, {"value": "hello"}, True),
+        ({"value__isnot": None}, {"value": None}, False),
     ],
     ids=[
         "eq-match",
@@ -193,6 +201,12 @@ def test_condition_when_complex():
         "contains-list-no-match",
         "contains-str-match",
         "contains-str-no-match",
+        "is-none-match",
+        "is-none-no-match",
+        "is-true-match",
+        "is-true-not-identical",
+        "isnot-not-none",
+        "isnot-is-none",
     ],
 )
 def test_condition_when_operators(kwargs, state_dict, expected):
@@ -226,11 +240,13 @@ def test_condition_when_operators_reads(kwargs, expected_reads):
         ({"status__in": ["a", "b"]}, "status in ['a', 'b']"),
         ({"status__notin": ["x"]}, "status not in ['x']"),
         ({"tags__contains": "py"}, "tags contains 'py'"),
+        ({"value__is": None}, "value is None"),
+        ({"value__isnot": None}, "value is not None"),
         # plain equality still uses old format
         ({"foo": "bar"}, "foo=bar"),
         ({"foo": "bar", "baz": "qux"}, "baz=qux, foo=bar"),
     ],
-    ids=["gte", "lt", "ne", "in", "notin", "contains", "plain-eq", "plain-multi"],
+    ids=["gte", "lt", "ne", "in", "notin", "contains", "is", "isnot", "plain-eq", "plain-multi"],
 )
 def test_condition_when_operators_name(kwargs, expected_name):
     cond = Condition.when(**kwargs)

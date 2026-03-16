@@ -433,6 +433,8 @@ class Condition(Function):
         "in": ("in", lambda a, b: a in b),
         "notin": ("not in", lambda a, b: a not in b),
         "contains": ("contains", lambda a, b: b in a),
+        "is": ("is", lambda a, b: a is b),
+        "isnot": ("is not", lambda a, b: a is not b),
     }
 
     @classmethod
@@ -481,6 +483,11 @@ class Condition(Function):
             when(status__in=["a", "b"])     # state["status"] in ["a", "b"]
             when(status__notin=["x", "y"])  # state["status"] not in ["x", "y"]
             when(tags__contains="python")   # "python" in state["tags"]
+
+        Identity operators::
+
+            when(value__is=None)            # state["value"] is None
+            when(value__isnot=None)         # state["value"] is not None
 
         Multiple conditions are ANDed together::
 
