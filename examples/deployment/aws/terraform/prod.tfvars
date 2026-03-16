@@ -36,7 +36,5 @@ sqs_visibility_timeout_seconds = 300
 sqs_receive_wait_time_seconds   = 20
 sqs_max_receive_count           = 3
 
-enable_bedrock = false
-
 # Optional: receive email when messages land in DLQ
 # dlq_alarm_notification_emails = ["ops@example.com"]

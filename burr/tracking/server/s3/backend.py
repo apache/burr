@@ -18,6 +18,7 @@
 import asyncio
 import dataclasses
 import datetime
+import enum
 import functools
 import itertools
 import json
@@ -32,6 +33,7 @@ from typing import List, Literal, Optional, Sequence, Tuple, Type, TypeVar, Unio
 import fastapi
 import pydantic
 from aiobotocore import session
+from pydantic import field_validator
 from fastapi import FastAPI
 from pydantic_settings import BaseSettings
 from tortoise import functions, transactions
@@ -159,6 +161,13 @@ class DataFile:
         )
 
 
+class TrackingMode(str, enum.Enum):
+    """Tracking mode for S3 backend: polling or event-driven."""
+
+    POLLING = "POLLING"
+    EVENT_DRIVEN = "EVENT_DRIVEN"
+
+
 class S3Settings(BurrSettings):
     s3_bucket: str
     update_interval_milliseconds: int = 120_000
@@ -167,11 +176,19 @@ class S3Settings(BurrSettings):
     load_snapshot_on_start: bool = True
     prior_snapshots_to_keep: int = 5
     # BIP-0042: Event-driven tracking settings
-    tracking_mode: str = "POLLING"  # "POLLING" or "SQS" - POLLING is default for backward compatibility
+    tracking_mode: TrackingMode = TrackingMode.POLLING
     sqs_queue_url: Optional[str] = None
     sqs_region: Optional[str] = None
     sqs_wait_time_seconds: int = 20  # SQS long polling timeout
     s3_buffer_size_mb: int = 10  # RAM buffer before spilling to disk
+
+    @field_validator("tracking_mode", mode="before")
+    @classmethod
+    def coerce_tracking_mode(cls, v: object) -> object:
+        """Coerce legacy 'SQS' string to EVENT_DRIVEN for backward compatibility."""
+        if v == "SQS":
+            return TrackingMode.EVENT_DRIVEN
+        return v
 
 
 def timestamp_to_reverse_alphabetical(timestamp: datetime) -> str:
@@ -198,7 +215,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         load_snapshot_on_start: bool,
         prior_snapshots_to_keep: int,
         # BIP-0042: New parameters for event-driven tracking
-        tracking_mode: str = "POLLING",
+        tracking_mode: Union[TrackingMode, str] = TrackingMode.POLLING,
         sqs_queue_url: Optional[str] = None,
         sqs_region: Optional[str] = None,
         sqs_wait_time_seconds: int = 20,
@@ -215,8 +232,13 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         self._load_snapshot_on_start = load_snapshot_on_start
         self._snapshot_key_history = []
         self._prior_snapshots_to_keep = prior_snapshots_to_keep
-        # BIP-0042: Store event-driven tracking settings
-        self._tracking_mode = tracking_mode
+        # BIP-0042: Store event-driven tracking settings (normalize str to enum)
+        if isinstance(tracking_mode, TrackingMode):
+            self._tracking_mode = tracking_mode
+        elif tracking_mode == "SQS":
+            self._tracking_mode = TrackingMode.EVENT_DRIVEN
+        else:
+            self._tracking_mode = TrackingMode(tracking_mode)
         self._sqs_queue_url = sqs_queue_url
         self._sqs_region = sqs_region
         self._sqs_wait_time_seconds = sqs_wait_time_seconds
@@ -739,73 +761,74 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
             logger.info(f"Indexed S3 event: {s3_key}")
         except Exception as e:
             logger.error(f"Failed to handle S3 event {s3_key}: {e}")
+            raise  # Re-raise so message stays in queue for retry / DLQ
 
-    async def start_sqs_consumer(self) -> None:
-        """Start the SQS consumer for event-driven tracking.
+    async def start_event_consumer(self) -> None:
+        """Start the event consumer for event-driven tracking.
 
-        BIP-0042: This method runs indefinitely, processing S3 event notifications
-        from the configured SQS queue. It handles both EventBridge and direct S3
-        notification formats.
+        Runs indefinitely, processing S3 event notifications from the configured
+        message queue. Handles both EventBridge and direct S3 notification formats.
         """
-        if self._tracking_mode != "SQS" or not self._sqs_queue_url:
-            logger.info("SQS consumer not configured, skipping")
+        if self._tracking_mode != TrackingMode.EVENT_DRIVEN or not self._sqs_queue_url:
+            logger.info("Event consumer not configured, skipping")
             return
 
-        logger.info(f"Starting SQS consumer for queue: {self._sqs_queue_url}")
+        logger.info(f"Starting event consumer for queue: {self._sqs_queue_url}")
 
         async with self._session.create_client("sqs", region_name=self._sqs_region) as sqs_client:
-            while True:
-                try:
-                    response = await sqs_client.receive_message(
-                        QueueUrl=self._sqs_queue_url,
-                        MaxNumberOfMessages=10,
-                        WaitTimeSeconds=self._sqs_wait_time_seconds,
-                        VisibilityTimeout=300,
-                    )
+            try:
+                while True:
+                    try:
+                        response = await sqs_client.receive_message(
+                            QueueUrl=self._sqs_queue_url,
+                            MaxNumberOfMessages=10,
+                            WaitTimeSeconds=self._sqs_wait_time_seconds,
+                            VisibilityTimeout=300,
+                        )
 
-                    messages = response.get("Messages", [])
-                    for message in messages:
-                        try:
-                            body = json.loads(message["Body"])
-                            s3_key = None
-                            event_time = None
+                        messages = response.get("Messages", [])
+                        for message in messages:
+                            try:
+                                body = json.loads(message["Body"])
+                                s3_key = None
+                                event_time = None
 
-                            # Handle EventBridge wrapped S3 events
-                            if "detail" in body:
-                                s3_key = body["detail"]["object"]["key"]
-                                event_time = datetime.datetime.fromisoformat(
-                                    body["time"].replace("Z", "+00:00")
+                                # Handle EventBridge wrapped S3 events
+                                if "detail" in body:
+                                    s3_key = body["detail"]["object"]["key"]
+                                    event_time = datetime.datetime.fromisoformat(
+                                        body["time"].replace("Z", "+00:00")
+                                    )
+                                elif "Records" in body:
+                                    record = body["Records"][0]
+                                    s3_key = record["s3"]["object"]["key"]
+                                    event_time = datetime.datetime.fromisoformat(
+                                        record["eventTime"].replace("Z", "+00:00")
+                                    )
+                                else:
+                                    logger.warning(f"Unknown message format: {body}")
+                                    continue
+
+                                if s3_key and s3_key.endswith(".jsonl"):
+                                    await self._handle_s3_event(s3_key, event_time)
+
+                                await sqs_client.delete_message(
+                                    QueueUrl=self._sqs_queue_url,
+                                    ReceiptHandle=message["ReceiptHandle"],
                                 )
-                            elif "Records" in body:
-                                record = body["Records"][0]
-                                s3_key = record["s3"]["object"]["key"]
-                                event_time = datetime.datetime.fromisoformat(
-                                    record["eventTime"].replace("Z", "+00:00")
-                                )
-                            else:
-                                logger.warning(f"Unknown message format: {body}")
-                                continue
+                            except Exception as e:
+                                logger.error(f"Failed to process SQS message: {e}")
 
-                            if s3_key and s3_key.endswith(".jsonl"):
-                                await self._handle_s3_event(s3_key, event_time)
-
-                            await sqs_client.delete_message(
-                                QueueUrl=self._sqs_queue_url,
-                                ReceiptHandle=message["ReceiptHandle"],
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to process SQS message: {e}")
-
-                except Exception as e:
-                    logger.error(f"SQS consumer error: {e}")
-                    await asyncio.sleep(5)
+                    except Exception as e:
+                        logger.error(f"Event consumer error: {e}")
+                        await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                logger.info("Event consumer shutting down")
+                raise
 
     def is_event_driven(self) -> bool:
-        """Check if this backend is configured for event-driven updates.
-
-        BIP-0042: Returns True if tracking_mode is SQS and queue URL is configured.
-        """
-        return self._tracking_mode == "SQS" and self._sqs_queue_url is not None
+        """Check if this backend is configured for event-driven updates."""
+        return self._tracking_mode == TrackingMode.EVENT_DRIVEN and self._sqs_queue_url is not None
 
     async def indexing_jobs(
         self, offset: int = 0, limit: int = 100, filter_empty: bool = True

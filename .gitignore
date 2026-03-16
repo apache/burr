@@ -194,9 +194,10 @@ examples/*/statemachine
 examples/*/*/statemachine
 .vscode
 
-# Terraform (see also terraform/.gitignore)
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/.terraform.tfstate.lock.info
-terraform/*.tfplan
+# Terraform (see also examples/deployment/aws/terraform/.gitignore)
+**/.terraform.lock.hcl
+examples/deployment/aws/terraform/.terraform/
+examples/deployment/aws/terraform/*.tfstate
+examples/deployment/aws/terraform/*.tfstate.*
+examples/deployment/aws/terraform/.terraform.tfstate.lock.info
+examples/deployment/aws/terraform/*.tfplan

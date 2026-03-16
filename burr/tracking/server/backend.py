@@ -163,18 +163,18 @@ class SnapshottingBackendMixin(abc.ABC):
 
 
 class EventDrivenBackendMixin(abc.ABC):
-    """Mixin for backends that support event-driven updates via SQS.
+    """Mixin for backends that support event-driven updates.
 
-    BIP-0042: This mixin enables backends to receive real-time notifications
-    from SQS instead of polling S3 for new files.
+    Enables backends to receive real-time notifications instead of polling
+    for new files.
     """
 
     @abc.abstractmethod
-    async def start_sqs_consumer(self):
-        """Start the SQS consumer for event-driven tracking.
+    async def start_event_consumer(self):
+        """Start the event consumer for event-driven tracking.
 
-        This method should run indefinitely, processing S3 event notifications
-        from the configured SQS queue.
+        This method should run indefinitely, processing event notifications
+        from the configured message queue.
         """
         pass
 
@@ -182,7 +182,7 @@ class EventDrivenBackendMixin(abc.ABC):
     def is_event_driven(self) -> bool:
         """Check if this backend is configured for event-driven updates.
 
-        :return: True if SQS mode is enabled and configured, False otherwise
+        :return: True if event-driven mode is enabled and configured, False otherwise
         """
         pass
 

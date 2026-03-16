@@ -87,23 +87,3 @@ resource "aws_iam_role_policy" "sqs" {
   policy = data.aws_iam_policy_document.sqs_least_privilege[0].json
 }
 
-data "aws_iam_policy_document" "bedrock_least_privilege" {
-  count = var.enable_bedrock ? 1 : 0
-
-  statement {
-    sid    = "BedrockInvokeModels"
-    effect = "Allow"
-    actions = [
-      "bedrock:InvokeModel",
-      "bedrock:InvokeModelWithResponseStream"
-    ]
-    resources = length(var.bedrock_model_arns) > 0 ? var.bedrock_model_arns : [var.bedrock_foundation_model_arn]
-  }
-}
-
-resource "aws_iam_role_policy" "bedrock" {
-  count  = var.enable_bedrock ? 1 : 0
-  name   = "${var.role_name}-bedrock"
-  role   = aws_iam_role.burr_server.id
-  policy = data.aws_iam_policy_document.bedrock_least_privilege[0].json
-}

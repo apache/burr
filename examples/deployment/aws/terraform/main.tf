@@ -167,14 +167,11 @@ resource "aws_cloudwatch_metric_alarm" "dlq_messages" {
 module "iam" {
   source = "./modules/iam"
 
-  role_name                    = "${var.environment}-burr-server-role"
-  s3_bucket_arn                = module.s3.bucket_arn
-  sqs_queue_arn                = var.enable_sqs ? module.sqs[0].queue_arn : ""
-  enable_sqs                   = var.enable_sqs
-  enable_bedrock               = var.enable_bedrock
-  bedrock_model_arns           = var.bedrock_model_arns
-  bedrock_foundation_model_arn  = "arn:aws:bedrock:${data.aws_region.current.name}::foundation-model/*"
-  tags                         = local.common_tags
+  role_name     = "${var.environment}-burr-server-role"
+  s3_bucket_arn = module.s3.bucket_arn
+  sqs_queue_arn = var.enable_sqs ? module.sqs[0].queue_arn : ""
+  enable_sqs    = var.enable_sqs
+  tags          = local.common_tags
 }
 
 locals {

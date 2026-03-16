@@ -1,11 +1,11 @@
 # Apache Burr AWS Tracking Infrastructure Tutorial
 
-This tutorial explains how to deploy Apache Burr tracking infrastructure on AWS using Terraform. All Terraform code lives in the `terraform/` folder. It covers deployment with S3 only (polling mode), with S3 and SQS (event-driven mode), and local development without AWS.
+This tutorial explains how to deploy Apache Burr tracking infrastructure on AWS using Terraform. All Terraform code lives in `examples/deployment/aws/terraform/`. It covers deployment with S3 only (polling mode), with S3 and SQS (event-driven mode), and local development without AWS.
 
 ## Quick Start
 
 ```bash
-cd terraform
+cd examples/deployment/aws/terraform
 terraform init
 terraform apply -var-file=dev.tfvars    # S3 only, polling mode
 # or
@@ -25,10 +25,10 @@ The Terraform configuration provisions:
 
 ## Directory Structure
 
-All code is in `terraform/`:
+All code is in `examples/deployment/aws/terraform/`:
 
 ```
-terraform/
+examples/deployment/aws/terraform/
 ├── main.tf           # Root module: S3, SQS, CloudWatch alarm, SNS, IAM
 ├── variables.tf      # Input variables
 ├── outputs.tf        # Output values
@@ -62,7 +62,7 @@ Uses S3 polling mode (no SQS). Bucket name is auto-generated (`burr-tracking-{en
 Deploy:
 
 ```bash
-cd terraform
+cd examples/deployment/aws/terraform
 terraform init
 terraform plan -var-file=dev.tfvars
 terraform apply -var-file=dev.tfvars
@@ -100,7 +100,7 @@ terraform output burr_environment_variables
 4. Set these on your Burr server (ECS task, EC2, etc.):
 
 - BURR_S3_BUCKET
-- BURR_TRACKING_MODE=SQS
+- BURR_TRACKING_MODE=EVENT_DRIVEN
 - BURR_SQS_QUEUE_URL
 - BURR_SQS_REGION
 - BURR_SQS_WAIT_TIME_SECONDS
@@ -153,7 +153,6 @@ burr --no-open
 | sqs_queue_name | Name of the SQS queue | burr-s3-events |
 | log_retention_days | Days to retain logs in S3 | 90 |
 | snapshot_retention_days | Days to retain DB snapshots | 30 |
-| enable_bedrock | Add Bedrock IAM permissions | false |
 | dlq_alarm_notification_emails | Emails to notify when DLQ has messages (confirm via AWS email) | [] |
 
 ## CloudWatch DLQ Alarm and SNS Notifications
@@ -185,7 +184,6 @@ The IAM role grants only:
 
 - **S3**: ListBucket, GetBucketLocation, GetObject, PutObject, DeleteObject, HeadObject on the specific bucket
 - **SQS** (when enabled): ReceiveMessage, DeleteMessage, GetQueueAttributes on the specific queue
-- **Bedrock** (when enabled): InvokeModel, InvokeModelWithResponseStream on specified model ARNs
 
 ## Cleanup
 

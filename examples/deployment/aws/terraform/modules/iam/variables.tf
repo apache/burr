@@ -43,23 +43,6 @@ variable "sqs_queue_arn" {
   default     = ""
 }
 
-variable "enable_bedrock" {
-  description = "Enable Bedrock IAM permissions"
-  type        = bool
-  default     = false
-}
-
-variable "bedrock_model_arns" {
-  description = "List of specific Bedrock model ARNs for least privilege. If empty, uses foundation model wildcard."
-  type        = list(string)
-  default     = []
-}
-
-variable "bedrock_foundation_model_arn" {
-  description = "Bedrock foundation model ARN wildcard when bedrock_model_arns is empty"
-  type        = string
-}
-
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

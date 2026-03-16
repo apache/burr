@@ -87,18 +87,6 @@ variable "sqs_max_receive_count" {
   default     = 3
 }
 
-variable "enable_bedrock" {
-  description = "Enable Bedrock IAM permissions for BedrockAction"
-  type        = bool
-  default     = false
-}
-
-variable "bedrock_model_arns" {
-  description = "List of specific Bedrock model ARNs for least privilege. Empty uses foundation-model/*"
-  type        = list(string)
-  default     = []
-}
-
 variable "dlq_alarm_notification_emails" {
   description = "Email addresses to notify when messages land in the DLQ. Empty = no email subscriptions."
   type        = list(string)

@@ -36,5 +36,3 @@ sqs_message_retention_seconds  = 86400
 sqs_visibility_timeout_seconds = 120
 sqs_receive_wait_time_seconds  = 20
 sqs_max_receive_count          = 3
-
-enable_bedrock = false

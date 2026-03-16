@@ -17,13 +17,4 @@
 
 from .client import LocalTrackingClient
 
-
-def __getattr__(name: str):
-    """Lazy load S3TrackingClient to avoid requiring boto3 unless used."""
-    if name == "S3TrackingClient":
-        from burr.tracking.s3client import S3TrackingClient
-        return S3TrackingClient
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["LocalTrackingClient", "S3TrackingClient"]
+__all__ = ["LocalTrackingClient"]

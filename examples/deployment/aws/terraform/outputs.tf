@@ -64,7 +64,7 @@ output "burr_environment_variables" {
   description = "Environment variables to configure Burr server"
   value = var.enable_sqs ? {
     BURR_S3_BUCKET             = module.s3.bucket_id
-    BURR_TRACKING_MODE         = "SQS"
+    BURR_TRACKING_MODE         = "EVENT_DRIVEN"
     BURR_SQS_QUEUE_URL         = module.sqs[0].queue_url
     BURR_SQS_REGION            = data.aws_region.current.name
     BURR_SQS_WAIT_TIME_SECONDS = "20"

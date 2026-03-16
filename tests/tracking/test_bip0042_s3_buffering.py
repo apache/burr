@@ -27,10 +27,10 @@ class TestS3Settings:
 
     def test_s3_settings_has_tracking_mode(self):
         """Verify tracking_mode field exists with POLLING default."""
-        from burr.tracking.server.s3.backend import S3Settings
+        from burr.tracking.server.s3.backend import S3Settings, TrackingMode
 
         assert "tracking_mode" in S3Settings.model_fields
-        assert S3Settings.model_fields["tracking_mode"].default == "POLLING"
+        assert S3Settings.model_fields["tracking_mode"].default == TrackingMode.POLLING
 
     def test_s3_settings_has_sqs_queue_url(self):
         """Verify sqs_queue_url field exists with None default."""
@@ -60,6 +60,13 @@ class TestS3Settings:
         assert "s3_buffer_size_mb" in S3Settings.model_fields
         assert S3Settings.model_fields["s3_buffer_size_mb"].default == 10
 
+    def test_s3_settings_coerces_sqs_to_event_driven(self):
+        """Verify legacy 'SQS' string coerces to EVENT_DRIVEN for backward compatibility."""
+        from burr.tracking.server.s3.backend import S3Settings, TrackingMode
+
+        settings = S3Settings(s3_bucket="test", tracking_mode="SQS")
+        assert settings.tracking_mode == TrackingMode.EVENT_DRIVEN
+
 
 class TestSQLiteS3BackendInit:
     """Test SQLiteS3Backend accepts and stores BIP-0042 parameters."""
@@ -78,14 +85,14 @@ class TestSQLiteS3BackendInit:
         assert "s3_buffer_size_mb" in params
 
     def test_backend_has_event_driven_methods(self):
-        """Verify SQLiteS3Backend has BIP-0042 event-driven methods."""
+        """Verify SQLiteS3Backend has event-driven methods."""
         from burr.tracking.server.s3.backend import SQLiteS3Backend
 
         assert hasattr(SQLiteS3Backend, "_handle_s3_event")
-        assert hasattr(SQLiteS3Backend, "start_sqs_consumer")
+        assert hasattr(SQLiteS3Backend, "start_event_consumer")
         assert hasattr(SQLiteS3Backend, "is_event_driven")
         assert callable(getattr(SQLiteS3Backend, "_handle_s3_event"))
-        assert callable(getattr(SQLiteS3Backend, "start_sqs_consumer"))
+        assert callable(getattr(SQLiteS3Backend, "start_event_consumer"))
         assert callable(getattr(SQLiteS3Backend, "is_event_driven"))
 
 
@@ -99,13 +106,13 @@ class TestEventDrivenBackendMixin:
         assert EventDrivenBackendMixin is not None
 
     def test_mixin_has_abstract_methods(self):
-        """Verify mixin has abstract start_sqs_consumer and is_event_driven."""
+        """Verify mixin has abstract start_event_consumer and is_event_driven."""
         import abc
 
         from burr.tracking.server.backend import EventDrivenBackendMixin
 
         assert issubclass(EventDrivenBackendMixin, abc.ABC)
-        assert hasattr(EventDrivenBackendMixin, "start_sqs_consumer")
+        assert hasattr(EventDrivenBackendMixin, "start_event_consumer")
         assert hasattr(EventDrivenBackendMixin, "is_event_driven")
 
     def test_sqlite_s3_backend_inherits_mixin(self):

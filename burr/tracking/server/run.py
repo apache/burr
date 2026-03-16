@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import importlib
 import logging
 import os
@@ -129,8 +130,6 @@ initialized = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
-
     # Download if it does it
     # For now we do this before the lifespan
     await download_snapshot()
@@ -138,12 +137,20 @@ async def lifespan(app: FastAPI):
     await backend.lifespan(app).__anext__()
     await sync_index()  # this will trigger the repeat every N seconds
     await save_snapshot()  # this will trigger the repeat every N seconds
-    # BIP-0042: Start SQS consumer for event-driven tracking when configured
+    # Start event consumer for event-driven tracking when configured
+    event_consumer_task = None
     if isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven():
-        asyncio.create_task(backend.start_sqs_consumer())
+        event_consumer_task = asyncio.create_task(backend.start_event_consumer())
     global initialized
     initialized = True
     yield
+    # Graceful shutdown: cancel event consumer task
+    if event_consumer_task is not None:
+        event_consumer_task.cancel()
+        try:
+            await event_consumer_task
+        except asyncio.CancelledError:
+            pass
     await backend.lifespan(app).__anext__()
 
 
@@ -178,7 +185,7 @@ app_spec = get_app_spec()
 logger = logging.getLogger(__name__)
 
 if app_spec.indexing:
-    # BIP-0042: Only use polling when not in event-driven (SQS) mode
+    # Only use polling when not in event-driven mode
     if not (
         isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven()
     ):
