@@ -28,7 +28,7 @@ import os.path
 import tempfile
 import uuid
 from collections import Counter
-from typing import Literal, Optional, Sequence, Type, TypeVar, Union
+from typing import List, Literal, Optional, Sequence, Tuple, Type, TypeVar, Union
 
 import fastapi
 import pydantic
@@ -281,7 +281,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         s3_key = f"{self._snapshot_prefix}/{timestamp}/{self._backend_id}/snapshot.db"
         # TODO -- copy the path at snapshot_path to s3 using aiobotocore
         session = self._session
-        logger.info("Saving db snapshot at: %s", s3_key)
+        logger.info(f"Saving db snapshot at: {s3_key}")
         async with session.create_client("s3") as s3_client:
             with open(path, "rb") as file_data:
                 await s3_client.put_object(Bucket=self._bucket, Key=s3_key, Body=file_data)
@@ -289,7 +289,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         self._snapshot_key_history.append(s3_key)
         if len(self._snapshot_key_history) > 5:
             old_snapshot_to_remove = self._snapshot_key_history.pop(0)
-            logger.info("Removing old snapshot: %s", old_snapshot_to_remove)
+            logger.info(f"Removing old snapshot: {old_snapshot_to_remove}")
             async with session.create_client("s3") as s3_client:
                 await s3_client.delete_object(Bucket=self._bucket, Key=old_snapshot_to_remove)
 
@@ -313,7 +313,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
     async def _update_projects(self):
         current_projects = await Project.all()
         project_names = {project.name for project in current_projects}
-        logger.info("Current projects: %s", project_names)
+        logger.info(f"Current projects: {project_names}")
         async with self._session.create_client("s3") as client:
             paginator = client.get_paginator("list_objects_v2")
             async for result in paginator.paginate(
@@ -323,7 +323,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
                     project_name = prefix.get("Prefix").split("/")[-2]
                     if project_name not in project_names:
                         now = system.now()
-                        logger.info("Creating project: %s", project_name)
+                        logger.info(f"Creating project: {project_name}")
                         await Project.create(
                             name=project_name,
                             uri=None,
@@ -349,7 +349,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
     async def _gather_metadata_files(
         self,
-        metadata_files: list[DataFile],
+        metadata_files: List[DataFile],
     ) -> Sequence[dict]:
         """Gives a list of metadata files so we can update the application"""
 
@@ -378,7 +378,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         )
         return out
 
-    async def _gather_log_file_data(self, log_files: list[DataFile]) -> Sequence[dict]:
+    async def _gather_log_file_data(self, log_files: List[DataFile]) -> Sequence[dict]:
         """Gives a list of log files so we can update the application"""
 
         async def _query_log_file(log_file: DataFile) -> dict:
@@ -410,9 +410,9 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
         :return: list of paths to update
         """
-        logger.info("Scanning db with highwatermark: %s", high_watermark_s3_path)
+        logger.info(f"Scanning db with highwatermark: {high_watermark_s3_path}")
         paths_to_update = []
-        logger.info("Scanning log data for project: %s", project.name)
+        logger.info(f"Scanning log data for project: {project.name}")
         async with self._session.create_client("s3") as client:
             paginator = client.get_paginator("list_objects_v2")
             async for result in paginator.paginate(
@@ -424,11 +424,11 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
                     key = content["Key"]
                     last_modified = content["LastModified"]
                     # Created == last_modified as we have an immutable data model
-                    logger.info("Found new file: %s", key)
+                    logger.info(f"Found new file: {key}")
                     paths_to_update.append(DataFile.from_path(key, created_date=last_modified))
                     if len(paths_to_update) >= max_paths:
                         break
-        logger.info("Found %s new files to index", len(paths_to_update))
+        logger.info(f"Found {len(paths_to_update)} new files to index")
         return paths_to_update
 
     async def _ensure_applications_exist(
@@ -445,13 +445,10 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         )
         counter = Counter([path.file_type for path in paths_to_update])
         logger.info(
-            "Found %s applications in the scan, including: %s log files, "
-            "%s metadata files, and %s graph files, and %s other files.",
-            len(all_application_keys),
-            counter["log"],
-            counter["metadata"],
-            counter["graph"],
-            len(paths_to_update) - len(all_application_keys),
+            f"Found {len(all_application_keys)} applications in the scan, "
+            f"including: {counter['log']} log files, "
+            f"{counter['metadata']} metadata files, and {counter['graph']} graph files, "
+            f"and {len(paths_to_update) - len(all_application_keys)} other files."
         )
 
         # First, let's create all applications, ignoring them if they exist
@@ -475,9 +472,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         ]
 
         logger.info(
-            "Creating %s new applications, with keys: %s",
-            len(apps_to_create),
-            [(app.name, app.partition_key) for app in apps_to_create],
+            f"Creating {len(apps_to_create)} new applications, with keys: {[(app.name, app.partition_key) for app in apps_to_create]}"
         )
         await Application.bulk_create(apps_to_create)
         all_applications = await self.query_applications_by_key(all_application_keys)
@@ -492,7 +487,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         :param paths_to_update: All paths to update
         :return:
         """
-        logger.info("found: %s applications to update in the db", len(all_applications))
+        logger.info(f"found: {len(all_applications)} applications to update in the db")
         metadata_data = [path for path in paths_to_update if path.file_type == "metadata"]
         graph_data = [path for path in paths_to_update if path.file_type == "graph"]
         metadata_objects = await self._gather_metadata_files(metadata_data)
@@ -555,7 +550,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
     async def _scan_and_update_db_for_project(
         self, project: Project, indexing_job: IndexingJob
-    ) -> tuple[IndexStatus, int]:
+    ) -> Tuple[IndexStatus, int]:
         """Scans and updates the database for a project.
 
         TODO -- break this up into functions
@@ -570,7 +565,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         )
         # This way we can sort by the latest captured time
         high_watermark = current_status.s3_highwatermark if current_status is not None else ""
-        logger.info("Scanning db with highwatermark: %s", high_watermark)
+        logger.info(f"Scanning db with highwatermark: {high_watermark}")
         paths_to_update = await self._gather_paths_to_update(
             project=project, high_watermark_s3_path=high_watermark
         )
@@ -595,7 +590,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
             # TODO -- add error catching
             status, num_files = await self._scan_and_update_db_for_project(project, indexing_job)
-            logger.info("Scanned: %s files with status stored at ID=%s", num_files, status.id)
+            logger.info(f"Scanned: {num_files} files with status stored at ID={status.id}")
 
             indexing_job.records_processed = num_files
             indexing_job.end_time = system.now()
@@ -642,7 +637,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         partition_key: Optional[str],
         limit: int = 100,
         offset: int = 0,
-    ) -> tuple[Sequence[schema.ApplicationSummary], int]:
+    ) -> Tuple[Sequence[schema.ApplicationSummary], int]:
         # TODO -- distinctify between project name and project ID
         # Currently they're the same in the UI but we'll want to have them decoupled
         app_query = (
@@ -750,7 +745,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
             project = await Project.filter(name=project_name).first()
             if project is None:
-                logger.info("Creating project %s from S3 event", project_name)
+                logger.info(f"Creating project {project_name} from S3 event")
                 project = await Project.create(
                     name=project_name,
                     uri=None,
@@ -763,9 +758,9 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
             await self._update_all_applications(all_applications, [data_file])
             await self.update_log_files([data_file], all_applications)
 
-            logger.info("Indexed S3 event: %s", s3_key)
+            logger.info(f"Indexed S3 event: {s3_key}")
         except Exception as e:
-            logger.error("Failed to handle S3 event %s: %s", s3_key, e)
+            logger.error(f"Failed to handle S3 event {s3_key}: {e}")
             raise  # Re-raise so message stays in queue for retry / DLQ
 
     async def start_event_consumer(self) -> None:
@@ -778,7 +773,7 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
             logger.info("Event consumer not configured, skipping")
             return
 
-        logger.info("Starting event consumer for queue: %s", self._sqs_queue_url)
+        logger.info(f"Starting event consumer for queue: {self._sqs_queue_url}")
 
         async with self._session.create_client("sqs", region_name=self._sqs_region) as sqs_client:
             try:
@@ -798,43 +793,34 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
                                 s3_key = None
                                 event_time = None
 
-                                # Handle EventBridge wrapped S3 events (one event per message)
+                                # Handle EventBridge wrapped S3 events
                                 if "detail" in body:
-                                    s3_keys_with_times = [
-                                        (
-                                            body["detail"]["object"]["key"],
-                                            datetime.datetime.fromisoformat(
-                                                body["time"].replace("Z", "+00:00")
-                                            ),
-                                        )
-                                    ]
+                                    s3_key = body["detail"]["object"]["key"]
+                                    event_time = datetime.datetime.fromisoformat(
+                                        body["time"].replace("Z", "+00:00")
+                                    )
                                 elif "Records" in body:
-                                    s3_keys_with_times = [
-                                        (
-                                            record["s3"]["object"]["key"],
-                                            datetime.datetime.fromisoformat(
-                                                record["eventTime"].replace("Z", "+00:00")
-                                            ),
-                                        )
-                                        for record in body["Records"]
-                                    ]
+                                    record = body["Records"][0]
+                                    s3_key = record["s3"]["object"]["key"]
+                                    event_time = datetime.datetime.fromisoformat(
+                                        record["eventTime"].replace("Z", "+00:00")
+                                    )
                                 else:
-                                    logger.warning("Unknown message format: %s", body)
+                                    logger.warning(f"Unknown message format: {body}")
                                     continue
 
-                                for s3_key, event_time in s3_keys_with_times:
-                                    if s3_key and s3_key.endswith(".jsonl"):
-                                        await self._handle_s3_event(s3_key, event_time)
+                                if s3_key and s3_key.endswith(".jsonl"):
+                                    await self._handle_s3_event(s3_key, event_time)
 
                                 await sqs_client.delete_message(
                                     QueueUrl=self._sqs_queue_url,
                                     ReceiptHandle=message["ReceiptHandle"],
                                 )
                             except Exception as e:
-                                logger.error("Failed to process SQS message: %s", e)
+                                logger.error(f"Failed to process SQS message: {e}")
 
                     except Exception as e:
-                        logger.error("Event consumer error: %s", e)
+                        logger.error(f"Event consumer error: {e}")
                         await asyncio.sleep(5)
             except asyncio.CancelledError:
                 logger.info("Event consumer shutting down")
