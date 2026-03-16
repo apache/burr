@@ -1,0 +1,143 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+name: Build and Deploy Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'website/**'
+      - '.github/workflows/build-site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: "site-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # ── Build Next.js landing page ──
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: website/package-lock.json
+
+    - name: Install Node dependencies
+      working-directory: ./website
+      run: npm ci
+
+    - name: Build landing page
+      working-directory: ./website
+      run: npm run build
+
+    # ── Build Sphinx docs ──
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y graphviz
+
+    - name: Install Sphinx and dependencies
+      run: |
+        python -m pip install --upgrade --no-cache-dir pip setuptools
+        python -m pip install --upgrade --no-cache-dir sphinx sphinx-rtd-theme sphinx-simplepdf
+        pip install -e ".[documentation]"
+
+    - name: Build Sphinx documentation
+      working-directory: ./docs
+      run: |
+        python -m sphinx -T -W --keep-going -b dirhtml -d _build/doctrees -D language=en . _build/html
+
+    # ── Merge outputs and deploy ──
+    - name: Assemble site
+      run: |
+        mkdir -p /tmp/site-output
+
+        # Landing page at root
+        cp -r website/out/* /tmp/site-output/
+
+        # Sphinx docs at /docs/
+        mkdir -p /tmp/site-output/docs
+        cp -r docs/_build/html/* /tmp/site-output/docs/
+
+        echo "Site structure:"
+        ls -la /tmp/site-output/
+        echo "Docs:"
+        ls -la /tmp/site-output/docs/ | head -20
+
+    - name: Deploy to asf-site / asf-staging
+      if: github.event_name != 'pull_request'
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          TARGET_BRANCH="asf-site"
+        else
+          TARGET_BRANCH="asf-staging"
+        fi
+
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+
+        mkdir -p /tmp/gh-pages
+
+        if ! git clone --branch $TARGET_BRANCH --single-branch \
+            https://github.com/${{ github.repository }}.git /tmp/gh-pages 2>/dev/null; then
+          rm -rf /tmp/gh-pages
+          mkdir -p /tmp/gh-pages
+          cd /tmp/gh-pages
+          git init
+          git checkout -b $TARGET_BRANCH
+          git remote add origin https://github.com/${{ github.repository }}.git
+          cd -
+        fi
+
+        rm -rf /tmp/gh-pages/content
+        mkdir -p /tmp/gh-pages/content
+        cp -r /tmp/site-output/* /tmp/gh-pages/content/
+
+        cd /tmp/gh-pages
+
+        if [ ! -f README.md ]; then
+          echo "# Apache Burr Website" > README.md
+          echo "This branch contains the built site (landing page + docs)." >> README.md
+        fi
+
+        git add -A
+
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "Deploy site from ${{ github.sha }}"
+          git push https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git $TARGET_BRANCH
+          echo "Deployed to $TARGET_BRANCH"
+        else
+          echo "No changes to deploy"
+        fi
