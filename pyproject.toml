@@ -25,12 +25,12 @@ version = "0.41.0"
 dependencies = [] # yes, there are none
 requires-python = ">=3.9"
 authors = [
-  {name = "Elijah ben Izzy", email = "elijah@dagworks.io"},
-  {name = "Stefan Krawczyk", email = "stefan@dagworks.io"},
+  {name = "Elijah ben Izzy", email = "elijah@apache.org"},
+  {name = "Stefan Krawczyk", email = "stefan@apache.org"},
 ]
 maintainers = [
-  {name = "Elijah ben Izzy", email = "elijah@dagworks.io"},
-  {name = "Stefan Krawczyk", email = "stefan@dagworks.io"},
+  {name = "Elijah ben Izzy", email = "elijah@apache.org"},
+  {name = "Stefan Krawczyk", email = "stefan@apache.org"},
 ]
 description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
@@ -223,10 +223,10 @@ tortoise_orm = "burr.tracking.server.s3.settings.TORTOISE_ORM"
 location = "./burr/tracking/server/s3/migrations"
 src_folder = "./."
 [project.urls]
-Homepage = "https://github.com/dagworks-inc/burr"
-Documentation = "https://github.com/dagworks-inc/burr"
-Repository = "https://github.com/dagworks-inc/burr"
-"Bug Tracker" = "https://github.com/dagworks-inc/burr"
+Homepage = "https://github.com/apache/burr"
+Documentation = "https://github.com/apache/burr"
+Repository = "https://github.com/apache/burr"
+"Bug Tracker" = "https://github.com/apache/burr"
 
 [project.scripts]
 burr = "burr.cli.__main__:cli_run_server"

@@ -307,7 +307,7 @@ class State(Mapping, Generic[StateType]):
             # This ensures we only copy the fields that are read by value
             # and copy the others by value
             # TODO -- make this more efficient when we have immutable transactions
-            # with event-based history: https://github.com/DAGWorks-Inc/burr/issues/33
+            # with event-based history: https://github.com/apache/burr/issues/33
             if field in new_state:
                 # currently the reads() includes optional fields
                 # We should clean that up, but this is an internal API so not worried now
