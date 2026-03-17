@@ -91,6 +91,9 @@ jobs:
         mkdir -p /tmp/site-output/docs
         cp -r docs/_build/html/* /tmp/site-output/docs/
 
+        # Redirects for old Sphinx paths
+        cp .htaccess /tmp/site-output/
+
         echo "Site structure:"
         ls -la /tmp/site-output/
         echo "Docs:"
