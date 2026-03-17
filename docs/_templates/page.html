@@ -39,4 +39,11 @@ s=d.getElementsByTagName('script')[0];
   })();
 </script>
 <!-- End Matomo Code -->
+<!-- Point sidebar brand link to landing page -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    var brand = document.querySelector(".sidebar-brand");
+    if (brand) brand.href = "/";
+  });
+</script>
 {% endblock %}

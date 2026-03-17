@@ -82,3 +82,21 @@
 [data-theme="dark"] .apache-footer a {
     color: var(--color-link) !important;
 }
+
+/* Sidebar brand: logo inline with title */
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-direction: row;
+}
+
+.sidebar-brand img {
+    height: 1.5rem;
+    width: auto;
+    margin: 0;
+}
+
+.sidebar-brand .sidebar-brand-text {
+    margin: 0;
+}

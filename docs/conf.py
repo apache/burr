@@ -64,7 +64,9 @@ html_css_files = [
 ]
 
 html_title = "Apache Burr"
+html_logo = "_static/burr_logo.svg"
 html_theme_options = {
+    "top_of_page_buttons": [],
     "source_repository": "https://github.com/apache/burr",
     "source_branch": "main",
     "source_directory": "docs/",

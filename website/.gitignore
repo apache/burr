@@ -3,3 +3,4 @@ node_modules/
 out/
 *.tsbuildinfo
 next-env.d.ts
+public/docs/
