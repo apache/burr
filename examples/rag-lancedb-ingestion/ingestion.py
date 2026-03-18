@@ -116,7 +116,7 @@ if __name__ == "__main__":
     utils.set_environment_variables()
 
     pipeline = dlt.pipeline(
-        pipeline_name="substack-blog", destination="lancedb", dataset_name="dagworks"
+        pipeline_name="substack-blog", destination="lancedb", dataset_name="apache_burr"
     )
 
     blog_url = "https://blog.dagworks.io/"

@@ -32,7 +32,7 @@ def relevant_chunk_retrieval(
     lancedb_con: lancedb.DBConnection,
 ) -> State:
     """Search LanceDB with the user query and return the top 4 results"""
-    text_chunks_table = lancedb_con.open_table("dagworks___contexts")
+    text_chunks_table = lancedb_con.open_table("apache_burr___contexts")
     search_results = (
         text_chunks_table.search(user_query).select(["text", "id__"]).limit(4).to_list()
     )

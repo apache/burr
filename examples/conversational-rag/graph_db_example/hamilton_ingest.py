@@ -37,7 +37,7 @@ def main():
     # from hamilton_sdk import adapters
     # tracker = adapters.HamiltonTracker(
     #    project_id=44,  # modify this as needed
-    #    username="elijah@dagworks.io",
+    #    username="elijah@apache.org",
     #    dag_name="load_fighters",
     #    tags={"environment": "DEV", "team": "MY_TEAM", "version": "X"}
     # )
@@ -60,7 +60,7 @@ def main():
     # from hamilton_sdk import adapters
     # tracker = adapters.HamiltonTracker(
     #    project_id=44,  # modify this as needed
-    #    username="elijah@dagworks.io",
+    #    username="elijah@apache.org",
     #    dag_name="load_fights",
     #    tags={"environment": "DEV", "team": "MY_TEAM", "version": "X"}
     # )
