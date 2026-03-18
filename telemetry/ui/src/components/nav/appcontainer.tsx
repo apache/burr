@@ -102,7 +102,7 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
     },
     {
       name: 'Examples',
-      href: 'https://github.com/-Inc/burr/tree/main/examples',
+      href: 'https://github.com/apache/burr/tree/main/examples',
       icon: FolderIcon,
       linkType: 'external'
     },
