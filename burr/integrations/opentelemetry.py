@@ -665,7 +665,8 @@ def _init_instrument(
 
     try:
         instrumentation_module = importlib.import_module(instrumentation_module_name)
-        instrumentor = getattr(instrumentation_module, instrumentor_name)
+        instrumentor_cls = getattr(instrumentation_module, instrumentor_name)
+        instrumentor = instrumentor_cls()
         if instrumentor.is_instrumented_by_opentelemetry:
             logger.debug(f"`{module_name}` is already instrumented.")
         else:
