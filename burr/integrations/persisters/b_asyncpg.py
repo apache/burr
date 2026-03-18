@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Literal, Optional
 from burr.common.types import BaseCopyable
 from burr.core import persistence, state
 from burr.integrations import base
+from burr.integrations.persisters.b_aiosqlite import _AsyncPersisterContextManager
 
 try:
     import asyncpg
@@ -106,12 +107,20 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         return cls._pool
 
     @classmethod
-    async def from_config(cls, config: dict) -> "AsyncPostgreSQLPersister":
-        """Creates a new instance of the PostgreSQLPersister from a configuration dictionary."""
-        return await cls.from_values(**config)
+    def from_config(cls, config: dict) -> "_AsyncPersisterContextManager":
+        """Creates a new instance of the PostgreSQLPersister from a configuration dictionary.
+
+        Can be used with ``await`` or as an async context manager::
+
+            persister = await AsyncPostgreSQLPersister.from_config(config)
+            # or
+            async with AsyncPostgreSQLPersister.from_config(config) as persister:
+                ...
+        """
+        return cls.from_values(**config)
 
     @classmethod
-    async def from_values(
+    def from_values(
         cls,
         db_name: str,
         user: str,
@@ -121,8 +130,15 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         table_name: str = "burr_state",
         use_pool: bool = False,
         **pool_kwargs,
-    ) -> "AsyncPostgreSQLPersister":
+    ) -> "_AsyncPersisterContextManager":
         """Builds a new instance of the PostgreSQLPersister from the provided values.
+
+        Can be used with ``await`` or as an async context manager::
+
+            persister = await AsyncPostgreSQLPersister.from_values(...)
+            # or
+            async with AsyncPostgreSQLPersister.from_values(...) as persister:
+                ...
 
         :param db_name: the name of the PostgreSQL database.
         :param user: the username to connect to the PostgreSQL database.
@@ -133,22 +149,25 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         :param use_pool: whether to use a connection pool (True) or a direct connection (False)
         :param pool_kwargs: additional kwargs to pass to the pool creation
         """
-        if use_pool:
-            pool = await cls.create_pool(
-                user=user,
-                password=password,
-                database=db_name,
-                host=host,
-                port=port,
-                **pool_kwargs,
-            )
-            return cls(connection=None, pool=pool, table_name=table_name)
-        else:
-            # Original behavior - direct connection
-            connection = await asyncpg.connect(
-                user=user, password=password, database=db_name, host=host, port=port
-            )
-            return cls(connection=connection, table_name=table_name)
+
+        async def _create():
+            if use_pool:
+                pool = await cls.create_pool(
+                    user=user,
+                    password=password,
+                    database=db_name,
+                    host=host,
+                    port=port,
+                    **pool_kwargs,
+                )
+                return cls(connection=None, pool=pool, table_name=table_name)
+            else:
+                connection = await asyncpg.connect(
+                    user=user, password=password, database=db_name, host=host, port=port
+                )
+                return cls(connection=connection, table_name=table_name)
+
+        return _AsyncPersisterContextManager(_create())
 
     def __init__(
         self,
