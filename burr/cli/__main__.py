@@ -31,7 +31,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Optional
 
-from burr import system, telemetry
+from burr import system
 from burr.core.persistence import PersistedStateData
 from burr.integrations.base import require_plugin
 from burr.log_setup import setup_logging
@@ -48,12 +48,6 @@ except ImportError as e:
 
 # Clear default handlers
 setup_logging(logging.INFO)
-
-
-# TODO -- add this as a general callback to the CLI
-def _telemetry_if_enabled(event: str):
-    if telemetry.is_telemetry_enabled():
-        telemetry.create_and_send_cli_event(event)
 
 
 def _command(command: str, capture_output: bool, addl_env: dict | None = None) -> str:
@@ -171,7 +165,6 @@ def _run_server(
     host: str = "127.0.0.1",
     backend: str = "local",
 ):
-    _telemetry_if_enabled("run_server")
     # TODO: Implement server running logic here
     # Example: Start a web server, configure ports, etc.
     logger.info(f"Starting server on port {port}")
@@ -244,7 +237,6 @@ def demo_server(port: int):
 @click.option("--prod", is_flag=True, help="Publish to pypi (rather than test pypi)")
 @click.option("--no-wipe-dist", is_flag=True, help="Wipe the dist/ directory before building")
 def build_and_publish(prod: bool, no_wipe_dist: bool):
-    _telemetry_if_enabled("build_and_publish")
     git_root = _get_git_root()
     with cd(git_root):
         logger.info("Building UI -- this may take a bit...")
@@ -272,7 +264,6 @@ def build_and_publish(prod: bool, no_wipe_dist: bool):
 @click.option("--unique-app-names", help="Use unique app names", is_flag=True)
 @click.option("--no-clear-current-data", help="Don't clear current data", is_flag=True)
 def generate_demo_data(s3_bucket, data_dir, unique_app_names: bool, no_clear_current_data: bool):
-    _telemetry_if_enabled("generate_demo_data")
     git_root = _get_git_root()
     # We need to add the examples directory to the path so we have all the imports
     # The GPT-one relies on a local import

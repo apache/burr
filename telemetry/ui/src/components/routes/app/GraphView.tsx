@@ -20,7 +20,7 @@
 import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
-import React, { createContext, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useLayoutEffect, useRef, useState } from 'react';
 import ReactFlow, {
   BaseEdge,
   Controls,
@@ -250,7 +250,10 @@ const getLayoutedElements = (
   });
 };
 
-const convertApplicationToGraph = (stateMachine: ApplicationModel): [NodeType[], EdgeType[]] => {
+const convertApplicationToGraph = (
+  stateMachine: ApplicationModel,
+  showInputs: boolean
+): [NodeType[], EdgeType[]] => {
   const shouldDisplayInput = (input: string) => !input.startsWith('__');
   const inputUniqueID = (action: ActionModel, input: string) => `${action.name}:${input}`; // Currently they're distinct by name
 
@@ -285,10 +288,12 @@ const convertApplicationToGraph = (stateMachine: ApplicationModel): [NodeType[],
     markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20 },
     data: { from: transition.from_, to: transition.to, condition: transition.condition }
   }));
-  return [
-    [...allActionNodes, ...allInputNodes],
-    [...allInputTransitions, ...allTransitionEdges]
-  ];
+  return showInputs
+    ? [
+        [...allActionNodes, ...allInputNodes],
+        [...allInputTransitions, ...allTransitionEdges]
+      ]
+    : [[...allActionNodes], [...allTransitionEdges]];
 };
 
 const nodeTypes = {
@@ -317,34 +322,25 @@ export const _Graph = (props: {
   previousActions: Step[] | undefined;
   hoverAction: Step | undefined;
 }) => {
-  const [initialNodes, initialEdges] = React.useMemo(() => {
-    return convertApplicationToGraph(props.stateMachine);
-  }, [props.stateMachine]);
+  const [showInputs, setShowInputs] = useState(true);
 
   const [nodes, setNodes] = useState<NodeType[]>([]);
   const [edges, setEdges] = useState<EdgeType[]>([]);
 
   const { fitView } = useReactFlow();
 
-  const onLayout = useCallback(
-    ({ direction = 'TB', useInitialNodes = false }): void => {
-      const opts = { direction };
-      const ns = useInitialNodes ? initialNodes : nodes;
-      const es = useInitialNodes ? initialEdges : edges;
+  useLayoutEffect(() => {
+    const [nextNodes, nextEdges] = convertApplicationToGraph(props.stateMachine, showInputs);
 
-      getLayoutedElements(ns, es, opts).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+    getLayoutedElements(nextNodes, nextEdges, { direction: 'TB' }).then(
+      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
 
         window.requestAnimationFrame(() => fitView());
-      });
-    },
-    [nodes, edges]
-  );
-
-  useLayoutEffect(() => {
-    onLayout({ direction: 'TB', useInitialNodes: true });
-  }, []);
+      }
+    );
+  }, [showInputs, props.stateMachine, fitView]);
 
   return (
     <NodeStateProvider.Provider
@@ -355,6 +351,11 @@ export const _Graph = (props: {
       }}
     >
       <div className="h-full w-full relative">
+        <label className="absolute top-2 left-2 z-10 bg-white p-2 rounded shadow">
+          <input type="checkbox" checked={showInputs} onChange={() => setShowInputs(!showInputs)} />
+          <span className="ml-2">Show Inputs</span>
+        </label>
+
         <ReactFlow
           nodes={nodes}
           edges={edges}

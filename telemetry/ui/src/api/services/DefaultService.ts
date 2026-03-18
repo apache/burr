@@ -36,6 +36,7 @@ import type { Project } from '../models/Project';
 import type { PromptInput } from '../models/PromptInput';
 import type { QuestionAnswers } from '../models/QuestionAnswers';
 import type { ResearchSummary } from '../models/ResearchSummary';
+import type { CounterState } from '../models/CounterState';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -695,6 +696,90 @@ export class DefaultService {
     return __request(OpenAPI, {
       method: 'GET',
       url: '/api/v0/deep_researcher/validate'
+    });
+  }
+  /**
+   * Count
+   * Increment the counter by one step and return the new state.
+   *
+   * :param project_id: Project ID to run
+   * :param app_id: Application ID to run
+   * :return: The current counter state
+   * @param projectId
+   * @param appId
+   * @returns CounterState Successful Response
+   * @throws ApiError
+   */
+  public static countApiV0CounterCountProjectIdAppIdPost(
+    projectId: string,
+    appId: string
+  ): CancelablePromise<CounterState> {
+    return __request(OpenAPI, {
+      method: 'POST',
+      url: '/api/v0/counter/count/{project_id}/{app_id}',
+      path: {
+        project_id: projectId,
+        app_id: appId
+      },
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
+   * Get Counter State
+   * Get the current counter state without incrementing.
+   *
+   * :param project_id: Project ID
+   * :param app_id: App ID
+   * :return: The current counter state
+   * @param projectId
+   * @param appId
+   * @returns CounterState Successful Response
+   * @throws ApiError
+   */
+  public static getCounterStateApiV0CounterStateProjectIdAppIdGet(
+    projectId: string,
+    appId: string
+  ): CancelablePromise<CounterState> {
+    return __request(OpenAPI, {
+      method: 'GET',
+      url: '/api/v0/counter/state/{project_id}/{app_id}',
+      path: {
+        project_id: projectId,
+        app_id: appId
+      },
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
+   * Create New Application
+   * Endpoint to create a new counter application
+   *
+   * :param project_id: Project ID
+   * :param app_id: App ID
+   * :return: The app ID
+   * @param projectId
+   * @param appId
+   * @returns string Successful Response
+   * @throws ApiError
+   */
+  public static createNewApplicationApiV0CounterCreateProjectIdAppIdPost(
+    projectId: string,
+    appId: string
+  ): CancelablePromise<string> {
+    return __request(OpenAPI, {
+      method: 'POST',
+      url: '/api/v0/counter/create/{project_id}/{app_id}',
+      path: {
+        project_id: projectId,
+        app_id: appId
+      },
+      errors: {
+        422: `Validation Error`
+      }
     });
   }
 }
