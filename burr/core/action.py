@@ -143,6 +143,7 @@ def flexible_api(func: Callable[..., Any]) -> Callable[..., Any]:
 
     return wrapper
 
+
 # This is here to make accessing the pydantic actions easier
 # we just attach them to action so you can call `@action.pyddantic...`
 # The IDE will like it better and thus be able to auto-complete/type-check
