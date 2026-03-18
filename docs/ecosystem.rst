@@ -51,18 +51,12 @@ LLM & AI Frameworks
    * - **OpenAI**
      - Build agents using OpenAI's powerful models.
      - `OpenAI Examples <https://github.com/apache/burr/tree/main/examples/openai-compatible-agent>`_
-   * - **LlamaIndex**
-     - Connect your custom data to LLMs.
-     - `LlamaIndex Integration <https://github.com/apache/burr/tree/main/examples/resource_management>`_
    * - **Haystack**
      - Build end-to-end NLP pipelines.
      - `Haystack Integration <https://github.com/apache/burr/tree/main/examples/haystack-integration>`_
    * - **Instructor**
      - Structured outputs for LLMs.
      - `Instructor Examples <https://github.com/apache/burr/tree/main/examples/instructor-gemini-flash>`_
-   * - **Google Gemini**
-     - specific examples using Google's Gemini models.
-     - `Gemini Examples <https://github.com/apache/burr/tree/main/examples/instructor-gemini-flash>`_
 
 Orchestration & Data
 --------------------
