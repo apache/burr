@@ -100,7 +100,48 @@ def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
         )
 
 
+from functools import wraps
+
 from burr.core.typing import ActionSchema
+
+
+def flexible_api(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator for ``run``, ``stream_run``, and ``run_and_update`` overrides
+    that declare explicit parameters instead of ``**run_kwargs``.
+
+    Applying this decorator prevents mypy ``[override]`` errors caused by
+    narrowing the base-class signature (which uses ``**run_kwargs``).
+
+    Example usage::
+
+        from burr.core import Action, State, flexible_api
+
+        class Counter(Action):
+            @property
+            def reads(self) -> list[str]:
+                return ["counter"]
+
+            @flexible_api
+            def run(self, state: State, increment_by: int) -> dict:
+                return {"counter": state["counter"] + increment_by}
+
+            @property
+            def writes(self) -> list[str]:
+                return ["counter"]
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(**result)
+
+            @property
+            def inputs(self) -> list[str]:
+                return ["increment_by"]
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    return wrapper
 
 # This is here to make accessing the pydantic actions easier
 # we just attach them to action so you can call `@action.pyddantic...`
