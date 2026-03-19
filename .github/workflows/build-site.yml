@@ -99,6 +99,42 @@ jobs:
         echo "Docs:"
         ls -la /tmp/site-output/docs/ | head -20
 
+    # TODO: Remove this step once we confirm ASF infra honors .htaccess (AllowOverride).
+    # This was added as a fallback for PR #679 (landing page migration) because:
+    # The .htaccess was not being deployed (dotglob fix above solves this) and
+    # ASF infra may not honor .htaccess for the publish serving mode in .asf.yaml.
+    # Once confirmed, the .htaccess 301s are sufficient and these static HTML
+    # redirects can be removed to avoid bloating the asf-site branch.
+    - name: Generate HTML redirect fallbacks
+      run: |
+        # Scan Sphinx build output and generate static HTML redirects for every page.
+        # These act as fallback if the server does not process .htaccess.
+        BASE_URL="https://burr.apache.org"
+        OUTPUT="/tmp/site-output"
+        DOCS_BUILD="docs/_build/html"
+        COUNT=0
+
+        # Find every index.html in the Sphinx output (dirhtml builder creates dir/index.html per page)
+        while IFS= read -r file; do
+          # Get path relative to build root, e.g. "getting_started/install/index.html"
+          rel="${file#$DOCS_BUILD/}"
+          dir="$(dirname "$rel")"
+
+          # Skip the docs root (landing page lives there) and paths already in site output
+          if [ "$dir" = "." ] || [ -e "$OUTPUT/$dir/index.html" ]; then
+            continue
+          fi
+
+          target="$BASE_URL/docs/$dir/"
+          mkdir -p "$OUTPUT/$dir"
+          printf '<!DOCTYPE html><html><head>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=%s">\n<link rel="canonical" href="%s">\n<script>window.location.replace("%s")</script>\n</head><body>Redirecting to <a href="%s">%s</a>...</body></html>\n' \
+            "$target" "$target" "$target" "$target" "$target" \
+            > "$OUTPUT/$dir/index.html"
+          COUNT=$((COUNT + 1))
+        done < <(find "$DOCS_BUILD" -name "index.html" -type f)
+
+        echo "Generated $COUNT HTML redirect fallbacks."
+
     - name: Deploy to asf-site / asf-staging
       if: github.event_name != 'pull_request'
       run: |
@@ -126,6 +162,7 @@ jobs:
 
         rm -rf /tmp/gh-pages/content
         mkdir -p /tmp/gh-pages/content
+        shopt -s dotglob
         cp -r /tmp/site-output/* /tmp/gh-pages/content/
 
         cd /tmp/gh-pages
