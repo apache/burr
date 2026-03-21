@@ -38,8 +38,14 @@ export type OpenAPIConfig = {
   ENCODE_PATH?: ((path: string) => string) | undefined;
 };
 
+// When the Burr UI is mounted as a sub-app (e.g. under /burr), the server
+// injects window.__BURR_BASE_PATH__ so API calls are correctly prefixed.
+const basePath = typeof window !== 'undefined'
+  ? (window as any).__BURR_BASE_PATH__ || ''
+  : '';
+
 export const OpenAPI: OpenAPIConfig = {
-  BASE: '',
+  BASE: basePath,
   VERSION: '0.1.0',
   WITH_CREDENTIALS: false,
   CREDENTIALS: 'include',

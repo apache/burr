@@ -50,7 +50,7 @@ import { DeepResearcherWithTelemetry } from './examples/DeepResearcher';
 const App = () => {
   return (
     <QueryClientProvider client={new QueryClient()}>
-      <Router>
+      <Router basename={(window as any).__BURR_BASE_PATH__ || ''}>
         <AppContainer>
           <Routes>
             <Route path="/" element={<Navigate to="/projects" />} />

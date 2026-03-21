@@ -180,8 +180,9 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
   const submitPrompt = async () => {
     setCurrentResponse(''); // Reset it
     setIsChatWaiting(true);
+    const basePath = (window as any).__BURR_BASE_PATH__ || '';
     const response = await fetch(
-      `/api/v0/streaming_chatbot/response/${props.projectId}/${props.appId}`,
+      `${basePath}/api/v0/streaming_chatbot/response/${props.projectId}/${props.appId}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
