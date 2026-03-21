@@ -1,0 +1,183 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+name: Build and Deploy Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'website/**'
+      - '.github/workflows/build-site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: "site-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # ── Build Next.js landing page ──
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+        cache-dependency-path: website/package-lock.json
+
+    - name: Install Node dependencies
+      working-directory: ./website
+      run: npm ci
+
+    - name: Build landing page
+      working-directory: ./website
+      run: npm run build
+
+    # ── Build Sphinx docs ──
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y graphviz
+
+    - name: Install Sphinx and dependencies
+      run: |
+        python -m pip install --upgrade --no-cache-dir pip setuptools
+        python -m pip install --upgrade --no-cache-dir sphinx sphinx-rtd-theme sphinx-simplepdf
+        pip install -e ".[documentation]"
+
+    - name: Build Sphinx documentation
+      working-directory: ./docs
+      run: |
+        python -m sphinx -T -W --keep-going -b dirhtml -d _build/doctrees -D language=en . _build/html
+
+    # ── Merge outputs and deploy ──
+    - name: Assemble site
+      run: |
+        mkdir -p /tmp/site-output
+
+        # Landing page at root
+        cp -r website/out/* /tmp/site-output/
+
+        # Sphinx docs at /docs/
+        mkdir -p /tmp/site-output/docs
+        cp -r docs/_build/html/* /tmp/site-output/docs/
+
+        # Redirects for old Sphinx paths
+        cp .htaccess /tmp/site-output/
+
+        echo "Site structure:"
+        ls -la /tmp/site-output/
+        echo "Docs:"
+        ls -la /tmp/site-output/docs/ | head -20
+
+    # TODO: Remove this step once we confirm ASF infra honors .htaccess (AllowOverride).
+    # This was added as a fallback for PR #679 (landing page migration) because:
+    # The .htaccess was not being deployed (dotglob fix above solves this) and
+    # ASF infra may not honor .htaccess for the publish serving mode in .asf.yaml.
+    # Once confirmed, the .htaccess 301s are sufficient and these static HTML
+    # redirects can be removed to avoid bloating the asf-site branch.
+    - name: Generate HTML redirect fallbacks
+      run: |
+        # Scan Sphinx build output and generate static HTML redirects for every page.
+        # These act as fallback if the server does not process .htaccess.
+        BASE_URL="https://burr.apache.org"
+        OUTPUT="/tmp/site-output"
+        DOCS_BUILD="docs/_build/html"
+        COUNT=0
+
+        # Find every index.html in the Sphinx output (dirhtml builder creates dir/index.html per page)
+        while IFS= read -r file; do
+          # Get path relative to build root, e.g. "getting_started/install/index.html"
+          rel="${file#$DOCS_BUILD/}"
+          dir="$(dirname "$rel")"
+
+          # Skip the docs root (landing page lives there) and paths already in site output
+          if [ "$dir" = "." ] || [ -e "$OUTPUT/$dir/index.html" ]; then
+            continue
+          fi
+
+          target="$BASE_URL/docs/$dir/"
+          mkdir -p "$OUTPUT/$dir"
+          printf '<!DOCTYPE html><html><head>\n<meta charset="utf-8">\n<meta http-equiv="refresh" content="0; url=%s">\n<link rel="canonical" href="%s">\n<script>window.location.replace("%s")</script>\n</head><body>Redirecting to <a href="%s">%s</a>...</body></html>\n' \
+            "$target" "$target" "$target" "$target" "$target" \
+            > "$OUTPUT/$dir/index.html"
+          COUNT=$((COUNT + 1))
+        done < <(find "$DOCS_BUILD" -name "index.html" -type f)
+
+        echo "Generated $COUNT HTML redirect fallbacks."
+
+    - name: Deploy to asf-site / asf-staging
+      if: github.event_name != 'pull_request'
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          TARGET_BRANCH="asf-site"
+        else
+          TARGET_BRANCH="asf-staging"
+        fi
+
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+
+        mkdir -p /tmp/gh-pages
+
+        if ! git clone --branch $TARGET_BRANCH --single-branch \
+            https://github.com/${{ github.repository }}.git /tmp/gh-pages 2>/dev/null; then
+          rm -rf /tmp/gh-pages
+          mkdir -p /tmp/gh-pages
+          cd /tmp/gh-pages
+          git init
+          git checkout -b $TARGET_BRANCH
+          git remote add origin https://github.com/${{ github.repository }}.git
+          cd -
+        fi
+
+        rm -rf /tmp/gh-pages/content
+        mkdir -p /tmp/gh-pages/content
+        shopt -s dotglob
+        cp -r /tmp/site-output/* /tmp/gh-pages/content/
+
+        cd /tmp/gh-pages
+
+        if [ ! -f README.md ]; then
+          echo "# Apache Burr Website" > README.md
+          echo "This branch contains the built site (landing page + docs)." >> README.md
+        fi
+
+        git add -A
+
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "Deploy site from ${{ github.sha }}"
+          git push https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git $TARGET_BRANCH
+          echo "Deployed to $TARGET_BRANCH"
+        else
+          echo "No changes to deploy"
+        fi

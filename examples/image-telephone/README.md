@@ -29,7 +29,7 @@ that talks to itself to do something fun. The game is simple:
 2. That caption is then provided to DALL-E, which generates an image based on the caption, which is saved to state.
 3. The loop repeats -- and you have encoded the game of telephone!
 
-Specifically, each action here in Burr is delegated to the [Hamilton](https://github.com/dagworks-inc/hamilton) micro-framework to run.
+Specifically, each action here in Burr is delegated to the [Hamilton](https://github.com/apache/hamilton) micro-framework to run.
 Hamilton is a great replacement for tools like LCEL, because it's built to provide a great SDLC experience, in addition
 to being lightweight, extensible and more general
 purpose (e.g. it's great for expressing things data processing, ML, and web-request logic). We're using
@@ -71,5 +71,5 @@ documentation for the Hamilton dataflows that are used: [captioning](https://hub
 template by overriding values, or by copying the code and modifying it yourself in 2 minutes - see instructions on the [hub](https://hub.dagworks.io/).
 
 ## Hamilton code
-For more details on the [Hamilton](https://github.com/dagworks-inc/hamilton) code and
-this [streamlit app](https://image-telephone.streamlit.app) see [this example in the Hamilton repo.](https://github.com/DAGWorks-Inc/hamilton/tree/main/examples/LLM_Workflows/image_telephone)
+For more details on the [Hamilton](https://github.com/apache/hamilton) code and
+this [streamlit app](https://image-telephone.streamlit.app) see [this example in the Hamilton repo.](https://github.com/apache/hamilton/tree/main/examples/LLM_Workflows/image_telephone)

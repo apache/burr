@@ -60,6 +60,7 @@ try:
     chatbot = importlib.import_module("burr.examples.multi-modal-chatbot.server")
     streaming_chatbot = importlib.import_module("burr.examples.streaming-fastapi.server")
     deep_researcher = importlib.import_module("burr.examples.deep-researcher.server")
+    counter = importlib.import_module("burr.examples.hello-world-counter.server")
 
 except ImportError as e:
     raise e
@@ -343,6 +344,7 @@ app.include_router(chatbot.router, prefix="/api/v0/chatbot")
 app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")
 app.include_router(streaming_chatbot.router, prefix="/api/v0/streaming_chatbot")
 app.include_router(deep_researcher.router, prefix="/api/v0/deep_researcher")
+app.include_router(counter.router, prefix="/api/v0/counter")
 
 if SERVE_STATIC:
     BASE_ASSET_DIRECTORY = str(files("burr").joinpath("tracking/server/build"))

@@ -64,7 +64,9 @@ html_css_files = [
 ]
 
 html_title = "Apache Burr"
+html_logo = "_static/burr_logo.svg"
 html_theme_options = {
+    "top_of_page_buttons": [],
     "source_repository": "https://github.com/apache/burr",
     "source_branch": "main",
     "source_directory": "docs/",
@@ -97,9 +99,9 @@ python_use_unqualified_type_names = True
 GIT_BRANCH_OUTPUT = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
 current_branch = GIT_BRANCH_OUTPUT.decode().strip()
 if current_branch == "main":
-    html_baseurl = "https://burr.apache.org/"
+    html_baseurl = "https://burr.apache.org/docs/"
 else:
-    html_baseurl = "https://burr.staged.apache.org/"
+    html_baseurl = "https://burr.staged.apache.org/docs/"
 html_extra_path = ["robots.txt"]
 sitemap_locales = [None]
 sitemap_url_scheme = "{link}"

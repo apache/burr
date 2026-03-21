@@ -55,5 +55,5 @@ Run the example with `python application.py`. Then, ensure `burr` is running, an
 UI: [http://localhost:7241/project/demo:parallelism_poem_generation](http://localhost:7241/project/demo:parallelism_poem_generation).
 
 
-FOr more information, read the documentation on [recursive applications](https://burr.dagworks.io/concepts/recursion).
+FOr more information, read the documentation on [recursive applications](https://burr.apache.org/concepts/recursion).
 ```

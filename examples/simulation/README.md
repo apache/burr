@@ -19,7 +19,7 @@
 
 # Simulations
 
-This example is a WIP -- we're actively looking for contributors + ideas. See [this issue](https://github.com/DAGWorks-Inc/burr/issues/136) to track.
+This example is a WIP -- we're actively looking for contributors + ideas. See [this issue](https://github.com/apache/burr/issues/136) to track.
 
 At a high level, simulations generally run over a set of time steps and maintain state. The user then manages the state, which becomes
 the input to the next time step, as well as output data to analyze.
@@ -47,7 +47,7 @@ This is a special case of time-series forecasting, in which one wants to simulat
 - `construct_portfolio` - uses the forecast to construct a portfolio
 - `evaluate_portfolio` - evaluates the portfolio
 
-Each one of these could be a DAG using [Hamilton](https://github.com/dagworks-inc/hamilton), or running any custom code.
+Each one of these could be a DAG using [Hamilton](https://github.com/apache/hamilton), or running any custom code.
 
 ### Multi-agent simulation
 
@@ -56,4 +56,4 @@ For multiple independent "agents", Burr could help model the way they interact. 
 actions, or an action that loops over all "users". We are still figuring out the best way to model this, so reach out if you have ideas!
 
 
-Please comment at [this issue](https://github.com/DAGWorks-Inc/burr/issues/136) if you have any opinions on the above! We would love user-contributed examples.
+Please comment at [this issue](https://github.com/apache/burr/issues/136) if you have any opinions on the above! We would love user-contributed examples.

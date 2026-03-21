@@ -21,35 +21,20 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "apache-burr"
-version = "0.40.2"
+version = "0.41.0"
 dependencies = [] # yes, there are none
 requires-python = ">=3.9"
 authors = [
-  {name = "Elijah ben Izzy", email = "elijah@dagworks.io"},
-  {name = "Stefan Krawczyk", email = "stefan@dagworks.io"},
+  {name = "Elijah ben Izzy", email = "elijah@apache.org"},
+  {name = "Stefan Krawczyk", email = "stefan@apache.org"},
 ]
 maintainers = [
-  {name = "Elijah ben Izzy", email = "elijah@dagworks.io"},
-  {name = "Stefan Krawczyk", email = "stefan@dagworks.io"},
+  {name = "Elijah ben Izzy", email = "elijah@apache.org"},
+  {name = "Stefan Krawczyk", email = "stefan@apache.org"},
 ]
-description = """Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks.
-
-Apache Burr works well for any application that uses LLMs, and can integrate with any of your favorite frameworks. Burr includes a UI that can track/monitor/trace your system in real time, along with
-pluggable persisters (e.g. for memory) to save & load application state.
-
-Apache Burr (incubating) is an effort undergoing incubation at the Apache
-Software Foundation (ASF), sponsored by the Apache Incubator PMC.
-
-Incubation is required of all newly accepted projects until a further review
-indicates that the infrastructure, communications, and decision making process
-have stabilized in a manner consistent with other successful ASF projects.
-
-While incubation status is not necessarily a reflection of the completeness
-or stability of the code, it does indicate that the project has yet to be
-fully endorsed by the ASF.
-"""
+description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
-license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]
+license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -238,10 +223,10 @@ tortoise_orm = "burr.tracking.server.s3.settings.TORTOISE_ORM"
 location = "./burr/tracking/server/s3/migrations"
 src_folder = "./."
 [project.urls]
-Homepage = "https://github.com/dagworks-inc/burr"
-Documentation = "https://github.com/dagworks-inc/burr"
-Repository = "https://github.com/dagworks-inc/burr"
-"Bug Tracker" = "https://github.com/dagworks-inc/burr"
+Homepage = "https://github.com/apache/burr"
+Documentation = "https://github.com/apache/burr"
+Repository = "https://github.com/apache/burr"
+"Bug Tracker" = "https://github.com/apache/burr"
 
 [project.scripts]
 burr = "burr.cli.__main__:cli_run_server"
@@ -267,6 +252,7 @@ include = [
   "LICENSE",
   "NOTICE",
   "DISCLAIMER",
+  "LICENSE-wheel",
   "scripts/**",
   "telemetry/ui/**",
   "examples/__init__.py",

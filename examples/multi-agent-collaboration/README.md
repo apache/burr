@@ -23,7 +23,7 @@ This example resembles the example from following [cookbook](https://github.com/
 
 There are two implementations:
 
-1. `hamilton/` -- this uses [Hamilton](https://github.com/dagworks-inc/hamilton) inside the defined actions.
+1. `hamilton/` -- this uses [Hamilton](https://github.com/apache/hamilton) inside the defined actions.
 2. `lcel/` -- this uses LangChain's LCEL inside the defined actions.
 
 # `hamilton/application.py` vs `lcel/application.py`:

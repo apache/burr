@@ -242,6 +242,73 @@ def test_persister_tracks_parent(tmpdir):
     assert metadata_parsed.parent_pointer.partition_key == "user123"
 
 
+def test_fork_children_have_correct_partition_key(tmpdir):
+    """Tests that children.jsonl in the parent app directory has the correct
+    partition_key for the forked child app. Regression test for #518."""
+    old_app_id = "parent_app"
+    new_app_id = "forked_app"
+    partition_key = "user123"
+    log_dir = os.path.join(tmpdir, "tracking")
+    project_name = "test_fork_children_partition_key"
+    tracking_client = LocalTrackingClient(project=project_name, storage_dir=log_dir)
+
+    # Create the parent app first
+    parent_app: Application = (
+        ApplicationBuilder()
+        .with_actions(counter, Result("count").with_name("result"))
+        .with_transitions(
+            ("counter", "counter", expr("counter < 3")),
+            ("counter", "result", default),
+        )
+        .with_state(counter=0, break_at=-1)
+        .with_entrypoint("counter")
+        .with_identifiers(app_id=old_app_id, partition_key=partition_key)
+        .with_tracker(tracking_client)
+        .build()
+    )
+    parent_app.run(halt_after=["result"])
+
+    # Fork from the parent
+    forked_app: Application = (
+        ApplicationBuilder()
+        .with_actions(counter, Result("count").with_name("result"))
+        .with_transitions(
+            ("counter", "counter", expr("counter < 5")),
+            ("counter", "result", default),
+        )
+        .initialize_from(
+            tracking_client,
+            resume_at_next_action=True,
+            default_state={"counter": 0, "break_at": -1},
+            default_entrypoint="counter",
+            fork_from_app_id=old_app_id,
+            fork_from_partition_key=partition_key,
+            fork_from_sequence_id=2,
+        )
+        .with_identifiers(app_id=new_app_id, partition_key=partition_key)
+        .with_tracker(tracking_client)
+        .build()
+    )
+    forked_app.run(halt_after=["result"])
+
+    # Check children.jsonl in the parent app directory
+    children_path = os.path.join(
+        log_dir, project_name, old_app_id, LocalTrackingClient.CHILDREN_FILENAME
+    )
+    assert os.path.exists(children_path), "children.jsonl should exist for the parent app"
+
+    with open(children_path) as f:
+        children = [ChildApplicationModel.model_validate(json.loads(line)) for line in f]
+
+    assert len(children) == 1
+    child = children[0]
+    assert child.child.app_id == new_app_id
+    assert child.child.partition_key == partition_key, (
+        f"Child partition_key should be '{partition_key}', got '{child.child.partition_key}'"
+    )
+    assert child.event_type == "fork"
+
+
 def test_multi_fork_tracking_client(tmpdir):
     """This is more of an end-to-end test. We shoudl probably break it out
     into smaller tests but the local tracking client being used as a persister is

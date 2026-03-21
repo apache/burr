@@ -44,7 +44,7 @@ from typing import (
     cast,
 )
 
-from burr import system, telemetry, visibility
+from burr import system, visibility
 from burr.common import types as burr_types
 from burr.core import persistence, validation
 from burr.core.action import (
@@ -201,9 +201,9 @@ def _state_update(state_to_modify: State, modified_state: State) -> State:
 
     This is suboptimal -- we should not be observing the state, we should be using the state commands and layering in deltas.
     That said, we currently eagerly evaluate the state at all operations, which means we have to do it this way. See
-    https://github.com/DAGWorks-Inc/burr/issues/33 for a more detailed plan.
+    https://github.com/apache/burr/issues/33 for a more detailed plan.
 
-    This function was written to solve this issue: https://github.com/DAGWorks-Inc/burr/issues/28.
+    This function was written to solve this issue: https://github.com/apache/burr/issues/28.
 
 
     :param state_subset_pre_update: The subset of state passed to the update() function
@@ -852,7 +852,7 @@ class Application(Generic[ApplicationStateType]):
         )
 
     # @telemetry.capture_function_usage # todo -- capture usage when we break this up into one that isn't called internally
-    # This will be doable when we move sequence ID to the beginning of the function https://github.com/DAGWorks-Inc/burr/pull/73
+    # This will be doable when we move sequence ID to the beginning of the function https://github.com/apache/burr/pull/73
     @_call_execute_method_pre_post(ExecuteMethod.step)
     def step(self, inputs: Optional[Dict[str, Any]] = None) -> Optional[Tuple[Action, dict, State]]:
         """Performs a single step, advancing the state machine along.
@@ -1012,8 +1012,6 @@ class Application(Generic[ApplicationStateType]):
             )
         return processed_inputs
 
-    # @telemetry.capture_function_usage
-    # ditto with step()
     @_call_execute_method_pre_post(ExecuteMethod.astep)
     async def astep(
         self, inputs: Optional[Dict[str, Any]] = None
@@ -1198,7 +1196,6 @@ class Application(Generic[ApplicationStateType]):
         )
         return prior_action, result, self._state
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.iterate)
     def iterate(
         self,
@@ -1245,7 +1242,6 @@ class Application(Generic[ApplicationStateType]):
                 break
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.aiterate)
     async def aiterate(
         self,
@@ -1277,7 +1273,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.run)
     def run(
         self,
@@ -1306,7 +1301,6 @@ class Application(Generic[ApplicationStateType]):
                 result = e.value
                 return result
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.arun)
     async def arun(
         self,
@@ -1338,7 +1332,6 @@ class Application(Generic[ApplicationStateType]):
             pass
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
 
-    @telemetry.capture_function_usage
     def stream_result(
         self,
         halt_after: list[str],
@@ -1590,7 +1583,6 @@ class Application(Generic[ApplicationStateType]):
             generator, self._state, process_result, callback
         )
 
-    @telemetry.capture_function_usage
     async def astream_result(
         self,
         halt_after: list[str],
@@ -1863,7 +1855,6 @@ class Application(Generic[ApplicationStateType]):
             generator, self._state, process_result, callback
         )
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.stream_iterate)
     def stream_iterate(
         self,
@@ -1907,7 +1898,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
-    @telemetry.capture_function_usage
     @_call_execute_method_pre_post(ExecuteMethod.astream_iterate)
     async def astream_iterate(
         self,
@@ -1941,7 +1931,6 @@ class Application(Generic[ApplicationStateType]):
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
-    @telemetry.capture_function_usage
     def visualize(
         self,
         output_file_path: Optional[str] = None,
@@ -2270,7 +2259,7 @@ class ApplicationBuilder(Generic[StateType]):
 
     def with_parallel_executor(self, executor_factory: lambda: Executor):
         """Assigns a default executor to be used for recursive/parallel sub-actions. This effectively allows
-        for executing multiple Burr apps in parallel. See https://burr.dagworks.io/concepts/parallelism/
+        for executing multiple Burr apps in parallel. See https://burr.apache.org/concepts/parallelism/
         for more details.
 
         This will default to a simple threadpool executor, meaning that you will be bound by the number of threads
@@ -2730,7 +2719,6 @@ class ApplicationBuilder(Generic[StateType]):
             state_initializer=self.state_initializer,
         )
 
-    @telemetry.capture_function_usage
     def build(self) -> Application[StateType]:
         """Builds the application for synchronous runs.
 
@@ -2770,7 +2758,6 @@ class ApplicationBuilder(Generic[StateType]):
 
         return self._build_common()
 
-    @telemetry.capture_function_usage
     async def abuild(self) -> Application[StateType]:
         """Builds the application for asynchronous runs.
 

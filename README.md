@@ -160,9 +160,7 @@ While Apache Burr is attempting something (somewhat) unique, there are a variety
 ## 🌯 Why the name Burr?
 
 Apache Burr is named after [Aaron Burr](https://en.wikipedia.org/wiki/Aaron_Burr), founding father, third VP of the United States, and murderer/arch-nemesis of [Alexander Hamilton](https://en.wikipedia.org/wiki/Alexander_Hamilton).
-What's the connection with Hamilton? This is [DAGWorks](www.dagworks.io)' second open-source library release after the [Apache Hamilton library](https://github.com/apache/hamilton)
-We imagine a world in which Burr and Hamilton lived in harmony and saw through their differences to better the union. We originally
-built Apache Burr as a _harness_ to handle state between executions of Apache Hamilton DAGs (because DAGs don't have cycles),
+What's the connection with (Apache) Hamilton? We imagine a world in which Burr and Hamilton lived in harmony and saw through their differences to better the union. Originally Apache Burr was built as a _harness_ to handle state between executions of Apache Hamilton DAGs (because DAGs don't have cycles),
 but realized that it has a wide array of applications and decided to release it more broadly.
 
 # Testimonials

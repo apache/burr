@@ -28,7 +28,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency: ci-${{ github.ref }}
 
@@ -37,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_PATH: pull/${{github.event.number}}
-      BASE_URL: https://burr.dagworks.io/pull/${{github.event.number}}
+      BASE_URL: https://burr.apache.org/pull/${{github.event.number}}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -49,7 +48,7 @@ jobs:
       - name: Sphinx build
         run: |
           sphinx-build docs -b dirhtml _build
-          echo "burr.dagworks.io" > _build/CNAME # keep the cname file which this clobbers -- todo, unhardcode
+          echo "burr.apache.org" > _build/CNAME # keep the cname file which this clobbers -- todo, unhardcode
       - name: Comment on PR
         uses: hasura/comment-progress@v2.2.0
         if: github.ref != 'refs/heads/main'

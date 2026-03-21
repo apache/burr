@@ -84,7 +84,7 @@ export const ProjectListTable = (props: { projects: Project[]; includeAnnotation
               <TableCell>
                 <LinkText
                   href={project.uri}
-                  text={project.uri.replace('https://github.com/DAGWorks-Inc/burr/tree/main/', '')}
+                  text={project.uri.replace('https://github.com/apache/burr/tree/main/', '')}
                 />
               </TableCell>
               <TableCell>{project.num_apps}</TableCell>

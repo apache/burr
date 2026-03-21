@@ -22,7 +22,6 @@ import logging
 import pathlib
 from typing import Any, Callable, List, Literal, Optional, Set, Tuple, Union
 
-from burr import telemetry
 from burr.core.action import Action, Condition, create_action, default
 from burr.core.state import State
 from burr.core.validation import BASE_ERROR_MESSAGE, assert_set
@@ -180,7 +179,6 @@ class Graph:
             )
         return self._action_tag_map.get(tag)
 
-    @telemetry.capture_function_usage
     def visualize(
         self,
         output_file_path: Optional[Union[str, pathlib.Path]] = None,

@@ -134,10 +134,10 @@ def _validate_environment_for_command(args) -> None:
     command_requirements = {
         "archive": ["git", "gpg"],
         "sdist": ["git", "gpg", "flit"],
-        "wheel": ["git", "gpg", "flit", "node", "npm"],
+        "wheel": ["git", "gpg", "flit", "node", "npm", "twine"],
         "upload": ["git", "gpg", "svn"],
-        "all": ["git", "gpg", "flit", "node", "npm", "svn"],
-        "verify": ["git", "gpg"],
+        "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
+        "verify": ["git", "gpg", "twine"],
     }
 
     required_tools = command_requirements.get(args.command, ["git", "gpg"])
@@ -165,6 +165,8 @@ def _validate_environment_for_command(args) -> None:
         for tool in missing_tools:
             if tool == "flit":
                 print(f"  • {tool}: Install with 'pip install flit'")
+            elif tool == "twine":
+                print(f"  • {tool}: Install with 'pip install twine'")
             elif tool in ["node", "npm"]:
                 print(f"  • {tool}: Install from https://nodejs.org/")
             else:
@@ -341,9 +343,9 @@ def _create_git_archive(version: str, rc_num: str, output_dir: str = "dist") -> 
 
     os.makedirs(output_dir, exist_ok=True)
 
-    archive_name = f"apache-burr-{version}-incubating.tar.gz"
+    archive_name = f"apache-burr-{version}-incubating-src.tar.gz"
     archive_path = os.path.join(output_dir, archive_name)
-    prefix = f"apache-burr-{version}-incubating/"
+    prefix = f"apache-burr-{version}-incubating-src/"
 
     _run_command(
         [
@@ -616,6 +618,30 @@ def _verify_wheel(wheel_path: str) -> bool:
         return False
 
 
+def _verify_wheel_with_twine(wheel_path: str) -> bool:
+    """Verify wheel metadata and package validity using twine."""
+    print(f"  Verifying wheel with twine: {os.path.basename(wheel_path)}")
+
+    try:
+        subprocess.run(
+            ["twine", "check", wheel_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print("    ✓ Twine check passed")
+        print("    ✓ Wheel metadata is valid")
+        return True
+    except subprocess.CalledProcessError as e:
+        print("\n❌ Twine metadata validation failed\n")
+        print("Twine output:")
+        if e.stdout:
+            print(e.stdout)
+        if e.stderr:
+            print(e.stderr)
+        _fail("Wheel failed twine validation - see output above for details")
+
+
 # ============================================================================
 # Upload to Apache SVN
 # ============================================================================
@@ -786,12 +812,16 @@ def cmd_wheel(args) -> bool:
 
     wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
 
-    print("\nSigning wheel...")
-    _sign_artifact(wheel_path)
+    print("\nVerifying wheel with twine...")
+    if not _verify_wheel_with_twine(wheel_path):
+        _fail("Twine verification failed!")
 
-    print("\nVerifying wheel...")
+    print("\nVerifying wheel contents...")
     if not _verify_wheel(wheel_path):
         _fail("Wheel verification failed!")
+
+    print("\nSigning wheel...")
+    _sign_artifact(wheel_path)
 
     if not _verify_artifact_complete(wheel_path):
         _fail("Wheel signature/checksum verification failed!")
@@ -872,6 +902,8 @@ def cmd_all(args) -> bool:
     # Step 3: Build wheel
     _print_step(3, 4, "Building wheel")
     wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
+    if not _verify_wheel_with_twine(wheel_path):
+        _fail("Twine verification failed!")
     _sign_artifact(wheel_path)
     if not _verify_wheel(wheel_path) or not _verify_artifact_complete(wheel_path):
         _fail("Wheel verification failed!")

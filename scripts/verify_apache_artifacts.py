@@ -24,7 +24,7 @@ Checks signatures, checksums, licenses, and archive integrity.
 
 Usage:
     # List contents of an artifact
-    python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
+    python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
 
     # Verify signatures and checksums
     python scripts/verify_apache_artifacts.py signatures
@@ -40,6 +40,7 @@ Usage:
 """
 
 import argparse
+import glob
 import hashlib
 import os
 import shutil
@@ -610,6 +611,35 @@ def cmd_list_contents(args) -> None:
     list_contents(args.artifact)
 
 
+def cmd_twine_check(args) -> bool:
+    """Verify wheel metadata with twine."""
+    _print_section("Verifying Wheel Metadata with Twine")
+
+    wheel_pattern = f"{args.artifacts_dir}/apache_burr-*.whl"
+    wheel_files = glob.glob(wheel_pattern)
+
+    if not wheel_files:
+        print(f"❌ No wheel found matching: {wheel_pattern}")
+        return False
+
+    for wheel_path in wheel_files:
+        print(f"\nChecking {os.path.basename(wheel_path)}...")
+        try:
+            subprocess.run(
+                ["twine", "check", wheel_path],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print(f"  ✓ {os.path.basename(wheel_path)} metadata is valid")
+        except subprocess.CalledProcessError as e:
+            print(f"  ✗ Twine check failed: {e.stderr}")
+            return False
+
+    print("\n✅ All wheels passed twine validation")
+    return True
+
+
 # ============================================================================
 # CLI Entry Point
 # ============================================================================
@@ -623,7 +653,7 @@ def main():
         epilog="""
 Examples:
   # List contents of a specific artifact
-  python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0.tar.gz
+  python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
   python scripts/verify_apache_artifacts.py list-contents dist/apache_burr-0.41.0-py3-none-any.whl
 
   # Verify signatures and checksums only
@@ -683,6 +713,12 @@ Examples:
         help="Generate report but don't fail on license issues",
     )
 
+    # twine-check subcommand
+    twine_parser = subparsers.add_parser("twine-check", help="Verify wheel metadata with twine")
+    twine_parser.add_argument(
+        "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
+    )
+
     args = parser.parse_args()
 
     # Dispatch to command handler
@@ -697,6 +733,8 @@ Examples:
             success = cmd_licenses(args)
         elif args.command == "all":
             success = cmd_all(args)
+        elif args.command == "twine-check":
+            success = cmd_twine_check(args)
         else:
             _fail(f"Unknown command: {args.command}")
     except KeyboardInterrupt:

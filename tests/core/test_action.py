@@ -126,6 +126,171 @@ def test_condition_when_complex():
     assert cond.run(State({"foo": "baz", "baz": "corge"})) == {Condition.KEY: False}
 
 
+# --- when() operator tests ---
+
+
+@pytest.mark.parametrize(
+    "kwargs,state_dict,expected",
+    [
+        # __eq (explicit equality)
+        ({"age__eq": 18}, {"age": 18}, True),
+        ({"age__eq": 18}, {"age": 19}, False),
+        # __ne (not equal)
+        ({"age__ne": 0}, {"age": 5}, True),
+        ({"age__ne": 0}, {"age": 0}, False),
+        # __gt (greater than)
+        ({"age__gt": 18}, {"age": 19}, True),
+        ({"age__gt": 18}, {"age": 18}, False),
+        ({"age__gt": 18}, {"age": 17}, False),
+        # __gte (greater than or equal)
+        ({"age__gte": 18}, {"age": 19}, True),
+        ({"age__gte": 18}, {"age": 18}, True),
+        ({"age__gte": 18}, {"age": 17}, False),
+        # __lt (less than)
+        ({"age__lt": 18}, {"age": 17}, True),
+        ({"age__lt": 18}, {"age": 18}, False),
+        ({"age__lt": 18}, {"age": 19}, False),
+        # __lte (less than or equal)
+        ({"age__lte": 18}, {"age": 17}, True),
+        ({"age__lte": 18}, {"age": 18}, True),
+        ({"age__lte": 18}, {"age": 19}, False),
+        # __in (membership)
+        ({"status__in": ["active", "pending"]}, {"status": "active"}, True),
+        ({"status__in": ["active", "pending"]}, {"status": "pending"}, True),
+        ({"status__in": ["active", "pending"]}, {"status": "banned"}, False),
+        # __notin (not in)
+        ({"status__notin": ["banned", "suspended"]}, {"status": "active"}, True),
+        ({"status__notin": ["banned", "suspended"]}, {"status": "banned"}, False),
+        # __contains (collection contains value)
+        ({"tags__contains": "python"}, {"tags": ["python", "java"]}, True),
+        ({"tags__contains": "go"}, {"tags": ["python", "java"]}, False),
+        ({"text__contains": "hello"}, {"text": "say hello world"}, True),
+        ({"text__contains": "goodbye"}, {"text": "say hello world"}, False),
+        # __is (identity)
+        ({"value__is": None}, {"value": None}, True),
+        ({"value__is": None}, {"value": 0}, False),
+        ({"value__is": True}, {"value": True}, True),
+        ({"value__is": True}, {"value": 1}, False),
+        # __isnot (not identity)
+        ({"value__isnot": None}, {"value": "hello"}, True),
+        ({"value__isnot": None}, {"value": None}, False),
+    ],
+    ids=[
+        "eq-match",
+        "eq-no-match",
+        "ne-different",
+        "ne-same",
+        "gt-above",
+        "gt-equal",
+        "gt-below",
+        "gte-above",
+        "gte-equal",
+        "gte-below",
+        "lt-below",
+        "lt-equal",
+        "lt-above",
+        "lte-below",
+        "lte-equal",
+        "lte-above",
+        "in-first",
+        "in-second",
+        "in-missing",
+        "notin-absent",
+        "notin-present",
+        "contains-list-match",
+        "contains-list-no-match",
+        "contains-str-match",
+        "contains-str-no-match",
+        "is-none-match",
+        "is-none-no-match",
+        "is-true-match",
+        "is-true-not-identical",
+        "isnot-not-none",
+        "isnot-is-none",
+    ],
+)
+def test_condition_when_operators(kwargs, state_dict, expected):
+    cond = Condition.when(**kwargs)
+    assert cond.run(State(state_dict)) == {Condition.KEY: expected}
+
+
+@pytest.mark.parametrize(
+    "kwargs,expected_reads",
+    [
+        ({"age__gte": 18}, ["age"]),
+        ({"status__in": ["a"]}, ["status"]),
+        ({"tags__contains": "x"}, ["tags"]),
+        ({"age__gte": 18, "status": "active"}, ["age", "status"]),
+        # same key with different operators
+        ({"age__gte": 10, "age__lt": 20}, ["age"]),
+    ],
+    ids=["gte", "in", "contains", "mixed", "same-key-two-ops"],
+)
+def test_condition_when_operators_reads(kwargs, expected_reads):
+    cond = Condition.when(**kwargs)
+    assert sorted(cond.reads) == sorted(expected_reads)
+
+
+@pytest.mark.parametrize(
+    "kwargs,expected_name",
+    [
+        ({"age__gte": 18}, "age>=18"),
+        ({"age__lt": 5}, "age<5"),
+        ({"age__ne": 0}, "age!=0"),
+        ({"status__in": ["a", "b"]}, "status in ['a', 'b']"),
+        ({"status__notin": ["x"]}, "status not in ['x']"),
+        ({"tags__contains": "py"}, "tags contains 'py'"),
+        ({"value__is": None}, "value is None"),
+        ({"value__isnot": None}, "value is not None"),
+        # plain equality still uses old format
+        ({"foo": "bar"}, "foo=bar"),
+        ({"foo": "bar", "baz": "qux"}, "baz=qux, foo=bar"),
+    ],
+    ids=["gte", "lt", "ne", "in", "notin", "contains", "is", "isnot", "plain-eq", "plain-multi"],
+)
+def test_condition_when_operators_name(kwargs, expected_name):
+    cond = Condition.when(**kwargs)
+    assert cond.name == expected_name
+
+
+def test_condition_when_operators_combined():
+    """Test multiple operators ANDed together."""
+    cond = Condition.when(age__gte=18, status="active", score__lt=100)
+    assert cond.run(State({"age": 20, "status": "active", "score": 50})) == {Condition.KEY: True}
+    assert cond.run(State({"age": 17, "status": "active", "score": 50})) == {Condition.KEY: False}
+    assert cond.run(State({"age": 20, "status": "inactive", "score": 50})) == {Condition.KEY: False}
+    assert cond.run(State({"age": 20, "status": "active", "score": 100})) == {Condition.KEY: False}
+
+
+def test_condition_when_operators_with_invert():
+    """Ensure operator-based conditions work with ~ (invert)."""
+    cond = ~Condition.when(age__gte=18)
+    assert cond.run(State({"age": 17})) == {Condition.KEY: True}
+    assert cond.run(State({"age": 18})) == {Condition.KEY: False}
+
+
+def test_condition_when_operators_with_or():
+    """Ensure operator-based conditions work with | (or)."""
+    cond = Condition.when(age__lt=13) | Condition.when(age__gte=65)
+    assert cond.run(State({"age": 10})) == {Condition.KEY: True}
+    assert cond.run(State({"age": 70})) == {Condition.KEY: True}
+    assert cond.run(State({"age": 30})) == {Condition.KEY: False}
+
+
+def test_condition_when_operators_with_and():
+    """Ensure operator-based conditions work with & (and)."""
+    cond = Condition.when(age__gte=18) & Condition.when(age__lt=65)
+    assert cond.run(State({"age": 30})) == {Condition.KEY: True}
+    assert cond.run(State({"age": 17})) == {Condition.KEY: False}
+    assert cond.run(State({"age": 65})) == {Condition.KEY: False}
+
+
+def test_condition_when_invalid_key():
+    """Empty state key before operator suffix should raise."""
+    with pytest.raises(ValueError, match="no state key"):
+        Condition.when(__gte=18)
+
+
 def test_condition_default():
     cond = default
     assert cond.name == "default"
@@ -823,3 +988,58 @@ def test_non_existent_bound_parameters():
     required, optional = derive_inputs_from_fn(bound_params, fn)
     assert required == []
     assert optional == []
+
+
+def test_undeclared_state_read_raises_error():
+    with pytest.raises(ValueError):
+
+        @action(reads=["foo"], writes=[])
+        def bad_action(state: State):
+            _ = state["bar"]
+            return {}, state
+
+
+def test_declared_state_read_passes():
+    @action(reads=["foo"], writes=[])
+    def good_action(state: State):
+        _ = state["foo"]
+        return {}, state
+
+
+def test_multiple_undeclared_reads_interleaved():
+    with pytest.raises(ValueError) as exc:
+
+        @action(reads=["foo"], writes=[])
+        def bad_action(state: State):
+            _ = state["foo"]
+            _ = state["bar"]
+            _ = state["baz"]
+            return {}, state
+
+    message = str(exc.value)
+    assert "bar" in message
+    assert "baz" in message
+
+
+def test_pydantic_action_not_impacted():
+    try:
+        from pydantic import BaseModel
+    except ImportError:
+        pytest.skip("pydantic not installed")
+
+    class MyState(BaseModel):
+        foo: str
+
+    @action.pydantic(
+        reads=["foo"],
+        writes=["foo"],
+        state_input_type=MyState,
+        state_output_type=MyState,
+    )
+    def good_action(state: MyState):
+        return {"foo": state.foo}
+
+    # ensure decoration didn't raise and action is creatable
+    from burr.core.action import create_action
+
+    create_action(good_action, name="test")

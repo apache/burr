@@ -207,7 +207,7 @@ def test_my_agent(input, expected_output, results_bag):
 ### Using Burr's pytest Hook
 With Burr you can curate test cases from real application runs. You can then use these test cases in your pytest suite.
 Burr has a hook that enables you to curate a file with the input state and expected output state for an entire run,
-or a single action.  See the [Burr test case creation documentation](https://burr.dagworks.io/examples/guardrails/creating_tests/) for more
+or a single action.  See the [Burr test case creation documentation](https://burr.apache.org/examples/guardrails/creating_tests/) for more
 details on how. Here we show you how you can combine this with getting results:
 
 ```python

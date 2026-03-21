@@ -102,45 +102,45 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
     },
     {
       name: 'Examples',
-      href: 'https://github.com/DAGWorks-Inc/burr/tree/main/examples',
+      href: 'https://github.com/apache/burr/tree/main/examples',
       icon: FolderIcon,
       linkType: 'external'
     },
     ...(backendSpec?.supports_demos
       ? [
-          {
-            name: 'Demos',
-            href: '/demos',
-            icon: ListBulletIcon,
-            linkType: 'internal',
-            children: [
-              { name: 'counter', href: '/demos/counter', current: false, linkType: 'internal' },
-              { name: 'chatbot', href: '/demos/chatbot', current: false, linkType: 'internal' },
-              {
-                name: 'email-assistant',
-                href: '/demos/email-assistant',
-                current: false,
-                linkType: 'internal'
-              },
-              {
-                name: 'streaming-chatbot',
-                href: '/demos/streaming-chatbot',
-                current: false,
-                linkType: 'internal'
-              },
-              {
-                name: 'deep-researcher',
-                href: '/demos/deep-researcher',
-                current: false,
-                linkType: 'internal'
-              }
-            ]
-          }
-        ]
+        {
+          name: 'Demos',
+          href: '/demos',
+          icon: ListBulletIcon,
+          linkType: 'internal',
+          children: [
+            { name: 'counter', href: '/demos/counter', current: false, linkType: 'internal' },
+            { name: 'chatbot', href: '/demos/chatbot', current: false, linkType: 'internal' },
+            {
+              name: 'email-assistant',
+              href: '/demos/email-assistant',
+              current: false,
+              linkType: 'internal'
+            },
+            {
+              name: 'streaming-chatbot',
+              href: '/demos/streaming-chatbot',
+              current: false,
+              linkType: 'internal'
+            },
+            {
+              name: 'deep-researcher',
+              href: '/demos/deep-researcher',
+              current: false,
+              linkType: 'internal'
+            }
+          ]
+        }
+      ]
       : []),
     {
       name: 'Develop',
-      href: 'https://github.com/dagworks-inc/burr',
+      href: 'https://github.com/apache/burr',
       icon: ComputerDesktopIcon,
       linkType: 'external'
     },
@@ -278,9 +278,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
 
         {/* Static sidebar for desktop */}
         <div
-          className={`hidden ${
-            sidebarOpen ? 'h-screen lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col' : ''
-          }`}
+          className={`hidden ${sidebarOpen ? 'h-screen lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col' : ''
+            }`}
         >
           {/* Sidebar component, swap this element with another sidebar if you like */}
           <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 py-2">
@@ -375,11 +374,10 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
           </div>
         </div>
         <div
-          className={`hidden h-screen ${
-            !sidebarOpen
-              ? 'lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-8 lg:flex-col justify-end lg:py-2 lg:px-1'
-              : ''
-          }`}
+          className={`hidden h-screen ${!sidebarOpen
+            ? 'lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-8 lg:flex-col justify-end lg:py-2 lg:px-1'
+            : ''
+            }`}
         >
           <ToggleOpenButton open={sidebarOpen} toggleSidebar={toggleSidebar} />
         </div>

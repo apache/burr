@@ -57,4 +57,3 @@ def application(count_up_to: int = 10) -> Application:
         .with_entrypoint("counter")
         .build()
     )
-
