@@ -95,8 +95,7 @@ const ChatMessage = (props: { message: ChatItem; id?: string }) => {
               a: ({ ...props }) => <a className="text-dwlightblue hover:underline" {...props} />
             }}
             remarkPlugins={[remarkGfm]}
-            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}
-          >
+            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}>
             {props.message.content}
           </Markdown>
         ) : (
@@ -180,7 +179,7 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
   const submitPrompt = async () => {
     setCurrentResponse(''); // Reset it
     setIsChatWaiting(true);
-    const basePath = (window as any).__BURR_BASE_PATH__ || '';
+    const basePath = window.__BURR_BASE_PATH__ || '';
     const response = await fetch(
       `${basePath}/api/v0/streaming_chatbot/response/${props.projectId}/${props.appId}`,
       {
@@ -293,8 +292,7 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
           disabled={isChatWaiting || props.appId === undefined}
           onClick={() => {
             submitPrompt();
-          }}
-        >
+          }}>
           Send
         </Button>
       </div>
@@ -319,7 +317,6 @@ export const StreamingChatbotWithTelemetry = () => {
           }
         />
       }
-      mode={'third'}
-    ></TwoColumnLayout>
+      mode={'third'}></TwoColumnLayout>
   );
 };

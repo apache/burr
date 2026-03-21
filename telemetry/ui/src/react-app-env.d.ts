@@ -18,3 +18,7 @@
  */
 
 /// <reference types="react-scripts" />
+
+interface Window {
+  __BURR_BASE_PATH__?: string;
+}

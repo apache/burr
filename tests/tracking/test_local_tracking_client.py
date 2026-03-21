@@ -303,9 +303,9 @@ def test_fork_children_have_correct_partition_key(tmpdir):
     assert len(children) == 1
     child = children[0]
     assert child.child.app_id == new_app_id
-    assert child.child.partition_key == partition_key, (
-        f"Child partition_key should be '{partition_key}', got '{child.child.partition_key}'"
-    )
+    assert (
+        child.child.partition_key == partition_key
+    ), f"Child partition_key should be '{partition_key}', got '{child.child.partition_key}'"
     assert child.event_type == "fork"
 
 
@@ -460,7 +460,7 @@ def test_that_we_fail_on_non_unicode_characters(tmp_path):
 
     @action(reads=["test"], writes=["test"])
     def state_2(state: State) -> State:
-        return state.update(test="\uD800")  # Invalid UTF-8 byte sequence
+        return state.update(test="\ud800")  # Invalid UTF-8 byte sequence
 
     tracker = LocalTrackingClient(project="test", storage_dir=tmp_path)
     app: Application = (
