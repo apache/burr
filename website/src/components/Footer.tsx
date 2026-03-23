@@ -1,4 +1,4 @@
-import { GITHUB_REPO, DOCS_URL, DISCORD_URL, TWITTER_URL, BASE_PATH } from "@/lib/constants";
+import { GITHUB_REPO, DOCS_URL, DISCORD_URL, BASE_PATH } from "@/lib/constants";
 
 const COLUMNS = [
   {
@@ -23,7 +23,6 @@ const COLUMNS = [
     links: [
       { label: "Discord", href: DISCORD_URL, external: true },
       { label: "GitHub", href: GITHUB_REPO, external: true },
-      { label: "Twitter / X", href: TWITTER_URL, external: true },
       { label: "Contributing", href: `${GITHUB_REPO}/blob/main/CONTRIBUTING.rst`, external: true },
     ],
   },

@@ -3,7 +3,6 @@ export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 export const GITHUB_REPO = "https://github.com/apache/burr";
 export const DOCS_URL = "/docs";
 export const DISCORD_URL = "https://discord.gg/6Zy2DwP4f3";
-export const TWITTER_URL = "https://x.com/buraborr";
 
 export const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -66,46 +65,60 @@ export const INTEGRATIONS = [
 
 export const TESTIMONIALS = [
   {
-    name: "Alex Johnson",
-    title: "ML Engineer",
-    company: "Acme Corp",
-    quote:
-      "Burr completely changed how we build AI agents. The state management and observability are game-changers for production systems.",
-  },
-  {
-    name: "Sarah Chen",
-    title: "Staff Engineer",
-    company: "TechFlow",
-    quote:
-      "We moved from a tangled mess of LangChain callbacks to clean, testable Burr actions. Our team velocity doubled.",
-  },
-  {
-    name: "Marcus Rivera",
+    name: "Ashish Ghosh",
     title: "CTO",
-    company: "DataPilot",
+    company: "Peanut Robotics",
+    logo: "https://www.google.com/s2/favicons?domain=peanutrobotics.com&sz=64",
     quote:
-      "The Burr UI alone is worth it. Being able to replay and debug agent runs saved us countless hours of debugging.",
+      "After evaluating several other obfuscating LLM frameworks, their elegant yet comprehensive state management solution proved to be the powerful answer to rolling out robots driven by AI decision making.",
   },
   {
-    name: "Priya Patel",
-    title: "AI Engineer",
-    company: "NeuralWorks",
+    name: "Ishita",
+    title: "Founder",
+    company: "Watto.ai",
+    logo: "https://www.google.com/s2/favicons?domain=watto.ai&sz=64",
     quote:
-      "Human-in-the-loop was trivial to add with Burr. We went from prototype to production approval workflow in a day.",
+      "Using Burr is a no-brainer if you want to build a modular AI application. It is so easy to build with and I especially love their UI which makes debugging a piece of cake. And the always ready to help team is the cherry on top.",
   },
   {
-    name: "David Kim",
-    title: "Senior Developer",
-    company: "CloudScale",
+    name: "Matthew Rideout",
+    title: "Staff Software Engineer",
+    company: "Paxton AI",
+    logo: "https://www.google.com/s2/favicons?domain=paxton.ai&sz=64",
     quote:
-      "Pure Python, no magic, no hidden abstractions. Burr lets us build exactly what we need without fighting the framework.",
+      "I just came across Burr and I'm like WOW, this seems like you guys predicted this exact need when building this. No weird esoteric concepts just because it's AI.",
   },
   {
-    name: "Emma Wilson",
-    title: "Tech Lead",
-    company: "Subreddit",
+    name: "Rinat Gareev",
+    title: "Senior Solutions Architect",
+    company: "Provectus",
+    logo: "https://www.google.com/s2/favicons?domain=provectus.com&sz=64",
     quote:
-      "Persistence and replay are incredible for debugging complex multi-step agents. Burr makes the hard parts easy.",
+      "Burr's state management part is really helpful for creating state snapshots and build debugging, replaying and even building evaluation cases around that.",
+  },
+  {
+    name: "Hadi Nayebi",
+    title: "Co-founder",
+    company: "CognitiveGraphs",
+    logo: null,
+    quote:
+      "I have been using Burr over the past few months, and compared to many agentic LLM platforms out there (e.g. LangChain, CrewAi, AutoGen, Agency Swarm, etc), Burr provides a more robust framework for designing complex behaviors.",
+  },
+  {
+    name: "Aditya K.",
+    title: "DS Architect",
+    company: "TaskHuman",
+    logo: `${BASE_PATH}/logos/taskhuman.svg`,
+    quote:
+      "Moving from LangChain to Burr was a game-changer! It took me just a few hours to get started with Burr, compared to the days and weeks I spent trying to navigate LangChain. I pitched Burr to my teammates, and we pivoted our entire codebase to it.",
+  },
+  {
+    name: "Reddit User",
+    title: "Developer",
+    company: "r/LocalLlama",
+    logo: null,
+    quote:
+      "Of course, you can use it [LangChain], but whether it's really production-ready and improves the time from code-to-prod, we've been doing LLM apps for two years, and the answer is no. Honestly, take a look at Burr. Thank me later.",
   },
 ];
 

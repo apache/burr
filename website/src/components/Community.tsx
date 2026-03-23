@@ -1,7 +1,7 @@
 "use client";
 
-import { GITHUB_REPO, DISCORD_URL, TWITTER_URL } from "@/lib/constants";
-import { Github, MessageCircle, Twitter } from "lucide-react";
+import { GITHUB_REPO, DISCORD_URL } from "@/lib/constants";
+import { Github, MessageCircle } from "lucide-react";
 import { MagicCard } from "@/components/ui/magic-card";
 import { BlurFade } from "@/components/ui/blur-fade";
 
@@ -22,14 +22,6 @@ const LINKS = [
     gradientFrom: "#6e7681",
     gradientTo: "#30363d",
   },
-  {
-    icon: Twitter,
-    label: "Twitter / X",
-    description: "Follow for updates and announcements",
-    href: TWITTER_URL,
-    gradientFrom: "#1DA1F2",
-    gradientTo: "#7B2FBE",
-  },
 ];
 
 export default function Community() {
@@ -45,7 +37,7 @@ export default function Community() {
           </p>
         </BlurFade>
 
-        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
           {LINKS.map((link, i) => {
             const Icon = link.icon;
             return (

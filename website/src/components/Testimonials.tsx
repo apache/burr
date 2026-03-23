@@ -10,6 +10,7 @@ function TestimonialCard({
   title,
   company,
   quote,
+  logo,
 }: (typeof TESTIMONIALS)[0]) {
   return (
     <div className="w-[380px] shrink-0 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 overflow-visible">
@@ -33,13 +34,15 @@ function TestimonialCard({
 }
 
 export default function Testimonials() {
-  const companies = [
-    ...new Set(
-      TESTIMONIALS.filter((t) => t.company !== "Subreddit").map(
-        (t) => t.company
-      )
-    ),
-  ];
+  const companies = TESTIMONIALS.filter((t) => t.logo).reduce(
+    (acc, t) => {
+      if (!acc.find((c) => c.name === t.company)) {
+        acc.push({ name: t.company, logo: t.logo! });
+      }
+      return acc;
+    },
+    [] as { name: string; logo: string }[]
+  );
 
   return (
     <section className="py-20 sm:py-28 overflow-hidden">
@@ -60,13 +63,24 @@ export default function Testimonials() {
           <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 mb-14">
             {companies.map((company) => (
               <div
-                key={company}
+                key={company.name}
                 className="flex items-center gap-2.5 px-4 py-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]"
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#7B2FBE]/10 text-xs font-bold text-[#7B2FBE]">
-                  {company.charAt(0)}
+                <img
+                  src={company.logo}
+                  alt={company.name}
+                  className="h-7 w-7 rounded-md object-contain"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = "none";
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.style.display = "flex";
+                  }}
+                />
+                <div className="hidden h-7 w-7 items-center justify-center rounded-md bg-[#7B2FBE]/10 text-xs font-bold text-[#7B2FBE]">
+                  {company.name.charAt(0)}
                 </div>
-                <span className="text-sm font-semibold">{company}</span>
+                <span className="text-sm font-semibold">{company.name}</span>
               </div>
             ))}
           </div>
