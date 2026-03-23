@@ -17,17 +17,41 @@
  * under the License.
  */
 
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
-/**
- * Generic link for indexing job -- can be exposed in 'admin mode' in the UI
- */
-export type BackendSpec = {
-  indexing: boolean;
-  snapshotting: boolean;
-  supports_demos: boolean;
-  supports_annotations: boolean;
-  supports_workspace: boolean;
+import { BaseEdge, EdgeProps, getBezierPath } from '@xyflow/react';
+
+type BuilderEdgeData = {
+  condition: string;
+  onConditionChange: (condition: string) => void;
+};
+
+export const BuilderEdgeComponent = ({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  data
+}: EdgeProps) => {
+  const edgeData = data as BuilderEdgeData;
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition
+  });
+
+  const label = edgeData?.condition === 'default' ? '' : edgeData?.condition || '';
+
+  return (
+    <BaseEdge
+      path={edgePath}
+      markerEnd={markerEnd}
+      style={{ strokeWidth: 1.5 }}
+      label={label}
+    />
+  );
 };

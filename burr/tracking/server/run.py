@@ -32,6 +32,7 @@ from burr.tracking.server.backend import (
     IndexingBackendMixin,
     SnapshottingBackendMixin,
 )
+from burr.tracking.server import workspace
 
 setup_logging(logging.INFO)
 
@@ -137,6 +138,7 @@ async def lifespan(app: FastAPI):
     global initialized
     initialized = True
     yield
+    await workspace.cleanup_processes()
     await backend.lifespan(app).__anext__()
 
 
@@ -151,6 +153,7 @@ def _get_app_spec() -> BackendSpec:
         snapshotting=is_snapshotting_backend,
         supports_demos=supports_demos,
         supports_annotations=is_annotations_backend,
+        supports_workspace=True,
     )
 
 
@@ -342,6 +345,7 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
                 burr_version = "unknown"
         return {"version": burr_version}
 
+    ui_app.include_router(workspace.router, prefix="/api/v0/workspace")
     # Examples -- todo -- put them behind `if` statements
     ui_app.include_router(chatbot.router, prefix="/api/v0/chatbot")
     ui_app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")

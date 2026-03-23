@@ -17,17 +17,19 @@
  * under the License.
  */
 
-/* generated using openapi-typescript-codegen -- do no edit */
-/* istanbul ignore file */
-/* tslint:disable */
-/* eslint-disable */
-/**
- * Generic link for indexing job -- can be exposed in 'admin mode' in the UI
- */
-export type BackendSpec = {
-  indexing: boolean;
-  snapshotting: boolean;
-  supports_demos: boolean;
-  supports_annotations: boolean;
-  supports_workspace: boolean;
+import { Handle, Position } from '@xyflow/react';
+
+const HANDLE_STYLE = { opacity: 0, cursor: 'default' };
+
+const GraphEndWidgetComponent = () => {
+  return (
+    <>
+      <div className="h-px w-px" />
+      <Handle type="target" position={Position.Top} style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE} />
+    </>
+  );
 };
+
+GraphEndWidgetComponent.displayName = 'GraphEndWidgetComponent';
+export { GraphEndWidgetComponent };
