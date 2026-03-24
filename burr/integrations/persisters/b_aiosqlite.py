@@ -21,6 +21,7 @@ from typing import Literal, Optional
 
 import aiosqlite
 
+from burr.common.async_utils import _AsyncPersisterContextManager
 from burr.common.types import BaseCopyable
 from burr.core import State
 from burr.core.persistence import AsyncBaseStatePersister, PersistedStateData
@@ -31,32 +32,6 @@ try:
     from typing import Self
 except ImportError:
     Self = None
-
-
-class _AsyncPersisterContextManager:
-    """Wraps an async coroutine that returns a persister so it can be used
-    directly with ``async with``::
-
-        async with AsyncSQLitePersister.from_values(...) as persister:
-            ...
-
-    The wrapper awaits the coroutine on ``__aenter__`` and delegates
-    ``__aexit__`` to the persister's own ``__aexit__``.
-    """
-
-    def __init__(self, coro):
-        self._coro = coro
-        self._persister = None
-
-    def __await__(self):
-        return self._coro.__await__()
-
-    async def __aenter__(self):
-        self._persister = await self._coro
-        return await self._persister.__aenter__()
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        return await self._persister.__aexit__(exc_type, exc_value, traceback)
 
 
 class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):

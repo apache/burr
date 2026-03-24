@@ -118,6 +118,28 @@ async def test_async_persister_methods_none_partition_key(
     # these operations are stateful (i.e., read/write to a db)
 
 
+async def test_async_sqlite_from_values_as_context_manager(tmp_path):
+    """Test that from_values works directly with async with (issue #546)."""
+    db_path = str(tmp_path / "test.db")
+    async with AsyncSQLitePersister.from_values(db_path=db_path) as persister:
+        await persister.initialize()
+        await persister.save("pk", "app1", 1, "pos", State({"k": "v"}), "completed")
+        loaded = await persister.load("pk", "app1")
+        assert loaded is not None
+        assert loaded["state"] == State({"k": "v"})
+
+
+async def test_async_sqlite_from_config_as_context_manager(tmp_path):
+    """Test that from_config works directly with async with (issue #546)."""
+    db_path = str(tmp_path / "test.db")
+    config = {"db_path": db_path, "table_name": "burr_state"}
+    async with AsyncSQLitePersister.from_config(config) as persister:
+        await persister.initialize()
+        await persister.save("pk", "app1", 1, "pos", State({"k": "v"}), "completed")
+        loaded = await persister.load("pk", "app1")
+        assert loaded is not None
+
+
 async def test_AsyncSQLitePersister_from_values():
     await asyncio.sleep(0.00001)
     connection = await aiosqlite.connect(":memory:")

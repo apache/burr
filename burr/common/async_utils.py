@@ -16,7 +16,7 @@
 # under the License.
 
 import inspect
-from typing import AsyncGenerator, AsyncIterable, Generator, List, TypeVar, Union
+from typing import Any, AsyncGenerator, AsyncIterable, Coroutine, Generator, List, TypeVar, Union
 
 T = TypeVar("T")
 
@@ -25,6 +25,32 @@ GenType = TypeVar("GenType")
 SyncOrAsyncIterable = Union[AsyncIterable[T], List[T]]
 SyncOrAsyncGenerator = Union[Generator[GenType, None, None], AsyncGenerator[GenType, None]]
 SyncOrAsyncGeneratorOrItemOrList = Union[SyncOrAsyncGenerator[GenType], List[GenType], GenType]
+
+
+class _AsyncPersisterContextManager:
+    """Wraps an async coroutine that returns a persister so it can be used
+    directly with ``async with``::
+
+        async with AsyncSQLitePersister.from_values(...) as persister:
+            ...
+
+    The wrapper awaits the coroutine on ``__aenter__`` and delegates
+    ``__aexit__`` to the persister's own ``__aexit__``.
+    """
+
+    def __init__(self, coro: Coroutine[Any, Any, Any]):
+        self._coro = coro
+        self._persister = None
+
+    def __await__(self):
+        return self._coro.__await__()
+
+    async def __aenter__(self):
+        self._persister = await self._coro
+        return await self._persister.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return await self._persister.__aexit__(exc_type, exc_value, traceback)
 
 
 async def asyncify_generator(
