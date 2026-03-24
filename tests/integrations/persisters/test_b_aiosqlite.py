@@ -140,6 +140,28 @@ async def test_async_sqlite_from_config_as_context_manager(tmp_path):
         assert loaded is not None
 
 
+async def test_async_sqlite_from_values_cannot_be_consumed_twice():
+    """Test that the factory wrapper raises on double consumption."""
+    wrapper = AsyncSQLitePersister.from_values(db_path=":memory:")
+    persister = await wrapper
+    with pytest.raises(RuntimeError, match="already been consumed"):
+        await wrapper
+    await persister.cleanup()
+
+
+async def test_async_sqlite_context_manager_aexit_safe_on_failed_aenter(tmp_path):
+    """Test that __aexit__ doesn't crash if __aenter__ never completed."""
+    from burr.common.async_utils import _AsyncPersisterContextManager
+
+    async def _failing_create():
+        raise ConnectionError("simulated connection failure")
+
+    mgr = _AsyncPersisterContextManager(_failing_create())
+    with pytest.raises(ConnectionError, match="simulated connection failure"):
+        async with mgr:
+            pass  # should never reach here
+
+
 async def test_AsyncSQLitePersister_from_values():
     await asyncio.sleep(0.00001)
     connection = await aiosqlite.connect(":memory:")

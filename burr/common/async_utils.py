@@ -36,20 +36,34 @@ class _AsyncPersisterContextManager:
 
     The wrapper awaits the coroutine on ``__aenter__`` and delegates
     ``__aexit__`` to the persister's own ``__aexit__``.
+
+    .. note::
+        Each instance wraps a single coroutine and can only be consumed once,
+        either via ``await`` or ``async with``. A second use will raise
+        ``RuntimeError``.
     """
 
     def __init__(self, coro: Coroutine[Any, Any, Any]):
         self._coro = coro
         self._persister = None
+        self._consumed = False
 
     def __await__(self):
+        if self._consumed:
+            raise RuntimeError("This factory result has already been consumed")
+        self._consumed = True
         return self._coro.__await__()
 
     async def __aenter__(self):
+        if self._consumed:
+            raise RuntimeError("This factory result has already been consumed")
+        self._consumed = True
         self._persister = await self._coro
         return await self._persister.__aenter__()
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        if self._persister is None:
+            return False
         return await self._persister.__aexit__(exc_type, exc_value, traceback)
 
 
