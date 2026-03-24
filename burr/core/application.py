@@ -348,8 +348,8 @@ def _run_single_step_streaming_action(
                     f"the state update must be None"
                 )
             result, state_update = item
-            count += 1
             if state_update is None:
+                count += 1
                 if first_stream_start_time is None:
                     first_stream_start_time = system.now()
                 lifecycle_adapters.call_all_lifecycle_hooks_sync(
@@ -364,9 +364,15 @@ def _run_single_step_streaming_action(
                     sequence_id=sequence_id,
                 )
                 yield result, None
-    except Exception:
+    except Exception as e:
         if state_update is None:
             raise
+        logger.warning(
+            "Streaming action '%s' raised %s after yielding %d items. "
+            "Proceeding with final state from generator cleanup. Original error: %s",
+            action.name, type(e).__name__, count, e,
+            exc_info=True,
+        )
 
     if state_update is None:
         raise ValueError(
@@ -406,6 +412,7 @@ async def _arun_single_step_streaming_action(
                 )
             result, state_update = item
             if state_update is None:
+                count += 1
                 if first_stream_start_time is None:
                     first_stream_start_time = system.now()
                 await lifecycle_adapters.call_all_lifecycle_hooks_sync_and_async(
@@ -419,11 +426,16 @@ async def _arun_single_step_streaming_action(
                     partition_key=partition_key,
                     sequence_id=sequence_id,
                 )
-                count += 1
                 yield result, None
-    except Exception:
+    except Exception as e:
         if state_update is None:
             raise
+        logger.warning(
+            "Streaming action '%s' raised %s after yielding %d items. "
+            "Proceeding with final state from generator cleanup. Original error: %s",
+            action.name, type(e).__name__, count, e,
+            exc_info=True,
+        )
 
     if state_update is None:
         raise ValueError(
@@ -459,7 +471,6 @@ def _run_multi_step_streaming_action(
     result = None
     first_stream_start_time = None
     count = 0
-    caught_exc = None
     try:
         for item in generator:
             # We want to peek ahead so we can return the last one
@@ -486,7 +497,13 @@ def _run_multi_step_streaming_action(
     except Exception as e:
         if result is None:
             raise
-        caught_exc = e
+        logger.warning(
+            "Streaming action '%s' raised %s after yielding %d items. "
+            "Proceeding with last yielded result for reducer. "
+            "Note: the reducer will run on potentially partial data. Original error: %s",
+            action.name, type(e).__name__, count, e,
+            exc_info=True,
+        )
     state_update = _run_reducer(action, state, result, action.name)
     _validate_result(result, action.name, action.schema)
     _validate_reducer_writes(action, state_update, action.name)
@@ -509,7 +526,6 @@ async def _arun_multi_step_streaming_action(
     result = None
     first_stream_start_time = None
     count = 0
-    caught_exc = None
     try:
         async for item in generator:
             # We want to peek ahead so we can return the last one
@@ -536,7 +552,13 @@ async def _arun_multi_step_streaming_action(
     except Exception as e:
         if result is None:
             raise
-        caught_exc = e
+        logger.warning(
+            "Streaming action '%s' raised %s after yielding %d items. "
+            "Proceeding with last yielded result for reducer. "
+            "Note: the reducer will run on potentially partial data. Original error: %s",
+            action.name, type(e).__name__, count, e,
+            exc_info=True,
+        )
     state_update = _run_reducer(action, state, result, action.name)
     _validate_result(result, action.name, action.schema)
     _validate_reducer_writes(action, state_update, action.name)
