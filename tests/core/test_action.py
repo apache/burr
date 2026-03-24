@@ -38,6 +38,7 @@ from burr.core.action import (
     default,
     derive_inputs_from_fn,
     streaming_action,
+    type_eraser,
 )
 
 
@@ -878,3 +879,143 @@ def test_pydantic_action_not_impacted():
     from burr.core.action import create_action
 
     create_action(good_action, name="test")
+
+
+class TestTypeEraser:
+    def test_sync_run(self):
+        class MyAction(Action):
+            @property
+            def reads(self) -> list[str]:
+                return ["counter"]
+
+            @type_eraser
+            def run(self, state: State, increment_by: int) -> dict:
+                return {"counter": state["counter"] + increment_by}
+
+            @property
+            def writes(self) -> list[str]:
+                return ["counter"]
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(**result)
+
+            @property
+            def inputs(self) -> list[str]:
+                return ["increment_by"]
+
+        a = MyAction()
+        result = a.run(State({"counter": 0}), increment_by=5)
+        assert result == {"counter": 5}
+        assert a.is_async() is False
+
+    def test_async_run(self):
+        class MyAsyncAction(Action):
+            @property
+            def reads(self) -> list[str]:
+                return ["counter"]
+
+            @type_eraser
+            async def run(self, state: State, increment_by: int) -> dict:
+                return {"counter": state["counter"] + increment_by}
+
+            @property
+            def writes(self) -> list[str]:
+                return ["counter"]
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(**result)
+
+            @property
+            def inputs(self) -> list[str]:
+                return ["increment_by"]
+
+        a = MyAsyncAction()
+        assert a.is_async() is True
+        result = asyncio.run(a.run(State({"counter": 0}), increment_by=5))
+        assert result == {"counter": 5}
+
+    def test_sync_stream_run(self):
+        class MyStreamingAction(StreamingAction):
+            @property
+            def reads(self) -> list[str]:
+                return ["items"]
+
+            @type_eraser
+            def stream_run(self, state: State, prefix: str) -> Generator[dict, None, None]:
+                for item in state["items"]:
+                    yield {"val": f"{prefix}_{item}"}
+
+            @property
+            def writes(self) -> list[str]:
+                return ["result"]
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(**result)
+
+            @property
+            def inputs(self) -> list[str]:
+                return ["prefix"]
+
+        a = MyStreamingAction()
+        results = list(a.stream_run(State({"items": ["a", "b"]}), prefix="x"))
+        assert results == [{"val": "x_a"}, {"val": "x_b"}]
+
+    def test_async_stream_run(self):
+        class MyAsyncStreamingAction(AsyncStreamingAction):
+            @property
+            def reads(self) -> list[str]:
+                return ["items"]
+
+            @type_eraser
+            async def stream_run(self, state: State, prefix: str) -> AsyncGenerator[dict, None]:
+                for item in state["items"]:
+                    yield {"val": f"{prefix}_{item}"}
+
+            @property
+            def writes(self) -> list[str]:
+                return ["result"]
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(**result)
+
+            @property
+            def inputs(self) -> list[str]:
+                return ["prefix"]
+
+        a = MyAsyncStreamingAction()
+        assert a.is_async() is True
+
+        async def collect():
+            return [item async for item in a.stream_run(State({"items": ["a", "b"]}), prefix="x")]
+
+        results = asyncio.run(collect())
+        assert results == [{"val": "x_a"}, {"val": "x_b"}]
+
+    def test_preserves_wrapped_name(self):
+        class MyAction(Action):
+            @property
+            def reads(self) -> list[str]:
+                return []
+
+            @type_eraser
+            def run(self, state: State, custom_param: str) -> dict:
+                return {}
+
+            @property
+            def writes(self) -> list[str]:
+                return []
+
+            def update(self, result: dict, state: State) -> State:
+                return state
+
+            @property
+            def inputs(self) -> list[str]:
+                return []
+
+        assert MyAction().run.__name__ == "run"
+        assert MyAction().run.__wrapped__.__name__ == "run"
+
+    def test_exported_from_burr_core(self):
+        from burr.core import type_eraser as te
+
+        assert te is type_eraser

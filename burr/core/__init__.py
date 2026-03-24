@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from burr.core.action import Action, Condition, Result, action, default, expr, flexible_api, when
+from burr.core.action import Action, Condition, Result, action, default, expr, type_eraser, when
 from burr.core.application import (
     Application,
     ApplicationBuilder,
@@ -35,7 +35,7 @@ __all__ = [
     "Condition",
     "default",
     "expr",
-    "flexible_api",
+    "type_eraser",
     "Result",
     "State",
     "when",

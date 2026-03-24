@@ -105,7 +105,7 @@ from functools import wraps
 from burr.core.typing import ActionSchema
 
 
-def flexible_api(func: Callable[..., Any]) -> Callable[..., Any]:
+def type_eraser(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator for ``run``, ``stream_run``, and ``run_and_update`` overrides
     that declare explicit parameters instead of ``**run_kwargs``.
 
@@ -114,14 +114,14 @@ def flexible_api(func: Callable[..., Any]) -> Callable[..., Any]:
 
     Example usage::
 
-        from burr.core import Action, State, flexible_api
+        from burr.core import Action, State, type_eraser
 
         class Counter(Action):
             @property
             def reads(self) -> list[str]:
                 return ["counter"]
 
-            @flexible_api
+            @type_eraser
             def run(self, state: State, increment_by: int) -> dict:
                 return {"counter": state["counter"] + increment_by}
 
@@ -136,6 +136,31 @@ def flexible_api(func: Callable[..., Any]) -> Callable[..., Any]:
             def inputs(self) -> list[str]:
                 return ["increment_by"]
     """
+
+    if inspect.iscoroutinefunction(func):
+
+        @wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await func(*args, **kwargs)
+
+        return async_wrapper
+
+    if inspect.isasyncgenfunction(func):
+
+        @wraps(func)
+        async def async_gen_wrapper(*args: Any, **kwargs: Any) -> Any:
+            async for item in func(*args, **kwargs):
+                yield item
+
+        return async_gen_wrapper
+
+    if inspect.isgeneratorfunction(func):
+
+        @wraps(func)
+        def gen_wrapper(*args: Any, **kwargs: Any) -> Any:
+            yield from func(*args, **kwargs)
+
+        return gen_wrapper
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
