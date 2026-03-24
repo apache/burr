@@ -168,15 +168,6 @@ from burr.integrations.persisters.b_aiosqlite import AsyncSQLitePersister
 """Asyncio integration for sqlite persister + """
 
 
-class AsyncSQLiteContextManager:
-    def __init__(self, sqlite_object):
-        self.client = sqlite_object
-
-    async def __aenter__(self):
-        return self.client
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.client.close()
 
 
 @pytest.fixture()
@@ -276,11 +267,9 @@ async def test_AsyncSQLitePersister_connection_shutdown():
 
 @pytest.fixture()
 async def initializing_async_persistence():
-    sqlite_persister = await AsyncSQLitePersister.from_values(
+    async with AsyncSQLitePersister.from_values(
         db_path=":memory:", table_name="test_table"
-    )
-    async_context_manager = AsyncSQLiteContextManager(sqlite_persister)
-    async with async_context_manager as client:
+    ) as client:
         yield client
 
 

@@ -25,17 +25,6 @@ from burr.core import ApplicationBuilder, State, action
 from burr.integrations.persisters.b_aiosqlite import AsyncSQLitePersister
 
 
-class AsyncSQLiteContextManager:
-    def __init__(self, sqlite_object):
-        self.client = sqlite_object
-
-    async def __aenter__(self):
-        return self.client
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.client.cleanup()
-
-
 async def test_copy_persister(async_persistence: AsyncSQLitePersister):
     copy = async_persistence.copy()
     assert copy.table_name == async_persistence.table_name
@@ -45,11 +34,9 @@ async def test_copy_persister(async_persistence: AsyncSQLitePersister):
 
 @pytest.fixture()
 async def async_persistence(request):
-    sqlite_persister = await AsyncSQLitePersister.from_values(
+    async with AsyncSQLitePersister.from_values(
         db_path=":memory:", table_name="test_table"
-    )
-    async_context_manager = AsyncSQLiteContextManager(sqlite_persister)
-    async with async_context_manager as client:
+    ) as client:
         yield client
 
 
@@ -189,11 +176,9 @@ async def test_AsyncSQLitePersister_connection_shutdown():
 
 @pytest.fixture()
 async def initializing_async_persistence():
-    sqlite_persister = await AsyncSQLitePersister.from_values(
+    async with AsyncSQLitePersister.from_values(
         db_path=":memory:", table_name="test_table"
-    )
-    async_context_manager = AsyncSQLiteContextManager(sqlite_persister)
-    async with async_context_manager as client:
+    ) as client:
         yield client
 
 

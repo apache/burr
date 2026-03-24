@@ -698,7 +698,7 @@ When using state persistence with async parallelism, make sure to use the async 
     from burr.integrations.persisters.b_asyncpg import AsyncPGPersister
 
     # Create an async persister with a connection pool
-    persister = AsyncPGPersister.from_values(
+    persister = await AsyncPGPersister.from_values(
         host="localhost",
         port=5432,
         user="postgres",
@@ -707,7 +707,7 @@ When using state persistence with async parallelism, make sure to use the async 
         use_pool=True  # Important for parallelism!
     )
 
-    app = (
+    app = await (
         ApplicationBuilder()
         .with_state_persister(persister)
         .with_action(
@@ -722,12 +722,12 @@ Remember to properly clean up your async persisters when you're done with them:
 
 .. code-block:: python
 
-    # Using as a context manager
+    # Using as a context manager (recommended)
     async with AsyncPGPersister.from_values(..., use_pool=True) as persister:
         # Use persister here
 
     # Or manual cleanup
-    persister = AsyncPGPersister.from_values(..., use_pool=True)
+    persister = await AsyncPGPersister.from_values(..., use_pool=True)
     try:
         # Use persister here
     finally:
