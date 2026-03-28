@@ -22,7 +22,6 @@ import {
   BurrNodeType,
   BurrEdgeType,
   BurrGraph,
-  BurrNode,
   BurrEdge,
   BurrStepNode,
   BurrGraphEndNode,

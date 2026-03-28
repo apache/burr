@@ -25,7 +25,7 @@ import { FileEntry, workspaceApi } from '../../../api/workspaceApi';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 const FilesSidePanel = () => {
-  const { workspacePath, openTab, terminalVisible, setTerminalVisible } = useProjectWorkspace();
+  const { workspacePath, openTab, setTerminalVisible } = useProjectWorkspace();
   const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
 
   useEffect(() => {

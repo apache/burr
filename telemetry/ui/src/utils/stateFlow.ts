@@ -26,7 +26,7 @@ import { ActionModel, TransitionModel } from '../api';
 export const getUpstreamWriters = (
   actionName: string,
   actions: ActionModel[],
-  _transitions: TransitionModel[]
+  _transitions: TransitionModel[] // eslint-disable-line @typescript-eslint/no-unused-vars
 ): string[] => {
   const target = actions.find((a) => a.name === actionName);
   if (!target || !target.reads || target.reads.length === 0) return [];
@@ -44,7 +44,7 @@ export const getUpstreamWriters = (
 export const getDownstreamReaders = (
   actionName: string,
   actions: ActionModel[],
-  _transitions: TransitionModel[]
+  _transitions: TransitionModel[] // eslint-disable-line @typescript-eslint/no-unused-vars
 ): string[] => {
   const target = actions.find((a) => a.name === actionName);
   if (!target || !target.writes || target.writes.length === 0) return [];
@@ -61,7 +61,7 @@ export const getDownstreamReaders = (
  */
 export const getUnresolvedReads = (
   actions: ActionModel[],
-  _transitions: TransitionModel[]
+  _transitions: TransitionModel[] // eslint-disable-line @typescript-eslint/no-unused-vars
 ): Map<string, string[]> => {
   const allWrites = new Set(actions.flatMap((a) => a.writes || []));
   const result = new Map<string, string[]>();

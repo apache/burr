@@ -32,7 +32,7 @@ import {
 } from '../utils/treeUtils';
 import { buildFlowGraph } from '../utils/flowLayout';
 import { InsertContext, InsertLocation, BurrGraph } from '../utils/builderTypes';
-import { parsePythonCode, buildTreeFromParsed } from '../utils/codeParser';
+// codeParser is used by BuilderView for bidirectional sync
 
 export const useBuilderState = () => {
   const [rootNode, setRootNode] = useState<BuilderNode | null>(null);

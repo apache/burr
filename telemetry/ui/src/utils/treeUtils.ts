@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { BuilderNode, BuilderEdge, BuilderBranch, NodeType, NODE_TYPE_META } from './codeGenerator';
+import { BuilderNode, BuilderEdge, NodeType } from './codeGenerator';
 
 let _nodeIdCounter = 0;
 

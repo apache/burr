@@ -144,7 +144,9 @@ def _validate_workspace(workspace: str) -> str:
     """Validate workspace is a registered link or the open endpoint validated it."""
     workspace_real = os.path.realpath(workspace)
     if not os.path.isdir(workspace_real):
-        raise HTTPException(status_code=400, detail="Workspace directory does not exist")
+        raise HTTPException(
+            status_code=400, detail="Workspace directory does not exist"
+        )
     links = _read_links()
     allowed = {os.path.realpath(p) for p in links.values()}
     if workspace_real not in allowed:
