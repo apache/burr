@@ -81,11 +81,6 @@ const EditorFileExplorer = (props: {
     });
   };
 
-  const langMap: Record<string, string> = {
-    py: 'python', js: 'javascript', ts: 'typescript', json: 'json',
-    yaml: 'yaml', yml: 'yaml', toml: 'toml', md: 'markdown', txt: 'plaintext'
-  };
-
   return (
     <div className="w-48 shrink-0 border-r border-gray-200 bg-gray-50 text-xs overflow-y-auto">
       {/* Generated files */}

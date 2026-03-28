@@ -27,7 +27,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { BurrNodeType, BurrEdgeType, BurrGraph, InsertContext } from '../../../utils/builderTypes';
+import { BurrNodeType, BurrEdgeType, BurrGraph, BurrStepNode, InsertContext } from '../../../utils/builderTypes';
 import { NodeType } from '../../../utils/codeGenerator';
 
 import { StepNodeComponent } from './nodes/StepNode';
@@ -75,7 +75,7 @@ const BuilderGraphInner = (props: BuilderGraphProps) => {
   const flowNodes = useMemo(() => {
     return props.layoutGraph.nodes.map((node) => {
       if (node.type === BurrNodeType.STEP) {
-        const stepData = node.data as any;
+        const stepData = node.data as BurrStepNode['data'];
         return {
           ...node,
           data: {

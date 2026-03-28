@@ -26,8 +26,7 @@ export const LoopStartEdgeComponent = ({
   sourceX,
   sourceY,
   targetX,
-  data,
-  id
+  data
 }: EdgeProps & BurrLoopStartEdge) => {
   const startY = sourceY + CANVAS.STEP_LINE_GAP;
   const vHalf = (CANVAS.VSPACE - 2 * CANVAS.STEP_LINE_GAP) / 2;
@@ -51,6 +50,7 @@ export const LoopStartEdgeComponent = ({
         >
           <InlineAddButton
             context={{ location: InsertLocation.INSIDE_LOOP, loopStepId: data.parentStepId }}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onInsert={(data as any).onInsert || (() => {})}
           />
         </foreignObject>

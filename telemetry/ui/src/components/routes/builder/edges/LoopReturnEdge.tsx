@@ -26,8 +26,7 @@ export const LoopReturnEdgeComponent = ({
   sourceX,
   sourceY,
   targetX,
-  data,
-  id
+  data
 }: EdgeProps & BurrLoopReturnEdge) => {
   const hLength = Math.abs(sourceX - targetX) - 2 * CANVAS.ARC;
   const vReturn = data.verticalSpaceBetweenReturnNodeStartAndEnd;
@@ -60,6 +59,7 @@ export const LoopReturnEdgeComponent = ({
       >
         <InlineAddButton
           context={{ location: InsertLocation.AFTER, parentStepId: data.parentStepId }}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onInsert={(data as any).onInsert || (() => {})}
         />
       </foreignObject>

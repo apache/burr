@@ -28,7 +28,7 @@ import { NodeTypePicker } from '../NodeTypePicker';
 const HANDLE_STYLE = { opacity: 0, cursor: 'default' };
 
 const BigAddButtonComponent = React.memo(
-  ({ data, id }: { data: BurrBigAddButtonNode['data'] & { onInsert?: (nodeType: NodeType, ctx: InsertContext) => void }; id: string }) => {
+  ({ data }: { data: BurrBigAddButtonNode['data'] & { onInsert?: (nodeType: NodeType, ctx: InsertContext) => void }; id: string }) => {
     const [pickerOpen, setPickerOpen] = useState(false);
     const btnRef = useRef<HTMLButtonElement>(null);
 

@@ -26,8 +26,7 @@ export const RouterStartEdgeComponent = ({
   sourceX,
   targetX,
   targetY,
-  data,
-  id
+  data
 }: EdgeProps & BurrRouterStartEdge) => {
   const vLine = CANVAS.VSPACE - CANVAS.STEP_LINE_GAP + 30;
   const dist = Math.abs(targetX - sourceX);
@@ -72,6 +71,7 @@ export const RouterStartEdgeComponent = ({
               routerStepId: data.parentStepId,
               branchIndex: data.branchIndex
             }}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onInsert={(data as any).onInsert || (() => {})}
           />
         </foreignObject>

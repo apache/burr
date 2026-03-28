@@ -34,8 +34,7 @@ export const RouterEndEdgeComponent = ({
   targetX,
   targetY,
   sourceY,
-  data,
-  id
+  data
 }: EdgeProps & BurrRouterEndEdge) => {
   const vLine = CANVAS.VSPACE - 2 * CANVAS.STEP_LINE_GAP;
   const hLength =
@@ -74,6 +73,7 @@ export const RouterEndEdgeComponent = ({
         >
           <InlineAddButton
             context={{ location: InsertLocation.AFTER, parentStepId: data.routerStepId }}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onInsert={(data as any).onInsert || (() => {})}
           />
         </foreignObject>

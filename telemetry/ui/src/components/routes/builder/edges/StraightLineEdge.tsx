@@ -26,8 +26,7 @@ export const StraightLineEdgeComponent = ({
   sourceX,
   sourceY,
   targetY,
-  data,
-  id
+  data
 }: EdgeProps & BurrStraightLineEdge) => {
   const lineLength = targetY - sourceY;
   const path = `M ${sourceX} ${sourceY} v${lineLength} ${data.drawArrowHead ? ARROW_DOWN : ''}`;
@@ -47,6 +46,7 @@ export const StraightLineEdgeComponent = ({
         >
           <InlineAddButton
             context={{ location: InsertLocation.AFTER, parentStepId: data.parentStepId }}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onInsert={(data as any).onInsert || (() => {})}
           />
         </foreignObject>

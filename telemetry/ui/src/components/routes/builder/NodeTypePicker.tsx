@@ -33,6 +33,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { NodeType, NODE_TYPE_META } from '../../../utils/codeGenerator';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPE_ICONS: Record<NodeType, React.ComponentType<any>> = {
   action: BoltIcon,
   input: ArrowDownTrayIcon,

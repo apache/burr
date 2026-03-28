@@ -26,6 +26,7 @@ import {
 import { classNames } from '../../../utils/tailwind';
 import { ActivityPanel, useProjectWorkspace } from './ProjectWorkspaceContext';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const items: { id: ActivityPanel | 'terminal'; icon: React.ComponentType<any>; label: string }[] = [
   { id: 'files', icon: DocumentTextIcon, label: 'Files' },
   { id: 'tracking', icon: Square2StackIcon, label: 'Tracking' },

@@ -36,6 +36,7 @@ import { CANVAS } from '../../../../utils/flowLayout';
 import { BurrStepNode } from '../../../../utils/builderTypes';
 import { Chip } from '../../../common/chip';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_ICONS: Record<NodeType, React.ComponentType<any>> = {
   action: BoltIcon,
   input: ArrowDownTrayIcon,
