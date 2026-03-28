@@ -31,7 +31,7 @@ import {
   InsertLocation
 } from './builderTypes';
 
-// Canvas constants (matching Activepieces proportions)
+/** Canvas dimension constants for node sizes, spacing, and arc radii. */
 export const CANVAS = {
   STEP_WIDTH: 220,
   STEP_HEIGHT: 80,
@@ -46,7 +46,7 @@ export const CANVAS = {
   STEP_LINE_GAP: 7
 } as const;
 
-// SVG arc path segments
+/** SVG arc path segments for drawing curved connections between nodes. */
 export const ARC_LEFT = `a${CANVAS.ARC},${CANVAS.ARC} 0 0,0 -${CANVAS.ARC},${CANVAS.ARC}`;
 export const ARC_RIGHT = `a${CANVAS.ARC},${CANVAS.ARC} 0 0,1 ${CANVAS.ARC},${CANVAS.ARC}`;
 export const ARC_LEFT_DOWN = `a${CANVAS.ARC},${CANVAS.ARC} 0 0,1 -${CANVAS.ARC},${CANVAS.ARC}`;
@@ -70,6 +70,7 @@ function doesAffectBoundingBox(type: string): boolean {
   );
 }
 
+/** Calculate the bounding box of a layout graph. */
 export function calculateBoundingBox(graph: BurrGraph): BoundingBox {
   if (graph.nodes.length === 0) {
     return { width: CANVAS.STEP_WIDTH, height: 0, left: CANVAS.STEP_WIDTH / 2, right: CANVAS.STEP_WIDTH / 2 };
@@ -98,6 +99,7 @@ export function calculateBoundingBox(graph: BurrGraph): BoundingBox {
   };
 }
 
+/** Offset all node positions in a graph by a given x,y delta. */
 export function offsetGraph(graph: BurrGraph, offset: { x: number; y: number }): BurrGraph {
   return {
     nodes: graph.nodes.map((node) => ({
@@ -108,6 +110,7 @@ export function offsetGraph(graph: BurrGraph, offset: { x: number; y: number }):
   };
 }
 
+/** Merge two graphs into one by concatenating their nodes and edges. */
 export function mergeGraph(g1: BurrGraph, g2: BurrGraph): BurrGraph {
   return {
     nodes: [...g1.nodes, ...g2.nodes],
@@ -361,6 +364,7 @@ function offsetRouterChildSteps(childGraphs: BurrGraph[]): BurrGraph[] {
   });
 }
 
+/** Recursively build a layout graph from a BuilderNode tree. This is the main entry point for the layout algorithm. */
 export function buildFlowGraph(step: BuilderNode | undefined): BurrGraph {
   if (!step) return { nodes: [], edges: [] };
 

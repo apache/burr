@@ -67,6 +67,7 @@ function detectNodeType(
   return 'action';
 }
 
+/** Parse Python source code to extract Burr actions, transitions, and entrypoint using regex. */
 export function parsePythonCode(code: string): ParseResult {
   const actions: ParsedAction[] = [];
   const transitions: ParsedTransition[] = [];
@@ -141,6 +142,7 @@ export function parsePythonCode(code: string): ParseResult {
   return { actions, transitions, entrypoint };
 }
 
+/** Build a BuilderNode tree from parsed Python code results. */
 export function buildTreeFromParsed(parsed: ParseResult): BuilderNode | null {
   if (parsed.actions.length === 0) return null;
 

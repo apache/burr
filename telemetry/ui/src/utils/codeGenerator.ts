@@ -17,8 +17,19 @@
  * under the License.
  */
 
-export type NodeType = 'action' | 'input' | 'result' | 'llm_call' | 'api_call' | 'code' | 'streaming' | 'loop' | 'router';
+/** Union type of all available node types in the builder. */
+export type NodeType =
+  | 'action'
+  | 'input'
+  | 'result'
+  | 'llm_call'
+  | 'api_call'
+  | 'code'
+  | 'streaming'
+  | 'loop'
+  | 'router';
 
+/** Visual metadata (label, color, border, description) for each node type. */
 export const NODE_TYPE_META: Record<
   NodeType,
   { label: string; color: string; borderColor: string; description: string }
@@ -79,6 +90,7 @@ export const NODE_TYPE_META: Record<
   }
 };
 
+/** Represents a single node in the builder graph tree. Supports compound nodes (loop, router) via nextAction, firstLoopAction, and branches fields. */
 export type BuilderNode = {
   id: string;
   name: string;
@@ -101,12 +113,14 @@ export type BuilderNode = {
   itemVariable?: string;
 };
 
+/** A single branch within a router node, with a name, condition, and optional child action chain. */
 export type BuilderBranch = {
   name: string;
   condition: string;
   firstAction?: BuilderNode;
 };
 
+/** A transition edge between two nodes, used for code generation. */
 export type BuilderEdge = {
   id: string;
   source: string;
@@ -114,12 +128,12 @@ export type BuilderEdge = {
   condition: string;
 };
 
-// Sanitize a string for use as a Python identifier (a-z, 0-9, _)
+/** Sanitize a string for use as a Python identifier. */
 function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^[0-9]/, '_$&') || 'unnamed';
 }
 
-// Escape a string for embedding in Python string literal
+/** Escape a string for safe embedding in a Python string literal. */
 function escapePyString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 }
@@ -216,6 +230,7 @@ const generateActionCode = (node: BuilderNode): string[] => {
   return lines;
 };
 
+/** Generate a single Python file from builder nodes and edges. */
 export const generatePythonCode = (
   nodes: BuilderNode[],
   edges: BuilderEdge[],
@@ -278,12 +293,14 @@ export const generatePythonCode = (
   return lines.join('\n');
 };
 
+/** A generated project file with name, language, and content. */
 export type ProjectFile = {
   name: string;
   language: string;
   content: string;
 };
 
+/** Generate a multi-file Python project (actions.py, app.py, run.py, requirements.txt). */
 export const generateProjectFiles = (
   nodes: BuilderNode[],
   edges: BuilderEdge[],

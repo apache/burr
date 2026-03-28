@@ -15,6 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""Workspace API router for the Burr tracking server.
+
+Provides endpoints for:
+- File browsing and content reading within a workspace directory
+- Python script execution with SSE output streaming
+- Process lifecycle management (start, stop, list)
+- Workspace-to-project linking (stored in ~/.burr/workspace_links.json)
+- Builder project persistence (stored in ~/.burr/builder_projects/)
+- Burr ApplicationBuilder usage scanning across .py files
+"""
+
 import asyncio
 import json as json_module
 import logging
@@ -59,27 +70,37 @@ BURR_APP_PATTERN = re.compile(r"ApplicationBuilder")
 
 
 class WorkspaceLinkRequest(BaseModel):
+    """Request body for linking a workspace directory to a project."""
+
     project_id: str
     workspace_path: str
 
 
 class WorkspaceLinkInfo(BaseModel):
+    """Response for workspace link queries. workspace_path is None if not linked."""
+
     project_id: str
     workspace_path: Optional[str]
 
 
 class BuilderProjectSave(BaseModel):
+    """Request body for saving a builder project."""
+
     name: str
     graph_json: str  # JSON-serialized tree
 
 
 class BuilderProjectSummary(BaseModel):
+    """Summary of a saved builder project (used in list responses)."""
+
     id: str
     name: str
     updated_at: float
 
 
 class BuilderProjectFull(BaseModel):
+    """Full builder project including the serialized graph."""
+
     id: str
     name: str
     graph_json: str
@@ -87,17 +108,23 @@ class BuilderProjectFull(BaseModel):
 
 
 class WorkspaceOpenRequest(BaseModel):
+    """Request body for opening/validating a workspace directory."""
+
     path: str
 
 
 class WorkspaceInfo(BaseModel):
+    """Basic info about an opened workspace."""
+
     path: str
     name: str
 
 
 class FileEntry(BaseModel):
+    """A single file or directory entry in a workspace listing."""
+
     name: str
-    path: str
+    path: str  # relative to workspace root
     is_dir: bool
     size: int
     modified: float
@@ -106,6 +133,8 @@ class FileEntry(BaseModel):
 
 
 class FileContent(BaseModel):
+    """Contents of a single file with detected language."""
+
     path: str
     content: str
     language: str
@@ -113,6 +142,8 @@ class FileContent(BaseModel):
 
 
 class ProcessInfo(BaseModel):
+    """Status of a running or completed Python process."""
+
     pid: int
     script_path: str
     started_at: float
@@ -121,6 +152,8 @@ class ProcessInfo(BaseModel):
 
 
 class RunRequest(BaseModel):
+    """Request body to start a Python script."""
+
     workspace: str
     script: str
 
@@ -129,6 +162,22 @@ class RunRequest(BaseModel):
 
 
 def _validate_path(workspace: str, relative: str) -> str:
+    """Resolve and validate a file path within a workspace.
+
+    Prevents path traversal by ensuring the resolved target stays within
+    the workspace directory. Uses os.sep suffix check to prevent /foo
+    matching /foobar.
+
+    Args:
+        workspace: Absolute path to the workspace root.
+        relative: Relative path within the workspace (may be empty).
+
+    Returns:
+        The resolved absolute path to the target.
+
+    Raises:
+        HTTPException: 403 if path traversal is detected.
+    """
     workspace_real = os.path.realpath(workspace)
     if relative:
         target = os.path.realpath(os.path.join(workspace_real, relative))
@@ -141,7 +190,20 @@ def _validate_path(workspace: str, relative: str) -> str:
 
 
 def _validate_workspace(workspace: str) -> str:
-    """Validate workspace is a registered link or the open endpoint validated it."""
+    """Validate that a workspace path is registered via the /link endpoint.
+
+    Checks the workspace against ~/.burr/workspace_links.json to ensure
+    only explicitly linked directories can be accessed.
+
+    Args:
+        workspace: Absolute path to validate.
+
+    Returns:
+        The resolved absolute path.
+
+    Raises:
+        HTTPException: 400 if directory doesn't exist, 403 if not registered.
+    """
     workspace_real = os.path.realpath(workspace)
     if not os.path.isdir(workspace_real):
         raise HTTPException(status_code=400, detail="Workspace directory does not exist")
@@ -153,6 +215,7 @@ def _validate_workspace(workspace: str) -> str:
 
 
 def _is_binary(file_path: str) -> bool:
+    """Detect if a file is binary by checking for null bytes in the first 8KB."""
     try:
         with open(file_path, "rb") as f:
             chunk = f.read(8192)
@@ -167,6 +230,7 @@ _LINKS_PATH = os.path.join(os.path.expanduser("~/.burr"), "workspace_links.json"
 
 
 def _read_links() -> dict:
+    """Read workspace-to-project links from ~/.burr/workspace_links.json."""
     if os.path.exists(_LINKS_PATH):
         with open(_LINKS_PATH, "r") as f:
             return json_module.load(f)
@@ -174,6 +238,7 @@ def _read_links() -> dict:
 
 
 def _write_links(data: dict):
+    """Write workspace-to-project links to ~/.burr/workspace_links.json."""
     os.makedirs(os.path.dirname(_LINKS_PATH), exist_ok=True)
     with open(_LINKS_PATH, "w") as f:
         json_module.dump(data, f, indent=2)
@@ -186,6 +251,7 @@ _processes: Dict[int, dict] = {}
 
 
 async def cleanup_processes():
+    """Terminate all tracked subprocesses. Called during FastAPI lifespan shutdown."""
     for pid, info in list(_processes.items()):
         proc = info.get("process")
         if proc and proc.returncode is None:
@@ -205,6 +271,7 @@ async def cleanup_processes():
 
 @router.post("/open", response_model=WorkspaceInfo)
 async def open_workspace(request: WorkspaceOpenRequest):
+    """Validate and return info about a workspace directory."""
     path = os.path.realpath(request.path)
     if not os.path.isdir(path):
         raise HTTPException(status_code=400, detail="Directory does not exist")
@@ -213,6 +280,7 @@ async def open_workspace(request: WorkspaceOpenRequest):
 
 @router.get("/link", response_model=WorkspaceLinkInfo)
 async def get_workspace_link(project_id: str = Query(...)):
+    """Get the linked workspace path for a project, or null if not linked."""
     links = _read_links()
     return WorkspaceLinkInfo(
         project_id=project_id,
@@ -222,6 +290,7 @@ async def get_workspace_link(project_id: str = Query(...)):
 
 @router.post("/link", response_model=WorkspaceLinkInfo)
 async def set_workspace_link(request: WorkspaceLinkRequest):
+    """Link a workspace directory to a project."""
     path = os.path.realpath(request.workspace_path)
     if not os.path.isdir(path):
         raise HTTPException(status_code=400, detail="Directory does not exist")
@@ -233,6 +302,7 @@ async def set_workspace_link(request: WorkspaceLinkRequest):
 
 @router.delete("/link")
 async def remove_workspace_link(project_id: str = Query(...)):
+    """Remove the workspace link for a project."""
     links = _read_links()
     links.pop(project_id, None)
     _write_links(links)
@@ -244,6 +314,7 @@ async def get_tree(
     workspace: str = Query(...),
     relative_path: str = Query(""),
 ):
+    """List one level of a directory within a workspace."""
     _validate_workspace(workspace)
     target = _validate_path(workspace, relative_path)
     if not os.path.isdir(target):
@@ -291,6 +362,7 @@ async def get_file(
     workspace: str = Query(...),
     relative_path: str = Query(...),
 ):
+    """Read the contents of a file within a workspace. Max 1MB, no binaries."""
     _validate_workspace(workspace)
     target = _validate_path(workspace, relative_path)
     if not os.path.isfile(target):
@@ -317,6 +389,7 @@ async def get_file(
 
 @router.post("/run", response_model=ProcessInfo)
 async def run_script(request: RunRequest):
+    """Start a Python script as a subprocess within a workspace."""
     _validate_workspace(request.workspace)
     target = _validate_path(request.workspace, request.script)
     if not os.path.isfile(target):
@@ -354,6 +427,7 @@ async def run_script(request: RunRequest):
 
 @router.get("/run/{pid}/output")
 async def stream_output(pid: int):
+    """Stream stdout/stderr from a running process via Server-Sent Events."""
     if pid not in _processes:
         raise HTTPException(status_code=404, detail="Process not found")
 
@@ -409,6 +483,7 @@ async def stream_output(pid: int):
 
 @router.post("/run/{pid}/stop", response_model=ProcessInfo)
 async def stop_process(pid: int):
+    """Send SIGTERM to a running process."""
     if pid not in _processes:
         raise HTTPException(status_code=404, detail="Process not found")
 
@@ -436,6 +511,7 @@ async def stop_process(pid: int):
 
 @router.get("/processes", response_model=List[ProcessInfo])
 async def list_processes(workspace: str = Query(...)):
+    """List all tracked processes for a workspace."""
     _validate_workspace(workspace)
     result = []
     for pid, info in _processes.items():
@@ -460,6 +536,7 @@ async def list_processes(workspace: str = Query(...)):
 
 @router.get("/scan", response_model=List[FileEntry])
 async def scan_burr_apps(workspace: str = Query(...)):
+    """Scan a workspace for .py files containing ApplicationBuilder usage."""
     _validate_workspace(workspace)
     workspace_real = os.path.realpath(workspace)
     if not os.path.isdir(workspace_real):
@@ -497,6 +574,7 @@ async def scan_burr_apps(workspace: str = Query(...)):
 
 
 def _json_escape(s: str) -> str:
+    """Escape a string for embedding in SSE JSON data."""
     import json
 
     return json.dumps(s)
@@ -508,11 +586,13 @@ _BUILDER_DIR = os.path.join(os.path.expanduser("~/.burr"), "builder_projects")
 
 
 def _ensure_builder_dir():
+    """Create the builder projects directory if it doesn't exist."""
     os.makedirs(_BUILDER_DIR, exist_ok=True)
 
 
 @router.get("/builder/projects", response_model=List[BuilderProjectSummary])
 async def list_builder_projects():
+    """List all saved builder projects from ~/.burr/builder_projects/."""
     _ensure_builder_dir()
     projects = []
     for fname in sorted(os.listdir(_BUILDER_DIR)):
@@ -536,6 +616,7 @@ async def list_builder_projects():
 
 @router.post("/builder/projects", response_model=BuilderProjectFull)
 async def save_builder_project(request: BuilderProjectSave):
+    """Save a builder project graph to ~/.burr/builder_projects/."""
     _ensure_builder_dir()
     # Generate ID from name
     project_id = re.sub(r"[^a-zA-Z0-9_-]", "_", request.name).lower()
@@ -558,6 +639,7 @@ async def save_builder_project(request: BuilderProjectSave):
 
 @router.get("/builder/projects/{project_id}", response_model=BuilderProjectFull)
 async def get_builder_project(project_id: str):
+    """Load a saved builder project by ID."""
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", project_id)
     fpath = os.path.join(_BUILDER_DIR, f"{safe_id}.json")
     if not os.path.isfile(fpath):
@@ -574,6 +656,7 @@ async def get_builder_project(project_id: str):
 
 @router.delete("/builder/projects/{project_id}")
 async def delete_builder_project(project_id: str):
+    """Delete a saved builder project by ID."""
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", project_id)
     fpath = os.path.join(_BUILDER_DIR, f"{safe_id}.json")
     if os.path.isfile(fpath):

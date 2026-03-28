@@ -19,6 +19,7 @@
 
 import { Edge } from '@xyflow/react';
 
+/** ReactFlow node types used in the builder canvas. */
 export enum BurrNodeType {
   STEP = 'STEP',
   BIG_ADD_BUTTON = 'BIG_ADD_BUTTON',
@@ -26,6 +27,7 @@ export enum BurrNodeType {
   LOOP_RETURN = 'LOOP_RETURN',
 }
 
+/** ReactFlow edge types used in the builder canvas. */
 export enum BurrEdgeType {
   STRAIGHT_LINE = 'BurrStraightLine',
   LOOP_START = 'BurrLoopStart',
@@ -34,12 +36,14 @@ export enum BurrEdgeType {
   ROUTER_END = 'BurrRouterEnd',
 }
 
+/** Where a new node should be inserted relative to existing nodes. */
 export enum InsertLocation {
   AFTER = 'AFTER',
   INSIDE_LOOP = 'INSIDE_LOOP',
   INSIDE_BRANCH = 'INSIDE_BRANCH',
 }
 
+/** Context passed to the inline add button, describing where to insert a new node. */
 export type InsertContext =
   | { location: InsertLocation.AFTER; parentStepId: string }
   | { location: InsertLocation.INSIDE_LOOP; loopStepId: string }
@@ -153,6 +157,7 @@ export type BurrEdge =
   | BurrRouterStartEdge
   | BurrRouterEndEdge;
 
+/** A complete layout graph with positioned nodes and typed edges, ready for ReactFlow. */
 export type BurrGraph = {
   nodes: BurrNode[];
   edges: BurrEdge[];

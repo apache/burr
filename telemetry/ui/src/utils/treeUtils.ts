@@ -21,10 +21,12 @@ import { BuilderNode, BuilderEdge, NodeType } from './codeGenerator';
 
 let _nodeIdCounter = 0;
 
+/** Reset the auto-increment node ID counter. Used when importing. */
 export function resetNodeIdCounter() {
   _nodeIdCounter = 0;
 }
 
+/** Create a new BuilderNode with sensible defaults for the given type. */
 export function createDefaultNode(nodeType: NodeType): BuilderNode {
   const id = `node_${++_nodeIdCounter}`;
   const prefixes: Record<NodeType, string> = {
@@ -92,6 +94,7 @@ export function createDefaultNode(nodeType: NodeType): BuilderNode {
   return node;
 }
 
+/** Recursively search the tree for a node by ID. */
 export function findNodeById(root: BuilderNode | undefined, id: string): BuilderNode | undefined {
   if (!root) return undefined;
   if (root.id === id) return root;
@@ -117,6 +120,7 @@ export function findNodeById(root: BuilderNode | undefined, id: string): Builder
   return undefined;
 }
 
+/** Immutably update a node in the tree by ID, returning a new tree. */
 export function mapNode(
   root: BuilderNode | undefined,
   id: string,
@@ -145,6 +149,7 @@ export function mapNode(
   return updated;
 }
 
+/** Insert a new node after a parent node in the tree. */
 export function insertAfter(
   root: BuilderNode | undefined,
   parentId: string,
@@ -172,6 +177,7 @@ export function insertAfter(
   };
 }
 
+/** Prepend a node to the beginning of a chain. */
 export function prependToChain(
   newNode: BuilderNode,
   existingHead: BuilderNode | undefined
@@ -179,10 +185,8 @@ export function prependToChain(
   return { ...newNode, nextAction: existingHead };
 }
 
-export function appendToEnd(
-  root: BuilderNode | undefined,
-  newNode: BuilderNode
-): BuilderNode {
+/** Append a node to the end of a chain. */
+export function appendToEnd(root: BuilderNode | undefined, newNode: BuilderNode): BuilderNode {
   if (!root) return newNode;
   if (!root.nextAction) {
     return { ...root, nextAction: newNode };
@@ -190,10 +194,8 @@ export function appendToEnd(
   return { ...root, nextAction: appendToEnd(root.nextAction, newNode) };
 }
 
-export function removeFromTree(
-  root: BuilderNode | undefined,
-  id: string
-): BuilderNode | undefined {
+/** Remove a node from the tree, re-linking parent to the removed node's nextAction. */
+export function removeFromTree(root: BuilderNode | undefined, id: string): BuilderNode | undefined {
   if (!root) return undefined;
 
   // If root itself is the target, splice it out but preserve its nextAction
@@ -220,9 +222,11 @@ function collectChain(node: BuilderNode | undefined): BuilderNode[] {
   return [node, ...collectChain(node.nextAction)];
 }
 
-export function flattenTree(
-  root: BuilderNode | undefined
-): { nodes: BuilderNode[]; edges: BuilderEdge[] } {
+/** Convert a tree-structured graph into flat arrays of nodes and edges for code generation. */
+export function flattenTree(root: BuilderNode | undefined): {
+  nodes: BuilderNode[];
+  edges: BuilderEdge[];
+} {
   if (!root) return { nodes: [], edges: [] };
 
   const nodes: BuilderNode[] = [];

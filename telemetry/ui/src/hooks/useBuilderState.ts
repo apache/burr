@@ -34,6 +34,7 @@ import { buildFlowGraph } from '../utils/flowLayout';
 import { InsertContext, InsertLocation, BurrGraph } from '../utils/builderTypes';
 // codeParser is used by BuilderView for bidirectional sync
 
+/** React hook managing the complete builder state. Provides tree-based graph management, undo/redo history, keyboard shortcuts, code generation, validation, and project save/load. */
 export const useBuilderState = () => {
   const [rootNode, setRootNode] = useState<BuilderNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
