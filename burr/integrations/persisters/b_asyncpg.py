@@ -19,10 +19,10 @@ import json
 import logging
 from typing import Any, ClassVar, Literal, Optional
 
+from burr.common.async_utils import _AsyncPersisterContextManager
 from burr.common.types import BaseCopyable
 from burr.core import persistence, state
 from burr.integrations import base
-from burr.common.async_utils import _AsyncPersisterContextManager
 
 try:
     import asyncpg
