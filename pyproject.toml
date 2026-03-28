@@ -103,7 +103,7 @@ tests = [
 
 documentation = [
   "apache-burr[tests]",
-  "sphinx",
+  "sphinx<9",
   "sphinx-autobuild",
   "myst-nb",
   "furo",
