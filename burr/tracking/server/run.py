@@ -26,13 +26,13 @@ from starlette import status
 
 # TODO -- remove this, just for testing
 from burr.log_setup import setup_logging
+from burr.tracking.server import workspace
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
     IndexingBackendMixin,
     SnapshottingBackendMixin,
 )
-from burr.tracking.server import workspace
 
 setup_logging(logging.INFO)
 
