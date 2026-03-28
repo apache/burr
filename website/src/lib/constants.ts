@@ -3,6 +3,7 @@ export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 export const GITHUB_REPO = "https://github.com/apache/burr";
 export const DOCS_URL = "/docs";
 export const DISCORD_URL = "https://discord.gg/6Zy2DwP4f3";
+export const TWITTER_URL = "https://x.com/burr_framework";
 
 export const NAV_LINKS = [
   { label: "Features", href: "#features" },
