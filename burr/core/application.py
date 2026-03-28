@@ -70,12 +70,7 @@ from burr.core.persistence import (
 from burr.core.state import State
 from burr.core.typing import ActionSchema, DictBasedTypingSystem, TypingSystem
 from burr.core.validation import BASE_ERROR_MESSAGE
-from burr.lifecycle.base import (
-    ExecuteMethod,
-    LifecycleAdapter,
-    PostRunStepHook,
-    PreRunStepHook,
-)
+from burr.lifecycle.base import ExecuteMethod, LifecycleAdapter, PostRunStepHook, PreRunStepHook
 from burr.lifecycle.internal import LifecycleAdapterSet
 from burr.visibility import tracing
 from burr.visibility.tracing import tracer_factory_context_var
@@ -94,9 +89,7 @@ StateType = TypeVar("StateType")
 StateTypeToSet = TypeVar("StateTypeToSet")
 
 
-def _validate_result(
-    result: Any, name: str, schema: ActionSchema = DEFAULT_SCHEMA
-) -> None:
+def _validate_result(result: Any, name: str, schema: ActionSchema = DEFAULT_SCHEMA) -> None:
     # TODO -- split out the action schema into input/output schema types
     # Currently they're tied together, but this doesn't make as much sense for single-step actions
     result_type = schema.intermediate_result_type()
@@ -165,9 +158,7 @@ def _remap_dunder_parameters(
     return inputs
 
 
-def _run_function(
-    function: Function, state: State, inputs: Dict[str, Any], name: str
-) -> dict:
+def _run_function(function: Function, state: State, inputs: Dict[str, Any], name: str) -> dict:
     """Runs a function, returning the result of running the function.
     Note this restricts the keys in the state to only those that the
     function reads.
@@ -187,9 +178,7 @@ def _run_function(
     function.validate_inputs(inputs)
     if "__context" in inputs or "__tracer" in inputs:
         # potentially need to remap the __context & __tracer variables
-        inputs = _remap_dunder_parameters(
-            function.run, inputs, ["__context", "__tracer"]
-        )
+        inputs = _remap_dunder_parameters(function.run, inputs, ["__context", "__tracer"])
     result = function.run(state_to_use, **inputs)
     _validate_result(result, name)
     return result
@@ -234,14 +223,11 @@ def _state_update(state_to_modify: State, modified_state: State) -> State:
     deleted_keys = [
         item
         for item in (
-            set(state_to_modify.keys())
-            - set(modified_state_without_private_fields.keys())
+            set(state_to_modify.keys()) - set(modified_state_without_private_fields.keys())
         )
         if not item.startswith("__")
     ]
-    return state_to_modify.merge(modified_state_without_private_fields).wipe(
-        delete=deleted_keys
-    )
+    return state_to_modify.merge(modified_state_without_private_fields).wipe(delete=deleted_keys)
 
 
 def _validate_reducer_writes(reducer: Reducer, state: State, name: str) -> None:
@@ -306,9 +292,7 @@ def _format_BASE_ERROR_MESSAGE(action: Action, input_state: State, inputs: dict)
     message += f"> Action: `{action.name}` encountered an error!"
     padding = " " * (80 - len(message) - 1)
     message += padding + "<"
-    message += "\n> State (at time of action):\n" + _create_dict_string(
-        input_state.get_all()
-    )
+    message += "\n> State (at time of action):\n" + _create_dict_string(input_state.get_all())
     message += "\n> Inputs (at time of action):\n" + _create_dict_string(inputs)
     border = "*" * 80
     return "\n" + border + "\n" + message + "\n" + border
@@ -714,12 +698,9 @@ class _call_execute_method_pre_post:
 
     def call_post(self, app, exc) -> bool:
         if should_run_hooks := (
-            app.uid in _run_call_var.get(dict)
-            and _run_call_var.get()[app.uid] == self.method
+            app.uid in _run_call_var.get(dict) and _run_call_var.get()[app.uid] == self.method
         ):
-            _run_call_var.set(
-                {k: v for k, v in _run_call_var.get().items() if k != app.uid}
-            )
+            _run_call_var.set({k: v for k, v in _run_call_var.get().items() if k != app.uid})
             app._adapter_set.call_all_lifecycle_hooks_sync(
                 "post_run_execute_call",
                 app_id=app.uid,
@@ -744,12 +725,9 @@ class _call_execute_method_pre_post:
 
     async def acall_post(self, app, exc) -> bool:
         if should_run_hooks := (
-            app.uid in _run_call_var.get(dict)
-            and _run_call_var.get()[app.uid] == self.method
+            app.uid in _run_call_var.get(dict) and _run_call_var.get()[app.uid] == self.method
         ):
-            _run_call_var.set(
-                {k: v for k, v in _run_call_var.get().items() if k != app.uid}
-            )
+            _run_call_var.set({k: v for k, v in _run_call_var.get().items() if k != app.uid})
             await app._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "post_run_execute_call",
                 app_id=app._uid,
@@ -830,9 +808,7 @@ class TracerFactoryContextHook(PreRunStepHook, PostRunStepHook):
         **future_kwargs: Any,
     ):
         try:
-            tracer_factory_context_var.reset(
-                self.token_pointer_map[(app_id, sequence_id)]
-            )
+            tracer_factory_context_var.reset(self.token_pointer_map[(app_id, sequence_id)])
         except ValueError:  # Token var = ContextVar created in a different context
             # This occurs when we're at the finally block of an async streaming action
             logger.debug(
@@ -895,9 +871,7 @@ class Application(Generic[ApplicationStateType]):
         )
         self._state = state
         adapter_set = adapter_set if adapter_set is not None else LifecycleAdapterSet()
-        self._adapter_set = adapter_set.with_new_adapters(
-            TracerFactoryContextHook(adapter_set)
-        )
+        self._adapter_set = adapter_set.with_new_adapters(TracerFactoryContextHook(adapter_set))
         # TODO -- consider adding global inputs + global input factories to the builder
         self._tracker = tracker
 
@@ -935,9 +909,7 @@ class Application(Generic[ApplicationStateType]):
     # @telemetry.capture_function_usage # todo -- capture usage when we break this up into one that isn't called internally
     # This will be doable when we move sequence ID to the beginning of the function https://github.com/DAGWorks-Inc/burr/pull/73
     @_call_execute_method_pre_post(ExecuteMethod.step)
-    def step(
-        self, inputs: Optional[Dict[str, Any]] = None
-    ) -> Optional[Tuple[Action, dict, State]]:
+    def step(self, inputs: Optional[Dict[str, Any]] = None) -> Optional[Tuple[Action, dict, State]]:
         """Performs a single step, advancing the state machine along.
         This returns a tuple of the action that was run, the result of running
         the action, and the new state.
@@ -1004,17 +976,13 @@ class Application(Generic[ApplicationStateType]):
                     result = _run_function(
                         next_action, self._state, action_inputs, name=next_action.name
                     )
-                    new_state = _run_reducer(
-                        next_action, self._state, result, next_action.name
-                    )
+                    new_state = _run_reducer(next_action, self._state, result, next_action.name)
 
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
             except Exception as e:
                 exc = e
-                logger.exception(
-                    _format_BASE_ERROR_MESSAGE(next_action, self._state, inputs)
-                )
+                logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
                 raise e
             finally:
                 if _run_hooks:
@@ -1048,9 +1016,7 @@ class Application(Generic[ApplicationStateType]):
 
     def _process_inputs(self, inputs: Dict[str, Any], action: Action) -> Dict[str, Any]:
         """Processes inputs, injecting the common inputs and ensuring that all required inputs are present."""
-        starting_with_double_underscore = {
-            key for key in inputs.keys() if key.startswith("__")
-        }
+        starting_with_double_underscore = {key for key in inputs.keys() if key.startswith("__")}
         if len(starting_with_double_underscore) > 0:
             raise ValueError(
                 BASE_ERROR_MESSAGE
@@ -1163,16 +1129,12 @@ class Application(Generic[ApplicationStateType]):
                         inputs=action_inputs,
                         name=next_action.name,
                     )
-                    new_state = _run_reducer(
-                        next_action, self._state, result, next_action.name
-                    )
+                    new_state = _run_reducer(next_action, self._state, result, next_action.name)
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
             except Exception as e:
                 exc = e
-                logger.exception(
-                    _format_BASE_ERROR_MESSAGE(next_action, self._state, inputs)
-                )
+                logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
                 raise e
             finally:
                 if _run_hooks:
@@ -1220,19 +1182,13 @@ class Application(Generic[ApplicationStateType]):
         halt_after_actions, halt_after_tags = self._parse_action_list(halt_after)
         halt_before_expanded = set(halt_before_actions)
         for tag in halt_before_tags:
-            halt_before_expanded.update(
-                [item.name for item in self.graph.get_actions_by_tag(tag)]
-            )
+            halt_before_expanded.update([item.name for item in self.graph.get_actions_by_tag(tag)])
         halt_after_expanded = set(halt_after_actions)
         for tag in halt_after_tags:
-            halt_after_expanded.update(
-                [item.name for item in self.graph.get_actions_by_tag(tag)]
-            )
+            halt_after_expanded.update([item.name for item in self.graph.get_actions_by_tag(tag)])
         return list(halt_before_expanded), list(halt_after_expanded), inputs
 
-    def _validate_halt_conditions(
-        self, halt_before: list[str], halt_after: list[str]
-    ) -> None:
+    def _validate_halt_conditions(self, halt_before: list[str], halt_after: list[str]) -> None:
         """Utility function to validate halt conditions"""
         missing_actions = set(halt_before + halt_after) - set(
             action.name for action in self.graph.actions
@@ -1397,9 +1353,7 @@ class Application(Generic[ApplicationStateType]):
         :return: The final state, and the results of running the actions in the order that they were specified.
         """
         self.validate_correct_async_use()
-        gen = self.iterate(
-            halt_before=halt_before, halt_after=halt_after, inputs=inputs
-        )
+        gen = self.iterate(halt_before=halt_before, halt_after=halt_after, inputs=inputs)
         while True:
             try:
                 next(gen)
@@ -1445,9 +1399,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: list[str],
         halt_before: Optional[list[str]] = None,
         inputs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[
-        Action, StreamingResultContainer[ApplicationStateType, Union[dict, Any]]
-    ]:
+    ) -> Tuple[Action, StreamingResultContainer[ApplicationStateType, Union[dict, Any]]]:
         """Streams a result out.
 
         :param halt_after: The list of actions/tags to halt after execution of. It will halt on the first one.
@@ -1549,9 +1501,7 @@ class Application(Generic[ApplicationStateType]):
                 print(format(result['response'], color))
         """
         self.validate_correct_async_use()
-        call_execute_method_wrapper = _call_execute_method_pre_post(
-            ExecuteMethod.stream_result
-        )
+        call_execute_method_wrapper = _call_execute_method_pre_post(ExecuteMethod.stream_result)
         call_execute_method_wrapper.call_pre(self)
         halt_before, halt_after, inputs = self._process_control_flow_params(
             halt_before, halt_after, inputs
@@ -1701,9 +1651,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: list[str],
         halt_before: Optional[list[str]] = None,
         inputs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[
-        Action, AsyncStreamingResultContainer[ApplicationStateType, Union[dict, Any]]
-    ]:
+    ) -> Tuple[Action, AsyncStreamingResultContainer[ApplicationStateType, Union[dict, Any]]]:
         """Streams a result out in an asynchronous manner.
 
         :param halt_after: The list of actions/tags to halt after execution of. It will halt on the first one.
@@ -1807,9 +1755,7 @@ class Application(Generic[ApplicationStateType]):
                 result, state = await output.get()
                 print(format(result['response'], color))
         """
-        call_execute_method_wrapper = _call_execute_method_pre_post(
-            ExecuteMethod.stream_result
-        )
+        call_execute_method_wrapper = _call_execute_method_pre_post(ExecuteMethod.stream_result)
         await call_execute_method_wrapper.acall_pre(self)
         halt_before, halt_after, inputs = self._process_control_flow_params(
             halt_before, halt_after, inputs
@@ -1882,9 +1828,7 @@ class Application(Generic[ApplicationStateType]):
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
-                action, result, state = await self._astep(
-                    inputs=inputs, _run_hooks=False
-                )
+                action, result, state = await self._astep(inputs=inputs, _run_hooks=False)
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",
                     app_id=self._uid,
@@ -2095,9 +2039,7 @@ class Application(Generic[ApplicationStateType]):
         self._state = new_state
 
     def get_next_action(self) -> Optional[Action]:
-        return self._graph.get_next_node(
-            self._state.get(PRIOR_STEP), self._state, self.entrypoint
-        )
+        return self._graph.get_next_node(self._state.get(PRIOR_STEP), self._state, self.entrypoint)
 
     def update_state(self, new_state: State[ApplicationStateType]):
         """Updates state -- this is meant to be called if you need to do
@@ -2449,9 +2391,7 @@ class ApplicationBuilder(Generic[StateType]):
         :return: The application builder for future chaining.
         """
         self._initialize_graph_builder()
-        self.graph_builder = self.graph_builder.with_actions(
-            *action_list, **action_dict
-        )
+        self.graph_builder = self.graph_builder.with_actions(*action_list, **action_dict)
         return self
 
     def with_transitions(
@@ -2476,9 +2416,7 @@ class ApplicationBuilder(Generic[StateType]):
         self.graph_builder = self.graph_builder.with_transitions(*transitions)
         return self
 
-    def with_hooks(
-        self, *adapters: LifecycleAdapter
-    ) -> "ApplicationBuilder[StateType]":
+    def with_hooks(self, *adapters: LifecycleAdapter) -> "ApplicationBuilder[StateType]":
         """Adds a lifecycle adapter to the application. This is a way to add hooks to the application so that
         they are run at the appropriate times. You can use this to synchronize state out, log results, etc...
 
@@ -2533,9 +2471,7 @@ class ApplicationBuilder(Generic[StateType]):
         if use_otel_tracing:
             from burr.integrations.opentelemetry import OpenTelemetryTracker
 
-            instantiated_tracker = OpenTelemetryTracker(
-                burr_tracker=instantiated_tracker
-            )
+            instantiated_tracker = OpenTelemetryTracker(burr_tracker=instantiated_tracker)
         self.lifecycle_adapters.append(instantiated_tracker)
         self.tracker = instantiated_tracker
         return self
@@ -2609,9 +2545,7 @@ class ApplicationBuilder(Generic[StateType]):
         if on_every != "step":
             raise ValueError(f"on_every {on_every} not supported")
 
-        self.state_persister = (
-            persister  # tracks for later; validates in build / abuild
-        )
+        self.state_persister = persister  # tracks for later; validates in build / abuild
         return self
 
     def with_spawning_parent(
@@ -2658,9 +2592,7 @@ class ApplicationBuilder(Generic[StateType]):
                     )
             except NotImplementedError:
                 pass
-            self.lifecycle_adapters.append(
-                persistence.PersisterHook(self.state_persister)
-            )
+            self.lifecycle_adapters.append(persistence.PersisterHook(self.state_persister))
 
     async def _set_async_state_persister(self):
         """Inits the asynchronous with_state_persister to save the state (local/DB/custom implementations).
@@ -2685,9 +2617,7 @@ class ApplicationBuilder(Generic[StateType]):
                     )
             except NotImplementedError:
                 pass
-            self.lifecycle_adapters.append(
-                persistence.PersisterHookAsync(self.state_persister)
-            )
+            self.lifecycle_adapters.append(persistence.PersisterHookAsync(self.state_persister))
 
     def _identify_state_to_load(self):
         """Helper to determine which state to load."""
@@ -2785,9 +2715,7 @@ class ApplicationBuilder(Generic[StateType]):
 
         # load state from persister
         load_result = self.state_initializer.load(_partition_key, _app_id, _sequence_id)
-        self._init_state_from_persister(
-            load_result, _partition_key, _app_id, _sequence_id
-        )
+        self._init_state_from_persister(load_result, _partition_key, _app_id, _sequence_id)
 
     async def _load_from_async_persister(self):
         """Loads from the set async persister and into this current object.
@@ -2808,12 +2736,8 @@ class ApplicationBuilder(Generic[StateType]):
         _partition_key, _app_id, _sequence_id = self._identify_state_to_load()
 
         # load state from persister
-        load_result = await self.state_initializer.load(
-            _partition_key, _app_id, _sequence_id
-        )
-        self._init_state_from_persister(
-            load_result, _partition_key, _app_id, _sequence_id
-        )
+        load_result = await self.state_initializer.load(_partition_key, _app_id, _sequence_id)
+        self._init_state_from_persister(load_result, _partition_key, _app_id, _sequence_id)
 
     def reset_to_entrypoint(self):
         self.state = self.state.wipe(delete=[PRIOR_STEP])
@@ -2831,9 +2755,7 @@ class ApplicationBuilder(Generic[StateType]):
         graph = self._get_built_graph()
         _validate_start(self.start, {action.name for action in graph.actions})
         typing_system: TypingSystem[StateType] = (
-            self.typing_system
-            if self.typing_system is not None
-            else DictBasedTypingSystem()
+            self.typing_system if self.typing_system is not None else DictBasedTypingSystem()
         )  # type: ignore
         self.state = self.state.with_typing_system(typing_system=typing_system)
         return Application(

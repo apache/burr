@@ -21,17 +21,7 @@ import datetime
 import logging
 import typing
 import uuid
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    Generator,
-    Literal,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional, Tuple, Union
 
 import pytest
 
@@ -173,9 +163,7 @@ base_counter_action_with_inputs = PassedInAction(
 )
 
 
-class StreamEventCaptureTracker(
-    PreStartStreamHook, PostStreamItemHook, PostEndStreamHook
-):
+class StreamEventCaptureTracker(PreStartStreamHook, PostStreamItemHook, PostEndStreamHook):
     def post_end_stream(
         self,
         *,
@@ -452,9 +440,7 @@ def test__run_function_with_inputs():
     """Tests that we can run a function"""
     action = base_counter_action_with_inputs
     state = State({})
-    result = _run_function(
-        action, state, inputs={"additional_increment": 1}, name=action.name
-    )
+    result = _run_function(action, state, inputs={"additional_increment": 1}, name=action.name)
     assert result == {"count": 2}
 
 
@@ -610,9 +596,7 @@ async def test_arun_single_step_action_errors_missing_writes():
         def reads(self) -> list[str]:
             return []
 
-        async def run_and_update(
-            self, state: State, **run_kwargs
-        ) -> Tuple[dict, State]:
+        async def run_and_update(self, state: State, **run_kwargs) -> Tuple[dict, State]:
             await asyncio.sleep(0.0001)  # just so we can make this *truly* async
             return {"present_value": 1}, state.update(present_value=1)
 
@@ -800,9 +784,7 @@ class StreamingCounter(StreamingAction):
 
 
 class AsyncStreamingCounter(AsyncStreamingAction):
-    async def stream_run(
-        self, state: State, **run_kwargs
-    ) -> AsyncGenerator[dict, None]:
+    async def stream_run(self, state: State, **run_kwargs) -> AsyncGenerator[dict, None]:
         if "steps_per_count" in run_kwargs:
             steps_per_count = run_kwargs["granularity"]
         else:
@@ -834,9 +816,7 @@ class SingleStepStreamingCounter(SingleStepStreamingAction):
         count = state["count"]
         for i in range(steps_per_count):
             yield {"count": count + ((i + 1) / 10)}, None
-        yield {"count": count + 1}, state.update(count=count + 1).append(
-            tracker=count + 1
-        )
+        yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
 
     @property
     def reads(self) -> list[str]:
@@ -857,9 +837,7 @@ class SingleStepStreamingCounterAsync(SingleStepStreamingAction):
             await asyncio.sleep(0.01)
             yield {"count": count + ((i + 1) / 10)}, None
         await asyncio.sleep(0.01)
-        yield {"count": count + 1}, state.update(count=count + 1).append(
-            tracker=count + 1
-        )
+        yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
 
     @property
     def reads(self) -> list[str]:
@@ -888,9 +866,7 @@ class StreamingActionIncorrectResultType(StreamingAction):
 
 
 class StreamingActionIncorrectResultTypeAsync(AsyncStreamingAction):
-    async def stream_run(
-        self, state: State, **run_kwargs
-    ) -> AsyncGenerator[dict, None]:
+    async def stream_run(self, state: State, **run_kwargs) -> AsyncGenerator[dict, None]:
         yield {}
         yield "not a dict"
 
@@ -950,9 +926,7 @@ base_streaming_counter_async = AsyncStreamingCounter()
 base_streaming_single_step_counter_async = SingleStepStreamingCounterAsync()
 
 base_single_step_action_incorrect_result_type = SingleStepActionIncorrectResultType()
-base_single_step_action_incorrect_result_type_async = (
-    SingleStepActionIncorrectResultTypeAsync()
-)
+base_single_step_action_incorrect_result_type_async = SingleStepActionIncorrectResultTypeAsync()
 
 
 def test__run_single_step_action():
@@ -983,14 +957,10 @@ async def test__arun_single_step_action_incorrect_result_type():
 def test__run_single_step_action_with_inputs():
     action = base_single_step_counter_with_inputs.with_name("counter")
     state = State({"count": 0, "tracker": []})
-    result, state = _run_single_step_action(
-        action, state, inputs={"additional_increment": 1}
-    )
+    result, state = _run_single_step_action(action, state, inputs={"additional_increment": 1})
     assert result == {"count": 2}
     assert state.subset("count", "tracker").get_all() == {"count": 2, "tracker": [2]}
-    result, state = _run_single_step_action(
-        action, state, inputs={"additional_increment": 1}
-    )
+    result, state = _run_single_step_action(action, state, inputs={"additional_increment": 1})
     assert result == {"count": 4}
     assert state.subset("count", "tracker").get_all() == {"count": 4, "tracker": [2, 4]}
 
@@ -1342,9 +1312,7 @@ class SingleStepStreamingCounterWithException(SingleStepStreamingAction):
                 yield {"count": count + ((i + 1) / 10)}, None
             raise RuntimeError("simulated failure")
         finally:
-            yield {"count": count + 1}, state.update(count=count + 1).append(
-                tracker=count + 1
-            )
+            yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
 
     @property
     def reads(self) -> list[str]:
@@ -1387,9 +1355,7 @@ class SingleStepStreamingCounterWithExceptionAsync(SingleStepStreamingAction):
                 yield {"count": count + ((i + 1) / 10)}, None
             raise RuntimeError("simulated failure")
         finally:
-            yield {"count": count + 1}, state.update(count=count + 1).append(
-                tracker=count + 1
-            )
+            yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
 
     @property
     def reads(self) -> list[str]:
@@ -1466,9 +1432,7 @@ class MultiStepStreamingCounterWithExceptionNoResult(StreamingAction):
 class MultiStepStreamingCounterWithExceptionAsync(AsyncStreamingAction):
     """Async variant: yields intermediate items, raises, then yields final result in finally."""
 
-    async def stream_run(
-        self, state: State, **run_kwargs
-    ) -> AsyncGenerator[dict, None]:
+    async def stream_run(self, state: State, **run_kwargs) -> AsyncGenerator[dict, None]:
         count = state["count"]
         try:
             for i in range(3):
@@ -1492,9 +1456,7 @@ class MultiStepStreamingCounterWithExceptionAsync(AsyncStreamingAction):
 class MultiStepStreamingCounterWithExceptionNoResultAsync(AsyncStreamingAction):
     """Async variant: raises without ever yielding any item."""
 
-    async def stream_run(
-        self, state: State, **run_kwargs
-    ) -> AsyncGenerator[dict, None]:
+    async def stream_run(self, state: State, **run_kwargs) -> AsyncGenerator[dict, None]:
         raise RuntimeError("simulated failure with no result")
         yield  # make this an async generator
 
@@ -1690,9 +1652,7 @@ def test_app_step():
     assert app.sequence_id == 1
     assert action.name == "counter"
     assert result == {"count": 1}
-    assert (
-        state[PRIOR_STEP] == "counter"
-    )  # internal contract, not part of the public API
+    assert state[PRIOR_STEP] == "counter"  # internal contract, not part of the public API
 
 
 def test_app_step_with_inputs():
@@ -1747,9 +1707,7 @@ def test_app_step_broken(caplog):
             transitions=[Transition(broken_action, broken_action, default)],
         ),
     )
-    with caplog.at_level(
-        logging.ERROR
-    ):  # it should say the name, that's the only contract for now
+    with caplog.at_level(logging.ERROR):  # it should say the name, that's the only contract for now
         with pytest.raises(BrokenStepException):
             app.step()
     assert "broken_action_unique_name" in caplog.text
@@ -1791,9 +1749,7 @@ async def test_app_astep():
     assert app.sequence_id == 1
     assert action.name == "counter_async"
     assert result == {"count": 1}
-    assert (
-        state[PRIOR_STEP] == "counter_async"
-    )  # internal contract, not part of the public API
+    assert state[PRIOR_STEP] == "counter_async"  # internal contract, not part of the public API
 
 
 def test_app_step_context():
@@ -1851,9 +1807,7 @@ async def test_app_astep_context():
 
 async def test_app_astep_with_inputs():
     """Tests that we can run an async step in an app"""
-    counter_action = base_single_step_counter_with_inputs_async.with_name(
-        "counter_async"
-    )
+    counter_action = base_single_step_counter_with_inputs_async.with_name("counter_async")
     app = Application(
         state=State({"count": 0, "tracker": []}),
         entrypoint="counter_async",
@@ -1873,9 +1827,7 @@ async def test_app_astep_with_inputs():
 
 async def test_app_astep_with_inputs_missing():
     """Tests that we can run an async step in an app"""
-    counter_action = base_single_step_counter_with_inputs_async.with_name(
-        "counter_async"
-    )
+    counter_action = base_single_step_counter_with_inputs_async.with_name("counter_async")
     app = Application(
         state=State({"count": 0, "tracker": []}),
         entrypoint="counter_async",
@@ -1905,9 +1857,7 @@ async def test_app_astep_broken(caplog):
             transitions=[Transition(broken_action, broken_action, default)],
         ),
     )
-    with caplog.at_level(
-        logging.ERROR
-    ):  # it should say the name, that's the only contract for now
+    with caplog.at_level(logging.ERROR):  # it should say the name, that's the only contract for now
         with pytest.raises(BrokenStepException):
             await app.astep()
     assert "broken_action_unique_name" in caplog.text
@@ -1984,9 +1934,7 @@ def test_iterate():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2055,9 +2003,7 @@ async def test_aiterate():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2089,9 +2035,7 @@ async def test_aiterate_halt_before():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2121,9 +2065,7 @@ async def test_app_aiterate_with_inputs():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2148,9 +2090,7 @@ def test_run():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2172,9 +2112,7 @@ def test_run_halt_before():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2197,16 +2135,12 @@ def test_run_with_inputs():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
     )
-    action_, result, state = app.run(
-        halt_after=["result"], inputs={"additional_increment": 10}
-    )
+    action_, result, state = app.run(halt_after=["result"], inputs={"additional_increment": 10})
     assert action_.name == "result"
     assert state["count"] == result["count"] == 11
 
@@ -2225,22 +2159,14 @@ def test_run_with_inputs_multiple_actions():
         graph=Graph(
             actions=[counter_action1, counter_action2, result_action],
             transitions=[
-                Transition(
-                    counter_action1, counter_action1, Condition.expr("count < 10")
-                ),
-                Transition(
-                    counter_action1, counter_action2, Condition.expr("count >= 10")
-                ),
-                Transition(
-                    counter_action2, counter_action2, Condition.expr("count < 20")
-                ),
+                Transition(counter_action1, counter_action1, Condition.expr("count < 10")),
+                Transition(counter_action1, counter_action2, Condition.expr("count >= 10")),
+                Transition(counter_action2, counter_action2, Condition.expr("count < 20")),
                 Transition(counter_action2, result_action, default),
             ],
         ),
     )
-    action_, result, state = app.run(
-        halt_after=["result"], inputs={"additional_increment": 8}
-    )
+    action_, result, state = app.run(halt_after=["result"], inputs={"additional_increment": 8})
     assert action_.name == "result"
     assert state["count"] == result["count"] == 27
     assert state["__SEQUENCE_ID"] == 4
@@ -2258,9 +2184,7 @@ async def test_arun():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2282,9 +2206,7 @@ async def test_arun_halt_before():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2307,9 +2229,7 @@ async def test_arun_with_inputs():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, counter_action, Condition.expr("count < 10")
-                ),
+                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2334,15 +2254,9 @@ async def test_arun_with_inputs_multiple_actions():
         graph=Graph(
             actions=[counter_action1, counter_action2, result_action],
             transitions=[
-                Transition(
-                    counter_action1, counter_action1, Condition.expr("count < 10")
-                ),
-                Transition(
-                    counter_action1, counter_action2, Condition.expr("count >= 10")
-                ),
-                Transition(
-                    counter_action2, counter_action2, Condition.expr("count < 20")
-                ),
+                Transition(counter_action1, counter_action1, Condition.expr("count < 10")),
+                Transition(counter_action1, counter_action2, Condition.expr("count >= 10")),
+                Transition(counter_action2, counter_action2, Condition.expr("count < 20")),
                 Transition(counter_action2, result_action, default),
             ],
         ),
@@ -2451,9 +2365,7 @@ async def test_astream_result_halt_after_unique_ordered_sequence_id():
             ],
         ),
     )
-    action_, streaming_async_container = await app.astream_result(
-        halt_after=["counter_2"]
-    )
+    action_, streaming_async_container = await app.astream_result(halt_after=["counter_2"])
     results = [
         item async for item in streaming_async_container
     ]  # this should just have the intermediate results
@@ -2727,9 +2639,7 @@ def test_stream_result_halt_after_run_through_non_streaming():
     action_tracker = CallCaptureTracker()
     stream_event_tracker = StreamEventCaptureTracker()
     counter_non_streaming = base_counter_action.with_name("counter_non_streaming")
-    counter_streaming = base_streaming_single_step_counter.with_name(
-        "counter_streaming"
-    )
+    counter_streaming = base_streaming_single_step_counter.with_name("counter_streaming")
 
     app = Application(
         state=State({"count": 0}),
@@ -2740,9 +2650,7 @@ def test_stream_result_halt_after_run_through_non_streaming():
         graph=Graph(
             actions=[counter_non_streaming, counter_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_streaming, default),
             ],
         ),
@@ -2784,9 +2692,7 @@ async def test_astream_result_halt_after_run_through_non_streaming():
     stream_event_tracker = StreamEventCaptureTrackerAsync()
     stream_event_tracker_sync = StreamEventCaptureTracker()
     counter_non_streaming = base_counter_action_async.with_name("counter_non_streaming")
-    counter_streaming = base_streaming_single_step_counter_async.with_name(
-        "counter_streaming"
-    )
+    counter_streaming = base_streaming_single_step_counter_async.with_name("counter_streaming")
 
     app = Application(
         state=State({"count": 0}),
@@ -2799,16 +2705,12 @@ async def test_astream_result_halt_after_run_through_non_streaming():
         graph=Graph(
             actions=[counter_non_streaming, counter_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_streaming, default),
             ],
         ),
     )
-    action_, async_streaming_container = await app.astream_result(
-        halt_after=["counter_streaming"]
-    )
+    action_, async_streaming_container = await app.astream_result(halt_after=["counter_streaming"])
     results = [
         item async for item in async_streaming_container
     ]  # this should just have the intermediate results
@@ -2858,9 +2760,7 @@ def test_stream_result_halt_after_run_through_final_non_streaming():
     """Tests that we can pass through non-streaming results when streaming is called"""
     action_tracker = CallCaptureTracker()
     counter_non_streaming = base_counter_action.with_name("counter_non_streaming")
-    counter_final_non_streaming = base_counter_action.with_name(
-        "counter_final_non_streaming"
-    )
+    counter_final_non_streaming = base_counter_action.with_name("counter_final_non_streaming")
 
     app = Application(
         state=State({"count": 0}),
@@ -2871,16 +2771,12 @@ def test_stream_result_halt_after_run_through_final_non_streaming():
         graph=Graph(
             actions=[counter_non_streaming, counter_final_non_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_final_non_streaming, default),
             ],
         ),
     )
-    action, streaming_container = app.stream_result(
-        halt_after=["counter_final_non_streaming"]
-    )
+    action, streaming_container = app.stream_result(halt_after=["counter_final_non_streaming"])
     results = list(streaming_container)
     assert len(results) == 0  # nothing to steram
     result, state = streaming_container.get()
@@ -2910,9 +2806,7 @@ async def test_astream_result_halt_after_run_through_final_streaming():
     action_tracker = CallCaptureTracker()
 
     counter_non_streaming = base_counter_action_async.with_name("counter_non_streaming")
-    counter_final_non_streaming = base_counter_action_async.with_name(
-        "counter_final_non_streaming"
-    )
+    counter_final_non_streaming = base_counter_action_async.with_name("counter_final_non_streaming")
 
     app = Application(
         state=State({"count": 0}),
@@ -2923,9 +2817,7 @@ async def test_astream_result_halt_after_run_through_final_streaming():
         graph=Graph(
             actions=[counter_non_streaming, counter_final_non_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_final_non_streaming, default),
             ],
         ),
@@ -2973,16 +2865,12 @@ def test_stream_result_halt_before():
         graph=Graph(
             actions=[counter_non_streaming, counter_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_streaming, default),
             ],
         ),
     )
-    action, streaming_container = app.stream_result(
-        halt_after=[], halt_before=["counter_final"]
-    )
+    action, streaming_container = app.stream_result(halt_after=[], halt_before=["counter_final"])
     results = list(streaming_container)
     assert len(results) == 0  # nothing to steram
     result, state = streaming_container.get()
@@ -3002,9 +2890,7 @@ def test_stream_result_halt_before():
 async def test_astream_result_halt_before():
     action_tracker = CallCaptureTracker()
     counter_non_streaming = base_counter_action_async.with_name("counter_non_streaming")
-    counter_streaming = base_streaming_single_step_counter_async.with_name(
-        "counter_final"
-    )
+    counter_streaming = base_streaming_single_step_counter_async.with_name("counter_final")
 
     app = Application(
         state=State({"count": 0}),
@@ -3015,9 +2901,7 @@ async def test_astream_result_halt_before():
         graph=Graph(
             actions=[counter_non_streaming, counter_streaming],
             transitions=[
-                Transition(
-                    counter_non_streaming, counter_non_streaming, expr("count < 10")
-                ),
+                Transition(counter_non_streaming, counter_non_streaming, expr("count < 10")),
                 Transition(counter_non_streaming, counter_streaming, default),
             ],
         ),
@@ -3125,9 +3009,7 @@ def test__validate_start_not_found():
 def test__adjust_single_step_output_result_and_state():
     state = State({"count": 1})
     result = {"count": 1}
-    assert _adjust_single_step_output(
-        (result, state), "test_action", DEFAULT_SCHEMA
-    ) == (
+    assert _adjust_single_step_output((result, state), "test_action", DEFAULT_SCHEMA) == (
         result,
         state,
     )
@@ -3173,9 +3055,7 @@ def test_application_run_step_hooks_sync():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, result_action, Condition.expr("count >= 10")
-                ),
+                Transition(counter_action, result_action, Condition.expr("count >= 10")),
                 Transition(counter_action, counter_action, default),
             ],
         ),
@@ -3226,9 +3106,7 @@ async def test_application_run_step_hooks_async():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, result_action, Condition.expr("count >= 10")
-                ),
+                Transition(counter_action, result_action, Condition.expr("count >= 10")),
                 Transition(counter_action, counter_action, default),
             ],
         ),
@@ -3342,9 +3220,7 @@ def test_application_post_application_create_hook():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, result_action, Condition.expr("count >= 10")
-                ),
+                Transition(counter_action, result_action, Condition.expr("count >= 10")),
                 Transition(counter_action, counter_action, default),
             ],
         ),
@@ -3366,9 +3242,7 @@ async def test_application_gives_graph():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(
-                    counter_action, result_action, Condition.expr("count >= 10")
-                ),
+                Transition(counter_action, result_action, Condition.expr("count >= 10")),
                 Transition(counter_action, counter_action, default),
             ],
         ),
@@ -3381,9 +3255,7 @@ async def test_application_gives_graph():
 
 def test_application_builder_initialize_does_not_allow_state_setting():
     with pytest.raises(ValueError, match="Cannot call initialize_from"):
-        ApplicationBuilder().with_entrypoint("foo").with_state(
-            **{"foo": "bar"}
-        ).initialize_from(
+        ApplicationBuilder().with_entrypoint("foo").with_state(**{"foo": "bar"}).initialize_from(
             DevNullPersister(),
             resume_at_next_action=True,
             default_state={},
@@ -3516,9 +3388,7 @@ def test__validate_halt_conditions():
         .build()
     )
     with pytest.raises(ValueError, match="(?=.*no_exist_1)(?=.*no_exist_2)"):
-        app._validate_halt_conditions(
-            halt_after=["no_exist_1"], halt_before=["no_exist_2"]
-        )
+        app._validate_halt_conditions(halt_after=["no_exist_1"], halt_before=["no_exist_2"])
 
 
 def test_application_builder_initialize_raises_on_fork_app_id_not_provided():
@@ -3621,9 +3491,7 @@ def test_application_builder_initialize_fork_app_id_happy_pth():
         .build()
     )
     assert app.uid != old_app_id
-    assert app.state == State(
-        {"count": 5, "__PRIOR_STEP": "counter", "__SEQUENCE_ID": 5}
-    )
+    assert app.state == State({"count": 5, "__PRIOR_STEP": "counter", "__SEQUENCE_ID": 5})
     assert app.parent_pointer.app_id == old_app_id
 
 
@@ -3776,9 +3644,7 @@ def test_application_passes_context_when_declared():
     app = (
         ApplicationBuilder()
         .with_actions(counter=context_counter, result=result_action)
-        .with_transitions(
-            ("counter", "counter", expr("count < 10")), ("counter", "result")
-        )
+        .with_transitions(("counter", "counter", expr("count < 10")), ("counter", "result"))
         .with_tracker(NoOpTracker("unique_tracker_name"))
         .with_identifiers(app_id="test123", partition_key="user123", sequence_id=5)
         .with_entrypoint("counter")
@@ -3809,9 +3675,7 @@ def test_optional_context_in_dependency_factories():
     app = (
         ApplicationBuilder()
         .with_actions(counter=context_counter, result=result_action)
-        .with_transitions(
-            ("counter", "counter", expr("count < 10")), ("counter", "result")
-        )
+        .with_transitions(("counter", "counter", expr("count < 10")), ("counter", "result"))
         .with_tracker(NoOpTracker("unique_tracker_name"))
         .with_identifiers(app_id="test123", partition_key="user123", sequence_id=5)
         .with_entrypoint("counter")
@@ -3949,9 +3813,7 @@ def test_application_recursive_action_lifecycle_hooks():
     result = recursive_action(State({"recursion_count": 0, "total_count": 0}))
     # Basic sanity checks to demonstrate
     assert result["recursion_count"] == 5
-    assert (
-        result["total_count"] == 63
-    )  # One for each of the calls (sum(2**n for n in range(6)))
+    assert result["total_count"] == 63  # One for each of the calls (sum(2**n for n in range(6)))
     assert (
         len(hook.pre_called) == 62
     )  # 63 - the initial one from the call to recursive_action outside the application
@@ -4138,10 +4000,7 @@ def test_remap_context_variable_with_mangled_context_kwargs():
         "other_key": "other_value",
         "foo": "foo_value",
     }
-    assert (
-        _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"])
-        == expected
-    )
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
 def test_remap_context_variable_with_mangled_context():
@@ -4157,10 +4016,7 @@ def test_remap_context_variable_with_mangled_context():
         "other_key": "other_value",
         "foo": "foo_value",
     }
-    assert (
-        _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"])
-        == expected
-    )
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
 def test_remap_context_variable_with_mangled_contexttracer():
@@ -4178,10 +4034,7 @@ def test_remap_context_variable_with_mangled_contexttracer():
         "foo": "foo_value",
         f"_{ActionWithContextTracer.__name__}__tracer": "tracer_value",
     }
-    assert (
-        _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"])
-        == expected
-    )
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
 def test_remap_context_variable_without_mangled_context():
@@ -4196,10 +4049,7 @@ def test_remap_context_variable_without_mangled_context():
         "other_key": "other_value",
         "foo": "foo_value",
     }
-    assert (
-        _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"])
-        == expected
-    )
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
 async def test_async_application_builder_initialize_raises_on_broken_persistor():
