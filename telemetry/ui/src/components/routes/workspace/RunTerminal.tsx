@@ -35,7 +35,7 @@ interface OutputLine {
 // Basic ANSI color codes to CSS classes
 function ansiToSpans(text: string): JSX.Element[] {
   const parts: JSX.Element[] = [];
-  // Match ANSI escape sequences - eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex
   const ansiRegex = new RegExp('\\x1b\\[([0-9;]*)m', 'g');
   let lastIndex = 0;
   let currentClass = '';
