@@ -25,7 +25,7 @@ import {
   AttributeModel,
   DefaultService
 } from '../../../api';
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loading } from '../../common/loading';
 import { ApplicationTable } from './StepList';
 import { TwoColumnLayout, TwoRowLayout } from '../../common/layout';
@@ -250,73 +250,67 @@ export const AppView = (props: {
   const [currentEditingAnnotationContext, setCurrentEditingAnnotationContext] = useState<
     AnnotationEditingContext | undefined
   >(undefined);
-  const { data: backendSpec } = useQuery(['backendSpec'], () =>
-    DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
-      return response;
-    })
-  );
-  const { data, error } = useQuery(
-    ['steps', appID, partitionKey],
-    () =>
+  const { data: backendSpec } = useQuery({
+    queryKey: ['backendSpec'],
+    queryFn: () =>
+      DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
+        return response;
+      })
+  });
+  const { data, error } = useQuery({
+    queryKey: ['steps', appID, partitionKey],
+    queryFn: () =>
       DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
         projectId as string,
         appID as string,
         props.partitionKey !== null ? props.partitionKey : '__none__'
       ),
-    {
-      refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
-      enabled: shouldQuery
-    }
-  );
+    refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
+    enabled: shouldQuery
+  });
 
-  const { data: currentFocusStepsData } = useQuery(
-    ['steps', currentFocusAppID, currentFocusPartitionKey],
-    () =>
+  const { data: currentFocusStepsData } = useQuery({
+    queryKey: ['steps', currentFocusAppID, currentFocusPartitionKey],
+    queryFn: () =>
       DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
         projectId as string,
         currentFocusAppID as string,
         currentFocusPartitionKey !== null ? currentFocusPartitionKey : '__none__'
       ),
-    {
-      refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
-      enabled: currentFocusAppID !== appID && currentFocusAppID !== undefined
-    }
-  );
+    refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
+    enabled: currentFocusAppID !== appID && currentFocusAppID !== undefined
+  });
   // TODO -- use a skiptoken to bypass annotation loading if we don't need them
-  const { data: annotationsData, refetch: refetchAnnotationsData } = useQuery(
-    ['annotations', appID, partitionKey],
-    () =>
+  const { data: annotationsData, refetch: refetchAnnotationsData } = useQuery({
+    queryKey: ['annotations', appID, partitionKey],
+    queryFn: () =>
       DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
         projectId as string,
         appID as string,
         partitionKey !== null ? partitionKey : '__none__'
       ),
-    {
-      refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
-      enabled: shouldQuery && props.allowAnnotations && backendSpec?.supports_annotations
-    }
-  );
+    refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
+    enabled: shouldQuery && props.allowAnnotations && backendSpec?.supports_annotations
+  });
 
-  const { data: currentFocusAnnotationsData } = useQuery(
-    ['annotations', currentFocusAppID, currentFocusPartitionKey],
-    () =>
+  const { data: currentFocusAnnotationsData } = useQuery({
+    queryKey: ['annotations', currentFocusAppID, currentFocusPartitionKey],
+    queryFn: () =>
       DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
         projectId as string,
         currentFocusAppID as string,
         currentFocusPartitionKey !== null ? partitionKey : '__none__'
       ),
-    {
-      enabled:
-        shouldQuery &&
-        props.allowAnnotations &&
-        backendSpec?.supports_annotations &&
-        currentFocusAppID !== appID &&
-        currentFocusAppID !== undefined
-    }
-  );
+    enabled:
+      shouldQuery &&
+      props.allowAnnotations &&
+      backendSpec?.supports_annotations &&
+      currentFocusAppID !== appID &&
+      currentFocusAppID !== undefined
+  });
 
-  const createAnnotationMutation = useMutation(
-    (data: {
+  const createAnnotationMutation = useMutation({
+    mutationFn: (data: {
       projectId: string;
       annotationData: AnnotationCreate;
       appID: string;
@@ -330,16 +324,16 @@ export const AppView = (props: {
         data.sequenceID,
         data.annotationData
       )
-  );
+  });
 
-  const updateAnnotationMutation = useMutation(
-    (data: { annotationID: number; annotationData: AnnotationUpdate }) =>
+  const updateAnnotationMutation = useMutation({
+    mutationFn: (data: { annotationID: number; annotationData: AnnotationUpdate }) =>
       DefaultService.updateAnnotationApiV0ProjectIdAnnotationIdUpdateAnnotationsPut(
         projectId,
         data.annotationID,
         data.annotationData
       )
-  );
+  });
 
   useEffect(() => {
     const steps = data?.steps || [];

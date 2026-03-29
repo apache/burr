@@ -70,7 +70,7 @@ import { RxActivityLog } from 'react-icons/rx';
 import { RenderedField } from './DataView';
 import { FaPencilAlt } from 'react-icons/fa';
 import { AnnotateButton } from './AnnotationsView';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 
 const StatusChip = (props: { status: Status }) => {
   return (
@@ -382,31 +382,29 @@ const SelfLoadingSubApplicationContainer = (props: {
   autoRefresh: boolean;
   depth: number;
 }) => {
-  const { data } = useQuery(
-    ['steps', props.projectID, props.appID, props.partitionKey],
-    () =>
+  const { data } = useQuery({
+    queryKey: ['steps', props.projectID, props.appID, props.partitionKey],
+    queryFn: () =>
       DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
         props.projectId as string,
         props.appID as string,
         props.partitionKey !== null ? props.partitionKey : '__none__'
       ),
-    {
-      // TODO -- decide how we want to auto-refresh with lots of nested stuff?
-      // Really, we'll want a bulk API but this is OK for now...
-      refetchInterval: props.autoRefresh ? REFRESH_INTERVAL : false,
-      enabled: true
-    }
-  );
+    // TODO -- decide how we want to auto-refresh with lots of nested stuff?
+    // Really, we'll want a bulk API but this is OK for now...
+    refetchInterval: props.autoRefresh ? REFRESH_INTERVAL : false,
+    enabled: true
+  });
   // TODO -- use a skiptoken to bypass annotation loading if we don't need them
-  const { data: annotationsData } = useQuery(
-    ['annotations', props.projectID, props.appID, props.partitionKey],
-    () =>
+  const { data: annotationsData } = useQuery({
+    queryKey: ['annotations', props.projectID, props.appID, props.partitionKey],
+    queryFn: () =>
       DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
         props.projectId as string,
         props.appID as string,
         props.partitionKey !== null ? props.partitionKey : '__none__'
       )
-  );
+  });
   const [traceExpandedActions, setTraceExpandedActions] = useState<number[]>([]);
   const [linksExpandedActions, setLinksExpandedActions] = useState<number[]>([]);
 

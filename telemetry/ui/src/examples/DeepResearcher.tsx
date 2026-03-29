@@ -22,7 +22,7 @@ import { ApplicationSummary, DefaultService, ResearchSummary } from '../api';
 import { TwoColumnLayout } from '../components/common/layout';
 import { TelemetryWithSelector } from './Common';
 import { Button } from '../components/common/button';
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Text } from '../components/common/text';
 import { Field, Label } from '../components/common/fieldset';
 
@@ -43,25 +43,23 @@ export const ResearchSummaryView = (props: { summary: string }) => {
 export const DeepResearcher = (props: { projectId: string; appId: string | undefined }) => {
   const [currentTopic, setCurrentTopic] = useState<string>('');
   const [displayedReport, setDisplayedReport] = useState(DEFAULT_RESEARCH_SUMMARY);
-  const { data: validationData, isLoading: isValidationLoading } = useQuery(
-    ['valid'],
-    DefaultService.validateEnvironmentApiV0DeepResearcherValidateGet
-  );
+  const { data: validationData, isLoading: isValidationLoading } = useQuery({
+    queryKey: ['valid'],
+    queryFn: DefaultService.validateEnvironmentApiV0DeepResearcherValidateGet
+  });
 
-  const mutation = useMutation(
-    (topic: string) => {
+  const mutation = useMutation({
+    mutationFn: (topic: string) => {
       return DefaultService.researchResponseApiV0DeepResearcherResponseProjectIdAppIdPost(
         props.projectId,
         props.appId || '',
         topic
       );
     },
-    {
-      onSuccess: (data) => {
-        setDisplayedReport(data);
-      }
+    onSuccess: (data) => {
+      setDisplayedReport(data);
     }
-  );
+  });
   const sendTopic = () => {
     if (currentTopic !== '') {
       mutation.mutate(currentTopic);
@@ -69,7 +67,7 @@ export const DeepResearcher = (props: { projectId: string; appId: string | undef
       setDisplayedReport(DEFAULT_RESEARCH_SUMMARY);
     }
   };
-  const isResearcherWaiting = mutation.isLoading || isValidationLoading;
+  const isResearcherWaiting = mutation.isPending || isValidationLoading;
   const displayValidationError = validationData !== null;
 
   return (

@@ -23,7 +23,7 @@ import { Button } from '../components/common/button';
 import { TwoColumnLayout } from '../components/common/layout';
 import { ApplicationSummary, ChatItem, DefaultService } from '../api';
 import { KeyboardEvent, useEffect, useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Loading } from '../components/common/loading';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -95,7 +95,8 @@ const ChatMessage = (props: { message: ChatItem; id?: string }) => {
               a: ({ ...props }) => <a className="text-dwlightblue hover:underline" {...props} />
             }}
             remarkPlugins={[remarkGfm]}
-            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}>
+            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}
+          >
             {props.message.content}
           </Markdown>
         ) : (
@@ -150,31 +151,39 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
   const [currentResponse, setCurrentResponse] = useState<string>('');
   const [isChatWaiting, setIsChatWaiting] = useState<boolean>(false);
 
-  const { isLoading: isInitialLoading } = useQuery(
+  const {
+    data: chatHistoryData,
+    error: chatHistoryError,
+    isLoading: isInitialLoading
+  } = useQuery({
     // TODO -- handle errors
-    ['chat', props.projectId, props.appId],
-    () =>
+    queryKey: ['chat', props.projectId, props.appId],
+    queryFn: () =>
       DefaultService.chatHistoryApiV0StreamingChatbotHistoryProjectIdAppIdGet(
         props.projectId,
         props.appId || '' // TODO -- find a cleaner way of doing a skip-token like thing here
       ),
-    {
-      enabled: props.appId !== undefined,
-      onSuccess: (data) => {
-        setDisplayedChatHistory(data); // when its succesful we want to set the displayed chat history
-      },
-      onError: (error: Error) => {
-        setDisplayedChatHistory([
-          ...DEFAULT_CHAT_HISTORY,
-          {
-            content: `Unable to load from server: ${error.message}`,
-            role: ChatItem.role.ASSISTANT,
-            type: ChatItem.type.ERROR
-          }
-        ]);
-      }
+    enabled: props.appId !== undefined
+  });
+
+  useEffect(() => {
+    if (chatHistoryData) {
+      setDisplayedChatHistory(chatHistoryData);
     }
-  );
+  }, [chatHistoryData]);
+
+  useEffect(() => {
+    if (chatHistoryError) {
+      setDisplayedChatHistory([
+        ...DEFAULT_CHAT_HISTORY,
+        {
+          content: `Unable to load from server: ${(chatHistoryError as Error).message}`,
+          role: ChatItem.role.ASSISTANT,
+          type: ChatItem.type.ERROR
+        }
+      ]);
+    }
+  }, [chatHistoryError]);
 
   const submitPrompt = async () => {
     setCurrentResponse(''); // Reset it
@@ -292,7 +301,8 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
           disabled={isChatWaiting || props.appId === undefined}
           onClick={() => {
             submitPrompt();
-          }}>
+          }}
+        >
           Send
         </Button>
       </div>
@@ -317,6 +327,7 @@ export const StreamingChatbotWithTelemetry = () => {
           }
         />
       }
-      mode={'third'}></TwoColumnLayout>
+      mode={'third'}
+    ></TwoColumnLayout>
   );
 };

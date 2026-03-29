@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { DefaultService, Project } from '../../api';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../common/table';
 import { Loading } from '../common/loading';
@@ -114,12 +114,17 @@ export const ProjectListTable = (props: { projects: Project[]; includeAnnotation
  * Container for the table -- fetches the data and passes it to the table
  */
 export const ProjectList = () => {
-  const { data, error } = useQuery('projects', DefaultService.getProjectsApiV0ProjectsGet);
-  const { data: backendSpec } = useQuery(['backendSpec'], () =>
-    DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
-      return response;
-    })
-  );
+  const { data, error } = useQuery({
+    queryKey: ['projects'],
+    queryFn: DefaultService.getProjectsApiV0ProjectsGet
+  });
+  const { data: backendSpec } = useQuery({
+    queryKey: ['backendSpec'],
+    queryFn: () =>
+      DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
+        return response;
+      })
+  });
   if (error) return <div>Error loading projects</div>;
   if (data === undefined || backendSpec === undefined) return <Loading />;
   return (

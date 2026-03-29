@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Navigate, useParams } from 'react-router';
 import { Loading } from '../common/loading';
 import { ApplicationSummary, DefaultService } from '../../api';
@@ -309,17 +309,17 @@ export const AppList = () => {
   const [searchParams] = useSearchParams();
   const currentOffset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
   const pageSize = DEFAULT_LIMIT;
-  const { data, error } = useQuery(
-    ['apps', projectId, partitionKey, pageSize, currentOffset],
-    () =>
+  const { data, error } = useQuery({
+    queryKey: ['apps', projectId, partitionKey, pageSize, currentOffset],
+    queryFn: () =>
       DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(
         projectId as string,
         partitionKey ? partitionKey : '__none__',
         pageSize,
         currentOffset
       ),
-    { enabled: projectId !== undefined }
-  );
+    enabled: projectId !== undefined
+  });
 
   const [queriedData, setQueriedData] = useState(data);
 
