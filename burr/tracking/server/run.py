@@ -186,12 +186,8 @@ logger = logging.getLogger(__name__)
 
 if app_spec.indexing:
     # Only use polling when not in event-driven mode
-    if not (
-        isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven()
-    ):
-        update_interval = (
-            backend.update_interval_milliseconds() / 1000 if app_spec.indexing else None
-        )
+    _event_driven = isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven()
+    if not _event_driven:
         sync_index = repeat_every(
             seconds=backend.update_interval_milliseconds() / 1000,
             wait_first=True,
@@ -199,9 +195,6 @@ if app_spec.indexing:
         )(sync_index)
 
 if app_spec.snapshotting:
-    snapshot_interval = (
-        backend.snapshot_interval_milliseconds() / 1000 if app_spec.snapshotting else None
-    )
     save_snapshot = repeat_every(
         seconds=backend.snapshot_interval_milliseconds() / 1000,
         wait_first=True,

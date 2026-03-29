@@ -33,8 +33,8 @@ from typing import List, Literal, Optional, Sequence, Tuple, Type, TypeVar, Unio
 import fastapi
 import pydantic
 from aiobotocore import session
-from pydantic import field_validator
 from fastapi import FastAPI
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from tortoise import functions, transactions
 from tortoise.contrib.fastapi import RegisterTortoise
@@ -205,7 +205,40 @@ def timestamp_to_reverse_alphabetical(timestamp: datetime) -> str:
     return inverted_str + "-" + timestamp.isoformat()
 
 
-class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixin, EventDrivenBackendMixin):
+def _parse_sqs_message_events(
+    body: dict,
+) -> Optional[List[Tuple[str, datetime.datetime]]]:
+    """Parse EventBridge-wrapped or native S3 notification bodies from SQS.
+
+    Returns None if the format is not recognized. Multiple S3 records in one
+    message yield one tuple per record.
+    """
+    if "detail" in body:
+        return [
+            (
+                body["detail"]["object"]["key"],
+                datetime.datetime.fromisoformat(body["time"].replace("Z", "+00:00")),
+            )
+        ]
+    if "Records" in body:
+        out: List[Tuple[str, datetime.datetime]] = []
+        for record in body["Records"]:
+            out.append(
+                (
+                    record["s3"]["object"]["key"],
+                    datetime.datetime.fromisoformat(record["eventTime"].replace("Z", "+00:00")),
+                )
+            )
+        return out
+    return None
+
+
+class SQLiteS3Backend(
+    BackendBase,
+    IndexingBackendMixin,
+    SnapshottingBackendMixin,
+    EventDrivenBackendMixin,
+):
     def __init__(
         self,
         s3_bucket: str,
@@ -790,27 +823,14 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
                         for message in messages:
                             try:
                                 body = json.loads(message["Body"])
-                                s3_key = None
-                                event_time = None
-
-                                # Handle EventBridge wrapped S3 events
-                                if "detail" in body:
-                                    s3_key = body["detail"]["object"]["key"]
-                                    event_time = datetime.datetime.fromisoformat(
-                                        body["time"].replace("Z", "+00:00")
-                                    )
-                                elif "Records" in body:
-                                    record = body["Records"][0]
-                                    s3_key = record["s3"]["object"]["key"]
-                                    event_time = datetime.datetime.fromisoformat(
-                                        record["eventTime"].replace("Z", "+00:00")
-                                    )
-                                else:
-                                    logger.warning(f"Unknown message format: {body}")
+                                events = _parse_sqs_message_events(body)
+                                if events is None:
+                                    logger.warning("Unknown message format: %s", body)
                                     continue
 
-                                if s3_key and s3_key.endswith(".jsonl"):
-                                    await self._handle_s3_event(s3_key, event_time)
+                                for s3_key, event_time in events:
+                                    if s3_key and s3_key.endswith(".jsonl"):
+                                        await self._handle_s3_event(s3_key, event_time)
 
                                 await sqs_client.delete_message(
                                     QueueUrl=self._sqs_queue_url,
@@ -865,7 +885,6 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
 if __name__ == "__main__":
     os.environ["BURR_LOAD_SNAPSHOT_ON_START"] = "True"
-    import asyncio
 
     be = SQLiteS3Backend.from_settings(S3Settings())
     # coro = be.snapshot()  # save to s3
