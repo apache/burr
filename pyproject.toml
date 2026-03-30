@@ -304,6 +304,8 @@ exclude = [
   "examples/rag-lancedb-ingestion/**",
   "examples/ray/**",
   "examples/recursive/**",
+  "examples/remote-execution-ray/**",
+  "examples/remote-execution-temporal/**",
   "examples/simple-chatbot-intro/**",
   "examples/simulation/**",
   "examples/streaming-overview/**",
