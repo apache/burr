@@ -1,0 +1,167 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+# Stale PR lifecycle management
+# Part of #690 (repo governance) and #695 (stale PR policy)
+#
+# Policy:
+#   - 14 days after review with no author response -> pr/stale + convert to draft
+#   - 90 days with no activity at all -> close with comment
+#   - PRs with lifecycle/frozen or pr/do-not-merge are always skipped
+
+name: Stale PR Lifecycle
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 09:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  stale-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark stale and close inactive PRs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const STALE_DAYS = 14;
+            const CLOSE_DAYS = 90;
+            const SKIP_LABELS = ['lifecycle/frozen', 'pr/do-not-merge'];
+            const STALE_LABEL = 'pr/stale';
+
+            const now = new Date();
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'asc',
+              per_page: 100,
+            });
+
+            for (const pr of prs) {
+              const labels = pr.labels.map(l => l.name);
+
+              // Skip protected PRs
+              if (SKIP_LABELS.some(skip => labels.includes(skip))) {
+                console.log(`#${pr.number}: skipped (protected label)`);
+                continue;
+              }
+
+              // Skip dependabot PRs
+              if (pr.user.login === 'dependabot[bot]') {
+                console.log(`#${pr.number}: skipped (dependabot)`);
+                continue;
+              }
+
+              const updatedAt = new Date(pr.updated_at);
+              const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
+
+              // 90+ days no activity -> close
+              if (daysSinceUpdate >= CLOSE_DAYS) {
+                const closeMsg = [
+                  `This PR has had no activity for ${daysSinceUpdate} days.`,
+                  'Closing to keep the PR list manageable.',
+                  '',
+                  'Feel free to reopen when you are ready to continue.',
+                  'If the branch has conflicts, a fresh PR against `main` might be easier.',
+                ].join('\n');
+
+                console.log(`#${pr.number}: closing (${daysSinceUpdate} days inactive)`);
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: closeMsg,
+                });
+
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed',
+                });
+
+                continue;
+              }
+
+              // 14+ days since last review with no author response -> stale + draft
+              if (daysSinceUpdate >= STALE_DAYS && !labels.includes(STALE_LABEL)) {
+                // Check if there's a review that the author hasn't responded to
+                const { data: reviews } = await github.rest.pulls.listReviews({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                });
+
+                const hasUnaddressedReview = reviews.some(r =>
+                  r.user.login !== pr.user.login &&
+                  r.state !== 'APPROVED' &&
+                  r.state !== 'DISMISSED'
+                );
+
+                if (!hasUnaddressedReview) {
+                  console.log(`#${pr.number}: skipped (no unaddressed review)`);
+                  continue;
+                }
+
+                console.log(`#${pr.number}: marking stale (${daysSinceUpdate} days, unaddressed review)`);
+
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  labels: [STALE_LABEL],
+                });
+
+                // Convert to draft via GraphQL
+                try {
+                  await github.graphql(`
+                    mutation($id: ID!) {
+                      convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                        pullRequest { id }
+                      }
+                    }
+                  `, { id: pr.node_id });
+                } catch (e) {
+                  console.log(`#${pr.number}: could not convert to draft (${e.message})`);
+                }
+
+                const staleMsg = [
+                  `This PR has been inactive for ${daysSinceUpdate} days after receiving review feedback.`,
+                  'Converting to draft.',
+                  '',
+                  'Please mark it as ready for review when you have addressed the comments.',
+                  'If no activity occurs within 90 days, it will be closed automatically.',
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: staleMsg,
+                });
+              }
+            }
