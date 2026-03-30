@@ -1,0 +1,170 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+# Stale issue assignment check
+# Part of #690 (repo governance) and #709 (assignment policy)
+#
+# Policy (documented in CONTRIBUTING.rst):
+#   - 14 days without activity on an assigned issue -> comment asking for update
+#   - 21 days total -> unassign + add help wanted
+#   - Issues with lifecycle/frozen are exempt
+#
+# Security: only uses numeric IDs and login names from the GitHub API.
+# No untrusted string input is interpolated into shell commands.
+
+name: Stale Assignments
+
+on:
+  schedule:
+    - cron: "0 9 * * 3" # Every Wednesday at 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check-assignments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for stale assignments
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const WARN_DAYS = 14;
+            const UNASSIGN_DAYS = 21;
+            const SKIP_LABELS = ['lifecycle/frozen'];
+            const now = new Date();
+
+            let page = 1;
+            let allIssues = [];
+
+            // Paginate through all open issues
+            while (true) {
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                page: page,
+              });
+              if (issues.length === 0) break;
+              allIssues = allIssues.concat(issues);
+              page++;
+            }
+
+            for (const issue of allIssues) {
+              // Skip PRs (they show up in the issues API)
+              if (issue.pull_request) continue;
+
+              // Skip unassigned
+              if (!issue.assignees || issue.assignees.length === 0) continue;
+
+              const labels = issue.labels.map(l => l.name);
+
+              // Skip protected issues
+              if (SKIP_LABELS.some(skip => labels.includes(skip))) {
+                console.log(`#${issue.number}: skipped (protected)`);
+                continue;
+              }
+
+              const updatedAt = new Date(issue.updated_at);
+              const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
+              const assigneeLogins = issue.assignees.map(a => a.login);
+
+              // 21+ days -> unassign and add help wanted
+              if (daysSinceUpdate >= UNASSIGN_DAYS) {
+                const names = assigneeLogins.map(l => `@${l}`).join(', ');
+
+                console.log(`#${issue.number}: unassigning ${names} (${daysSinceUpdate} days)`);
+
+                const unassignMsg = [
+                  `Removing assignment from ${names} after ${daysSinceUpdate} days of inactivity`,
+                  '(per the [assignment policy](../blob/main/CONTRIBUTING.rst#issue-assignment-policy)).',
+                  '',
+                  'Feel free to comment if you want to pick this back up or if someone else wants to take it.',
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: unassignMsg,
+                });
+
+                await github.rest.issues.removeAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  assignees: assigneeLogins,
+                });
+
+                if (!labels.includes('help wanted')) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: ['help wanted'],
+                  });
+                }
+
+                continue;
+              }
+
+              // 14+ days -> warn
+              if (daysSinceUpdate >= WARN_DAYS) {
+                // Check if we already warned (avoid spamming)
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  per_page: 5,
+                });
+
+                const recentWarn = comments.some(c =>
+                  c.user.login === 'github-actions[bot]' &&
+                  c.body.includes('assignment policy') &&
+                  (now - new Date(c.created_at)) / (1000 * 60 * 60 * 24) < 10
+                );
+
+                if (recentWarn) {
+                  console.log(`#${issue.number}: skipped (already warned recently)`);
+                  continue;
+                }
+
+                const names = assigneeLogins.map(l => `@${l}`).join(', ');
+
+                console.log(`#${issue.number}: warning ${names} (${daysSinceUpdate} days)`);
+
+                const warnMsg = [
+                  `${names}, this issue has been inactive for ${daysSinceUpdate} days.`,
+                  'Are you still working on it? Drop a comment to let us know.',
+                  '',
+                  'If there is no update within 7 days, the assignment will be removed',
+                  'so someone else can pick it up',
+                  '(per the [assignment policy](../blob/main/CONTRIBUTING.rst#issue-assignment-policy)).',
+                ].join('\n');
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: warnMsg,
+                });
+              }
+            }
