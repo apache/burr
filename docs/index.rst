@@ -29,6 +29,7 @@
    concepts/index
    reference/index
    contributing/index
+   ecosystem
 
 .. toctree::
    :hidden:
