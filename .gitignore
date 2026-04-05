@@ -187,7 +187,7 @@ burr/tracking/server/build
 # pycharm files we don't want to attach
 .idea
 # added by macOS
-.DS_store
+.DS_Store
 
 # statemachine images
 examples/*/statemachine
