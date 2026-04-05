@@ -22,5 +22,8 @@
 .*\.bat
 robots\.txt
 
+# JSON config files (cannot contain comments)
+.*\.json
+
 # Examples pattern (legacy - keeping for compatibility)
 apache_burr-.*/burr/examples
