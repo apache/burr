@@ -25,5 +25,13 @@ robots\.txt
 # JSON config files (cannot contain comments)
 .*\.json
 
+# Third-party MIT-licensed files (attributed in LICENSE)
+examples/deep-researcher/prompts\.py
+examples/deep-researcher/utils\.py
+website/src/components/ui/.*\.tsx
+
+# SVG files (third-party logos and graphics, headers impractical)
+.*\.svg
+
 # Examples pattern (legacy - keeping for compatibility)
 apache_burr-.*/burr/examples
