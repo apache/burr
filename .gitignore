@@ -193,3 +193,4 @@ burr/tracking/server/build
 examples/*/statemachine
 examples/*/*/statemachine
 .vscode
+google_creds.json
