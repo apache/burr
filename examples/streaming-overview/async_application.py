@@ -61,7 +61,7 @@ async def choose_mode(state: State) -> Tuple[dict, State]:
     )
 
     result = await _get_openai_client().chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
             {"role": "user", "content": prompt},
@@ -90,7 +90,7 @@ def prompt_for_more(state: State) -> Tuple[dict, State]:
 
 @streaming_action(reads=["prompt", "chat_history", "mode"], writes=["response"])
 async def chat_response(
-    state: State, prepend_prompt: str, model: str = "gpt-3.5-turbo"
+    state: State, prepend_prompt: str, model: str = "gpt-4o-mini"
 ) -> Tuple[dict, State]:
     """Streaming action, as we don't have the result immediately. This makes it more interactive"""
     chat_history = state["chat_history"].copy()

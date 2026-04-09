@@ -49,7 +49,7 @@ def choose_mode(state: State) -> Tuple[dict, State]:
     )
 
     result = _get_openai_client().chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
             {"role": "user", "content": prompt},

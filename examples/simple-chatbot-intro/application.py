@@ -43,7 +43,7 @@ def ai_response(state: State) -> Tuple[dict, State]:
     client = openai.Client()  # replace this with your favorite LLM client library
     content = (
         client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=state["chat_history"],
         )
         .choices[0]

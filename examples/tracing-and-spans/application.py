@@ -69,7 +69,7 @@ def choose_mode(state: State, __tracer: TracerFactory) -> Tuple[dict, State]:
             client = _get_openai_client()
         with __tracer("query_openai") as tracer:
             result = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant"},
                     {"role": "user", "content": prompt},
@@ -107,7 +107,7 @@ def chat_response(
     state: State,
     prepend_prompt: str,
     __tracer: TracerFactory,
-    model: str = "gpt-3.5-turbo",
+    model: str = "gpt-4o-mini",
 ) -> Tuple[dict, State]:
     __tracer.log_attributes(model=model, prepend_prompt=prepend_prompt)
     with __tracer("process_chat_history"):
