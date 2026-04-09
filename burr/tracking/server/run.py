@@ -138,8 +138,10 @@ async def lifespan(app: FastAPI):
     global initialized
     initialized = True
     yield
-    await workspace.cleanup_processes()
-    await backend.lifespan(app).__anext__()
+    try:
+        await workspace.cleanup_processes()
+    finally:
+        await backend.lifespan(app).__anext__()
 
 
 def _get_app_spec() -> BackendSpec:
@@ -153,7 +155,7 @@ def _get_app_spec() -> BackendSpec:
         snapshotting=is_snapshotting_backend,
         supports_demos=supports_demos,
         supports_annotations=is_annotations_backend,
-        supports_workspace=True,
+        supports_workspace=workspace.is_available(),
     )
 
 

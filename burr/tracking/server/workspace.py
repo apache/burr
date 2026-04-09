@@ -32,6 +32,7 @@ import logging
 import os
 import re
 import signal
+import threading
 import time
 from typing import Dict, List, Optional
 
@@ -42,6 +43,8 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_initialized = True  # Module loaded successfully if we reach this point
 
 MAX_FILE_SIZE = 1_048_576  # 1MB
 
@@ -228,20 +231,50 @@ def _is_binary(file_path: str) -> bool:
 
 _LINKS_PATH = os.path.join(os.path.expanduser("~/.burr"), "workspace_links.json")
 
+# In-process cache for workspace links to avoid disk reads on every request.
+_links_cache: Optional[dict] = None
+_links_cache_lock = threading.Lock()
+
 
 def _read_links() -> dict:
-    """Read workspace-to-project links from ~/.burr/workspace_links.json."""
+    """Read workspace-to-project links from ~/.burr/workspace_links.json.
+
+    Uses an in-process cache that is invalidated on writes via _write_links().
+    """
+    global _links_cache
+    with _links_cache_lock:
+        if _links_cache is not None:
+            return _links_cache
     if os.path.exists(_LINKS_PATH):
         with open(_LINKS_PATH, "r") as f:
-            return json_module.load(f)
-    return {}
+            data = json_module.load(f)
+    else:
+        data = {}
+    with _links_cache_lock:
+        _links_cache = data
+    return data
 
 
 def _write_links(data: dict):
-    """Write workspace-to-project links to ~/.burr/workspace_links.json."""
+    """Write workspace-to-project links to ~/.burr/workspace_links.json.
+
+    Invalidates the in-process cache so subsequent reads pick up changes.
+    """
+    global _links_cache
     os.makedirs(os.path.dirname(_LINKS_PATH), exist_ok=True)
     with open(_LINKS_PATH, "w") as f:
         json_module.dump(data, f, indent=2)
+    with _links_cache_lock:
+        _links_cache = data
+
+
+def is_available() -> bool:
+    """Return True if the workspace module initialized successfully.
+
+    Used by run.py to dynamically set supports_workspace in the BackendSpec
+    instead of hardcoding True.
+    """
+    return _initialized
 
 
 # --- Process Management ---
