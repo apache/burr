@@ -467,7 +467,10 @@ async def stream_output(pid: int):
     proc = _processes[pid]["process"]
 
     async def event_generator():
+        """Yield SSE-formatted lines by interleaving stdout and stderr."""
+
         async def read_stream(stream, stream_type):
+            """Read lines from an async stream and yield them as SSE data."""
             while True:
                 line = await stream.readline()
                 if not line:
