@@ -113,7 +113,7 @@ class TemporalInterceptor(ActionExecutionInterceptorHookAsync):
             self._client = await Client.connect("localhost:7233")
         return self._client
 
-    async def should_intercept(self, *, action: Action, **future_kwargs: Any) -> bool:
+    def should_intercept(self, *, action: Action, **future_kwargs: Any) -> bool:
         """Intercept actions tagged with 'durable'."""
         return hasattr(action, "tags") and "durable" in getattr(action, "tags", {})
 
@@ -142,12 +142,12 @@ class TemporalInterceptor(ActionExecutionInterceptorHookAsync):
         # Call worker hooks if provided
         worker_adapter_set = future_kwargs.get("worker_adapter_set")
         if worker_adapter_set:
-            for hook in worker_adapter_set.get_hooks(PreRunStepHookWorkerAsync):
-                await hook.pre_run_step_worker(
-                    action=action.name,
-                    state=state,
-                    inputs=inputs,
-                )
+            await worker_adapter_set.call_all_lifecycle_hooks_async(
+                "pre_run_step_worker",
+                action=action,
+                state=state,
+                inputs=inputs,
+            )
 
         # Execute as Temporal activity
         result_data = await client.execute_workflow(
@@ -167,12 +167,13 @@ class TemporalInterceptor(ActionExecutionInterceptorHookAsync):
 
         # Call post-run worker hooks
         if worker_adapter_set:
-            for hook in worker_adapter_set.get_hooks(PostRunStepHookWorkerAsync):
-                await hook.post_run_step_worker(
-                    action=action.name,
-                    state=state,
-                    result=result,
-                )
+            await worker_adapter_set.call_all_lifecycle_hooks_async(
+                "post_run_step_worker",
+                action=action,
+                state=state,
+                result=result,
+                exception=None,
+            )
 
         # For single-step actions, wrap state update
         if hasattr(action, "single_step") and action.single_step:
@@ -189,14 +190,22 @@ class TemporalWorkerLogger(PreRunStepHookWorkerAsync, PostRunStepHookWorkerAsync
     """Example worker hook that logs action execution on the Temporal worker side."""
 
     async def pre_run_step_worker(
-        self, *, action: str, state: "State", inputs: Dict[str, Any], **kwargs
+        self, *, action: Action, state: "State", inputs: Dict[str, Any], **future_kwargs
     ):
         """Log before action runs on worker."""
-        logger.info(f"[Worker Hook] PRE: {action}")
+        logger.info(f"[Worker Hook] PRE: {action.name}")
 
-    async def post_run_step_worker(self, *, action: str, state: "State", result: dict, **kwargs):
+    async def post_run_step_worker(
+        self,
+        *,
+        action: Action,
+        state: "State",
+        result: dict,
+        exception: Exception,
+        **future_kwargs,
+    ):
         """Log after action runs on worker."""
-        logger.info(f"[Worker Hook] POST: {action} -> {list(result.keys())}")
+        logger.info(f"[Worker Hook] POST: {action.name} -> {list(result.keys())}")
 
 
 # --- Example Application ---

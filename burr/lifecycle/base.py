@@ -709,13 +709,17 @@ class ActionExecutionInterceptorHookAsync(abc.ABC):
     """Async version of ActionExecutionInterceptorHook for intercepting async actions."""
 
     @abc.abstractmethod
-    async def should_intercept(
+    def should_intercept(
         self,
         *,
         action: "Action",
         **future_kwargs: Any,
     ) -> bool:
         """Determine if this action should be intercepted.
+
+        Note: This method is intentionally synchronous even on async interceptors.
+        It is a pure predicate used inside lambdas that cannot be awaited. If you
+        need I/O to decide, cache the result during __init__ or pre_run_step.
 
         :param action: Action to potentially intercept
         :param future_kwargs: Future keyword arguments
@@ -799,13 +803,17 @@ class StreamingActionInterceptorHookAsync(abc.ABC):
     """Async version for intercepting async streaming actions."""
 
     @abc.abstractmethod
-    async def should_intercept(
+    def should_intercept(
         self,
         *,
         action: "Action",
         **future_kwargs: Any,
     ) -> bool:
         """Determine if this streaming action should be intercepted.
+
+        Note: This method is intentionally synchronous even on async interceptors.
+        It is a pure predicate used inside lambdas that cannot be awaited. If you
+        need I/O to decide, cache the result during __init__ or pre_run_step.
 
         :param action: Streaming action to potentially intercept
         :param future_kwargs: Future keyword arguments
@@ -814,7 +822,7 @@ class StreamingActionInterceptorHookAsync(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def intercept_stream_run_and_update(
+    async def intercept_stream_run_and_update(
         self,
         *,
         action: "Action",
