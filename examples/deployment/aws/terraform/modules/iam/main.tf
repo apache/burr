@@ -86,4 +86,3 @@ resource "aws_iam_role_policy" "sqs" {
   role   = aws_iam_role.burr_server.id
   policy = data.aws_iam_policy_document.sqs_least_privilege[0].json
 }
-
