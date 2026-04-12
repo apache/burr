@@ -71,6 +71,37 @@ class StateToPromptMapper(Protocol):
     def __call__(self, state: State) -> dict[str, Any]: ...  # noqa: E704
 
 
+def _text_from_content_blocks(content_blocks: list[Any]) -> str:
+    """Join text from every content block (multi-block replies, tool use + text, etc.)."""
+    parts: list[str] = []
+    for block in content_blocks:
+        if isinstance(block, dict) and "text" in block:
+            parts.append(block["text"])
+    return "\n".join(parts)
+
+
+def _model_result_for_writes(
+    text: str,
+    usage: dict[str, Any],
+    stop_reason: Any,
+    writes: list[str],
+) -> dict[str, Any]:
+    """Build the result dict and ensure each ``writes`` key maps to the right value."""
+    result: dict[str, Any] = {
+        "response": text,
+        "usage": usage,
+        "stop_reason": stop_reason,
+    }
+    for w in writes:
+        if w == "usage":
+            result[w] = usage
+        elif w == "stop_reason":
+            result[w] = stop_reason
+        else:
+            result[w] = text
+    return result
+
+
 class _BedrockCore:
     """Shared Bedrock client, inference config, and Converse request shape."""
 
@@ -145,7 +176,56 @@ class _BedrockCore:
         return request
 
 
-class BedrockAction(SingleStepAction):
+class _BedrockBase:
+    """Shared Bedrock wiring: core state and reads/writes/name for action subclasses."""
+
+    _bedrock: _BedrockCore
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+    def _init_bedrock_core(
+        self,
+        model_id: str,
+        input_mapper: StateToPromptMapper,
+        reads: list[str],
+        writes: list[str],
+        name: str,
+        region: Optional[str],
+        guardrail_id: Optional[str],
+        guardrail_version: Optional[str],
+        inference_config: Optional[dict[str, Any]],
+        max_retries: int,
+        client: Optional[BedrockClient],
+    ) -> None:
+        self._bedrock = _BedrockCore(
+            model_id=model_id,
+            input_mapper=input_mapper,
+            reads=reads,
+            writes=writes,
+            name=name,
+            region=region,
+            guardrail_id=guardrail_id,
+            guardrail_version=guardrail_version,
+            inference_config=inference_config,
+            max_retries=max_retries,
+            client=client,
+        )
+
+    @property
+    def reads(self) -> list[str]:
+        return self._bedrock.reads
+
+    @property
+    def writes(self) -> list[str]:
+        return self._bedrock.writes
+
+    @property
+    def name(self) -> str:
+        return self._bedrock.name
+
+
+class BedrockAction(_BedrockBase, SingleStepAction):
     """Action that invokes Amazon Bedrock models using the Converse API.
 
     :param model_id: Bedrock model identifier (e.g. Anthropic Claude on Bedrock).
@@ -180,7 +260,7 @@ class BedrockAction(SingleStepAction):
         client: Optional[BedrockClient] = None,
     ):
         super().__init__()
-        self._bedrock = _BedrockCore(
+        self._init_bedrock_core(
             model_id=model_id,
             input_mapper=input_mapper,
             reads=reads,
@@ -194,18 +274,6 @@ class BedrockAction(SingleStepAction):
             client=client,
         )
 
-    @property
-    def reads(self) -> list[str]:
-        return self._bedrock.reads
-
-    @property
-    def writes(self) -> list[str]:
-        return self._bedrock.writes
-
-    @property
-    def name(self) -> str:
-        return self._bedrock.name
-
     def run_and_update(self, state: State, **run_kwargs) -> tuple[dict, State]:
         request = self._bedrock.build_converse_request(state)
 
@@ -217,13 +285,14 @@ class BedrockAction(SingleStepAction):
 
         output_message = response["output"]["message"]
         content_blocks = output_message.get("content", [])
-        text = content_blocks[0]["text"] if content_blocks else ""
+        text = _text_from_content_blocks(content_blocks)
 
-        result: dict[str, Any] = {
-            "response": text,
-            "usage": response.get("usage", {}),
-            "stop_reason": response.get("stopReason"),
-        }
+        result = _model_result_for_writes(
+            text,
+            response.get("usage", {}),
+            response.get("stopReason"),
+            self._bedrock.writes,
+        )
 
         updates = {key: result[key] for key in self._bedrock.writes if key in result}
         new_state = state.update(**updates)
@@ -231,7 +300,7 @@ class BedrockAction(SingleStepAction):
         return result, new_state
 
 
-class BedrockStreamingAction(StreamingAction):
+class BedrockStreamingAction(_BedrockBase, StreamingAction):
     """Streaming Bedrock action using the Converse Stream API.
 
     Parameters match :class:`BedrockAction` except the default ``name`` is
@@ -254,7 +323,7 @@ class BedrockStreamingAction(StreamingAction):
         client: Optional[BedrockClient] = None,
     ):
         super().__init__()
-        self._bedrock = _BedrockCore(
+        self._init_bedrock_core(
             model_id=model_id,
             input_mapper=input_mapper,
             reads=reads,
@@ -268,18 +337,6 @@ class BedrockStreamingAction(StreamingAction):
             client=client,
         )
 
-    @property
-    def reads(self) -> list[str]:
-        return self._bedrock.reads
-
-    @property
-    def writes(self) -> list[str]:
-        return self._bedrock.writes
-
-    @property
-    def name(self) -> str:
-        return self._bedrock.name
-
     def stream_run(self, state: State, **run_kwargs) -> Generator[dict, None, None]:
         request = self._bedrock.build_converse_request(state)
 
@@ -289,19 +346,21 @@ class BedrockStreamingAction(StreamingAction):
             logger.error("Bedrock streaming API error: %s", e)
             raise
 
-        full_response = ""
+        text_parts: list[str] = []
         stream = response.get("stream", [])
         for event in stream:
             if "contentBlockDelta" in event:
                 chunk = event["contentBlockDelta"]["delta"].get("text", "")
-                full_response += chunk
+                text_parts.append(chunk)
+                full_response = "".join(text_parts)
                 yield {"chunk": chunk, "response": full_response}
 
-        yield {"chunk": "", "response": full_response, "complete": True}
+        full_text = "".join(text_parts)
+        payload = _model_result_for_writes(full_text, {}, None, self._bedrock.writes)
+        yield {"chunk": "", "complete": True, **payload}
 
     def update(self, result: dict, state: State) -> State:
         if result.get("complete"):
-            updates = {"response": result.get("response", "")}
-            filtered = {k: v for k, v in updates.items() if k in self._bedrock.writes}
-            return state.update(**filtered)
+            updates = {key: result[key] for key in self._bedrock.writes if key in result}
+            return state.update(**updates)
         return state

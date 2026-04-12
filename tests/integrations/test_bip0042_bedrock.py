@@ -257,6 +257,51 @@ class TestBedrockActionInterface:
         result, _ = action.run_and_update({})
         assert result["response"] == ""
 
+    def test_multiple_text_blocks_joined_with_newline(self):
+        from burr.integrations.bedrock import BedrockAction
+
+        mock_client = MagicMock()
+        mock_client.converse.return_value = {
+            "output": {
+                "message": {
+                    "content": [
+                        {"text": "first"},
+                        {"text": "second"},
+                    ]
+                }
+            },
+            "usage": {},
+            "stopReason": "end_turn",
+        }
+        action = BedrockAction(
+            model_id="test-model",
+            input_mapper=lambda s: {"messages": [{"role": "user", "content": "hi"}]},
+            reads=[],
+            writes=["response"],
+            client=mock_client,
+        )
+        result, _ = action.run_and_update({})
+        assert result["response"] == "first\nsecond"
+
+    def test_custom_write_key_updates_state(self):
+        from burr.integrations.bedrock import BedrockAction
+
+        mock_client = MagicMock()
+        mock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": "hello"}]}},
+            "usage": {},
+            "stopReason": "end_turn",
+        }
+        action = BedrockAction(
+            model_id="test-model",
+            input_mapper=lambda s: {"messages": [{"role": "user", "content": "hi"}]},
+            reads=[],
+            writes=["answer"],
+            client=mock_client,
+        )
+        _, new_state = action.run_and_update(State({}))
+        assert new_state.get("answer") == "hello"
+
     def test_client_error_from_converse_propagates(self):
         from burr.integrations.bedrock import BedrockAction
 
@@ -333,6 +378,27 @@ class TestBedrockStreamingActionInterface:
         assert s1.get("response") == "old"
         s2 = action.update({"complete": True, "response": "final"}, s0)
         assert s2.get("response") == "final"
+
+    def test_streaming_custom_write_key_updates_state(self):
+        from burr.integrations.bedrock import BedrockStreamingAction
+
+        action = BedrockStreamingAction(
+            model_id="test-model",
+            input_mapper=lambda s: {"messages": []},
+            reads=[],
+            writes=["answer"],
+        )
+        s0 = State({})
+        final = {
+            "chunk": "",
+            "complete": True,
+            "response": "done",
+            "usage": {},
+            "stop_reason": None,
+            "answer": "done",
+        }
+        s1 = action.update(final, s0)
+        assert s1.get("answer") == "done"
 
 
 class TestStateToPromptMapperProtocol:
