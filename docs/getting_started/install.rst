@@ -174,3 +174,9 @@ This installs the server dependencies to run the UI and load tracking that was s
     pip install "burr[tracking-server]"
 
 This installs the server dependencies for running the UI off a filesystem.
+
+.. code-block:: bash
+
+    pip install "burr[bedrock]"
+
+This installs ``boto3`` for the :ref:`Amazon Bedrock integration <bedrock-integration>` (``BedrockAction`` / ``BedrockStreamingAction``).

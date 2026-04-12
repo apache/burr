@@ -103,6 +103,7 @@ tests = [
 
 documentation = [
   "apache-burr[tests]",
+  "apache-burr[bedrock]",
   "sphinx<9",
   "sphinx-autobuild",
   "myst-nb",
@@ -125,6 +126,10 @@ tracking-client = [
 
 tracking-client-s3 = [
   "apache-burr[tracking-client]",
+  "boto3"
+]
+
+bedrock = [
   "boto3"
 ]
 

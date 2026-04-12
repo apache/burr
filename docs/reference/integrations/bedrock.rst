@@ -17,21 +17,28 @@
    under the License.
 
 
-============
-Integrations
-============
+.. _bedrock-integration:
 
-Integrations -- we will be adding more
+==============
+Amazon Bedrock
+==============
 
-.. toctree::
-   :maxdepth: 2
+`Amazon Bedrock <https://aws.amazon.com/bedrock/>`_ models can be called through the
+Bedrock Runtime **Converse** and **Converse Stream** APIs using the actions below.
 
-   hamilton
-   streamlit
-   opentelemetry
-   traceloop
-   langchain
-   pydantic
-   haystack
-   ray
-   bedrock
+Install the optional extra (pulls ``boto3``):
+
+.. code-block:: bash
+
+   pip install "burr[bedrock]"
+
+IAM permissions must allow ``bedrock:InvokeModel`` / streaming equivalents for your
+chosen models; see AWS documentation for your account and model IDs.
+
+.. autoclass:: burr.integrations.bedrock.BedrockAction
+   :members: run_and_update
+   :show-inheritance:
+
+.. autoclass:: burr.integrations.bedrock.BedrockStreamingAction
+   :members: stream_run, update
+   :show-inheritance:

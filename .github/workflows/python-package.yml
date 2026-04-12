@@ -73,7 +73,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests --ignore=tests/integrations/persisters
+          python -m pytest tests --ignore=tests/integrations/persisters --ignore=tests/integrations/test_bip0042_bedrock.py
 
   test-tracking-server-s3:
     runs-on: ubuntu-latest
@@ -97,6 +97,29 @@ jobs:
       - name: Run S3 tracking server tests
         run: |
           python -m pytest tests/tracking/test_bip0042_s3_buffering.py -v
+
+  test-bedrock:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -e ".[tests,bedrock]"
+
+      - name: Run Bedrock integration tests
+        run: |
+          python -m pytest tests/integrations/test_bip0042_bedrock.py -v
 
   validate-examples:
     runs-on: ubuntu-latest
