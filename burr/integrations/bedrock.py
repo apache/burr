@@ -155,7 +155,9 @@ class _BedrockCore:
         if self._client is not None:
             return self._client
         config = Config(retries={"max_attempts": self._max_retries, "mode": "adaptive"})
-        self._client = boto3.client("bedrock-runtime", region_name=self._region, config=config)
+        self._client = boto3.client(
+            "bedrock-runtime", region_name=self._region, config=config
+        )
         return self._client
 
     def build_converse_request(self, state: State) -> dict[str, Any]:
@@ -361,6 +363,8 @@ class BedrockStreamingAction(_BedrockBase, StreamingAction):
 
     def update(self, result: dict, state: State) -> State:
         if result.get("complete"):
-            updates = {key: result[key] for key in self._bedrock.writes if key in result}
+            updates = {
+                key: result[key] for key in self._bedrock.writes if key in result
+            }
             return state.update(**updates)
         return state
