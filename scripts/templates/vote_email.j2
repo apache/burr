@@ -1,0 +1,58 @@
+{#
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+#}
+[VOTE] Release Apache {{ project_short_name }} {{ version_with_incubating }} (RC{{ rc_num }})
+
+Hi all,
+
+This is a call for a vote on releasing Apache {{ project_short_name }} {{ version_with_incubating }},
+release candidate {{ rc_num }}.
+
+The artifacts for this release candidate can be found at:
+{{ svn_url }}
+
+The PyPI release candidate package is available at:
+{{ pypi_url }}
+
+The Git tag to be voted upon is:
+{{ git_tag }}
+
+Release artifacts are signed with the release manager's GPG key. The KEYS file is available at:
+{{ keys_url }}
+
+Changelog summary:
+{{ changelog_summary }}
+
+Please download, verify, and test the release candidate.
+
+For detailed step-by-step instructions on how to verify this release, please see the
+"For Voters: Verifying a Release" section in the scripts/README.md file within the
+source archive.
+
+The vote will run for a minimum of 72 hours and close no earlier than:
+{{ vote_deadline }}
+
+Please vote:
+
+[ ] +1 Release this package as Apache {{ project_short_name }} {{ version_with_incubating }}
+[ ] +0 No opinion
+[ ] -1 Do not release this package because... (reason required)
+
+Checklist for reference:
+[ ] Download links are valid
+[ ] Checksums and signatures are valid
+[ ] LICENSE/NOTICE files exist
+[ ] No unexpected binary files in source
+[ ] All source files have ASF headers
+[ ] Can compile from source
+
+On behalf of the Apache {{ project_short_name }} PPMC,
+[Your Name]

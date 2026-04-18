@@ -38,12 +38,16 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import NoReturn, Optional
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, NoReturn, Optional
 
 # --- Configuration ---
 PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+DEFAULT_DOWNLOADS_URL = f"https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/"
 
 # Required examples for wheel (from pyproject.toml)
 REQUIRED_EXAMPLES = [
@@ -53,7 +57,6 @@ REQUIRED_EXAMPLES = [
     "streaming-fastapi",
     "deep-researcher",
 ]
-
 
 # ============================================================================
 # Utility Functions
@@ -119,6 +122,246 @@ def _run_command(
         _fail(f"{error_message}{error_detail}")
 
 
+def _render_template(template_name: str, context: dict[str, Any]) -> str:
+    """Render a template with Jinja2 if available, or a simple placeholder fallback."""
+    template_path = TEMPLATES_DIR / template_name
+
+    if not template_path.exists():
+        _fail(f"Template not found: {template_path}")
+
+    try:
+        from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
+        environment = Environment(
+            loader=FileSystemLoader(str(TEMPLATES_DIR)),
+            autoescape=False,
+            keep_trailing_newline=True,
+            trim_blocks=True,
+            lstrip_blocks=True,
+            undefined=StrictUndefined,
+        )
+        return environment.get_template(template_name).render(**context)
+    except ImportError:
+        content = template_path.read_text(encoding="utf-8")
+        for key, value in context.items():
+            content = re.sub(r"{{\s*" + re.escape(key) + r"\s*}}", str(value), content)
+        return re.sub(r"{#.*?#}\n?", "", content, flags=re.DOTALL)
+
+
+def _copy_to_clipboard(content: str) -> bool:
+    """Copy content to the system clipboard when a known clipboard tool exists."""
+    clipboard_commands = [
+        ["pbcopy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+        ["clip"],
+    ]
+
+    for command in clipboard_commands:
+        if shutil.which(command[0]) is None:
+            continue
+        try:
+            subprocess.run(command, input=content, text=True, check=True)
+            return True
+        except subprocess.CalledProcessError:
+            continue
+    return False
+
+
+def _emit_email_output(content: str, copy_to_clipboard: bool = False) -> None:
+    """Emit rendered email to stdout and optionally copy it to the clipboard."""
+    print(content)
+    if copy_to_clipboard:
+        if _copy_to_clipboard(content):
+            print("\n✓ Copied email content to clipboard")
+        else:
+            print("\n⚠️  Clipboard tool not found; email content was printed to stdout instead")
+
+
+def _parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse an X.Y.Z version string into a sortable tuple."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+    if not match:
+        _fail(f"Invalid version format: {version}")
+    return tuple(int(part) for part in match.groups())
+
+
+def _list_release_tags() -> list[tuple[tuple[int, int, int], str]]:
+    """List known release tags in the repository."""
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return []
+
+    tags: list[tuple[tuple[int, int, int], str]] = []
+    for line in result.stdout.splitlines():
+        match = re.fullmatch(r"(?:v|burr-)(\d+\.\d+\.\d+)", line.strip())
+        if match:
+            tags.append((_parse_semver(match.group(1)), line.strip()))
+    return sorted(tags)
+
+
+def _find_previous_release_tag(version: str) -> Optional[str]:
+    """Find the most recent release tag strictly older than the requested version."""
+    target = _parse_semver(version)
+    previous_tags = [tag for parsed, tag in _list_release_tags() if parsed < target]
+    if not previous_tags:
+        return None
+    return previous_tags[-1]
+
+
+def _find_release_tag(version: str) -> Optional[str]:
+    """Find the exact release tag for a version, if it exists."""
+    target = _parse_semver(version)
+    matching_tags = [tag for parsed, tag in _list_release_tags() if parsed == target]
+    if not matching_tags:
+        return None
+    return matching_tags[-1]
+
+
+def _build_changelog_summary(
+    version: str, previous_tag: Optional[str] = None, max_entries: int = 8
+) -> str:
+    """Summarize recent commits since the prior release tag."""
+    if previous_tag is None:
+        previous_tag = _find_previous_release_tag(version)
+    release_tag = _find_release_tag(version)
+
+    if not previous_tag:
+        return "- Changelog summary unavailable; please add a short summary before sending."
+
+    revision_range = f"{previous_tag}..{release_tag or 'HEAD'}"
+
+    try:
+        result = subprocess.run(
+            ["git", "log", revision_range, "--pretty=format:%s"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return f"- Changelog summary unavailable; review commits in {revision_range} manually."
+
+    subjects = []
+    for line in result.stdout.splitlines():
+        cleaned = line.strip()
+        if cleaned and cleaned not in subjects:
+            subjects.append(cleaned)
+
+    if not subjects:
+        return f"- No commits found in {revision_range}; verify the tag range before sending."
+
+    summary_lines = [f"- {subject}" for subject in subjects[:max_entries]]
+    remaining = len(subjects) - len(summary_lines)
+    if remaining > 0:
+        summary_lines.append(f"- ... plus {remaining} more commits in {revision_range}")
+    return "\n".join(summary_lines)
+
+
+def _build_vote_deadline(hours: int = 72) -> datetime:
+    """Return the vote deadline timestamp in UTC."""
+    return datetime.now(timezone.utc) + timedelta(hours=hours)
+
+
+def _format_vote_deadline(deadline: datetime) -> str:
+    """Format the vote deadline for email output."""
+    return deadline.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _build_vote_email_context(
+    version: str,
+    rc_num: str,
+    svn_url: Optional[str] = None,
+    pypi_url: Optional[str] = None,
+    keys_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+    deadline: Optional[datetime] = None,
+) -> dict[str, str]:
+    """Build rendering context for the vote email template."""
+    version_with_incubating = f"{version}-incubating"
+    svn_url = svn_url or _build_svn_dev_url(version, rc_num)
+    deadline = deadline or _build_vote_deadline()
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "version": version,
+        "version_with_incubating": version_with_incubating,
+        "rc_num": rc_num,
+        "svn_url": svn_url,
+        "pypi_url": pypi_url or _build_pypi_rc_url(version, rc_num),
+        "keys_url": keys_url or _build_keys_url(),
+        "git_tag": f"v{version}-incubating-RC{rc_num}",
+        "changelog_summary": changelog_summary
+        or _build_changelog_summary(version, previous_tag=previous_tag),
+        "vote_deadline": _format_vote_deadline(deadline),
+    }
+
+
+def _build_result_email_context(
+    version: str,
+    rc_num: str,
+    binding_yes: int,
+    non_binding_yes: int,
+    abstain: int,
+    no_votes: int,
+    vote_thread_url: Optional[str] = None,
+) -> dict[str, str]:
+    """Build rendering context for the result email template."""
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "version": version,
+        "version_with_incubating": f"{version}-incubating",
+        "rc_num": rc_num,
+        "binding_yes": str(binding_yes),
+        "non_binding_yes": str(non_binding_yes),
+        "abstain": str(abstain),
+        "no_votes": str(no_votes),
+        "vote_thread_url": vote_thread_url or "[add link to vote thread]",
+    }
+
+
+def _build_announcement_email_context(
+    version: str,
+    pypi_url: Optional[str] = None,
+    downloads_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+) -> dict[str, str]:
+    """Build rendering context for the release announcement template."""
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "version": version,
+        "version_with_incubating": f"{version}-incubating",
+        "pypi_url": pypi_url or f"https://pypi.org/project/apache-burr/{version}/",
+        "downloads_url": downloads_url or DEFAULT_DOWNLOADS_URL,
+        "changelog_summary": changelog_summary
+        or _build_changelog_summary(version, previous_tag=previous_tag),
+    }
+
+
+def _build_svn_dev_url(version: str, rc_num: str) -> str:
+    """Build the Apache SVN development artifacts URL for an RC."""
+    return (
+        "https://dist.apache.org/repos/dist/dev/incubator/"
+        f"{PROJECT_SHORT_NAME}/{version}-incubating-RC{rc_num}"
+    )
+
+
+def _build_keys_url() -> str:
+    """Build the Apache KEYS URL."""
+    return f"{DEFAULT_DOWNLOADS_URL}KEYS"
+
+
+def _build_pypi_rc_url(version: str, rc_num: str) -> str:
+    """Build the PyPI URL for a release candidate."""
+    return f"https://pypi.org/project/apache-burr/{version}rc{rc_num}/"
+
+
 # ============================================================================
 # Environment Validation
 # ============================================================================
@@ -138,9 +381,12 @@ def _validate_environment_for_command(args) -> None:
         "upload": ["git", "gpg", "svn"],
         "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
         "verify": ["git", "gpg", "twine"],
+        "vote-email": ["git"],
+        "result-email": [],
+        "announce-email": ["git"],
     }
 
-    required_tools = command_requirements.get(args.command, ["git", "gpg"])
+    required_tools = command_requirements.get(args.command, [])
 
     # Check for RAT if needed
     if hasattr(args, "check_licenses") or hasattr(args, "check_licenses_report"):
@@ -720,50 +966,49 @@ def _upload_to_svn(
 
 
 def _generate_vote_email(version: str, rc_num: str, svn_url: str) -> str:
-    """Generate [VOTE] email template."""
-    version_with_incubating = f"{version}-incubating"
-    tag = f"v{version}-incubating-RC{rc_num}"
+    """Generate [VOTE] email from template."""
+    context = _build_vote_email_context(version=version, rc_num=rc_num, svn_url=svn_url)
+    return _render_template("vote_email.j2", context)
 
-    return f"""[VOTE] Release Apache {PROJECT_SHORT_NAME} {version_with_incubating} (RC{rc_num})
 
-Hi all,
+def _generate_result_email(
+    version: str,
+    rc_num: str,
+    binding_yes: int,
+    non_binding_yes: int,
+    abstain: int,
+    no_votes: int,
+    vote_thread_url: Optional[str] = None,
+) -> str:
+    """Generate [RESULT] email from template."""
+    context = _build_result_email_context(
+        version=version,
+        rc_num=rc_num,
+        binding_yes=binding_yes,
+        non_binding_yes=non_binding_yes,
+        abstain=abstain,
+        no_votes=no_votes,
+        vote_thread_url=vote_thread_url,
+    )
+    return _render_template("result_email.j2", context)
 
-This is a call for a vote on releasing Apache {PROJECT_SHORT_NAME} {version_with_incubating},
-release candidate {rc_num}.
 
-The artifacts for this release candidate can be found at:
-{svn_url}
-
-The Git tag to be voted upon is:
-{tag}
-
-Release artifacts are signed with the release manager's GPG key. The KEYS file is available at:
-https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/KEYS
-
-Please download, verify, and test the release candidate.
-
-For detailed step-by-step instructions on how to verify this release, please see the
-"For Voters: Verifying a Release" section in the scripts/README.md file within the
-source archive.
-
-The vote will run for a minimum of 72 hours.
-Please vote:
-
-[ ] +1 Release this package as Apache {PROJECT_SHORT_NAME} {version_with_incubating}
-[ ] +0 No opinion
-[ ] -1 Do not release this package because... (reason required)
-
-Checklist for reference:
-[ ] Download links are valid
-[ ] Checksums and signatures are valid
-[ ] LICENSE/NOTICE files exist
-[ ] No unexpected binary files in source
-[ ] All source files have ASF headers
-[ ] Can compile from source
-
-On behalf of the Apache {PROJECT_SHORT_NAME} PPMC,
-[Your Name]
-"""
+def _generate_announcement_email(
+    version: str,
+    pypi_url: Optional[str] = None,
+    downloads_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+) -> str:
+    """Generate [ANNOUNCE] email from template."""
+    context = _build_announcement_email_context(
+        version=version,
+        pypi_url=pypi_url,
+        downloads_url=downloads_url,
+        changelog_summary=changelog_summary,
+        previous_tag=previous_tag,
+    )
+    return _render_template("announce_email.j2", context)
 
 
 # ============================================================================
@@ -877,6 +1122,61 @@ def cmd_verify(args) -> bool:
     return all_valid
 
 
+def cmd_vote_email(args) -> bool:
+    """Handle 'vote-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _render_template(
+        "vote_email.j2",
+        _build_vote_email_context(
+            version=args.version,
+            rc_num=args.rc_num,
+            svn_url=args.svn_url,
+            pypi_url=args.pypi_url,
+            keys_url=args.keys_url,
+            changelog_summary=args.changelog_summary,
+            previous_tag=args.previous_tag,
+        ),
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
+
+
+def cmd_result_email(args) -> bool:
+    """Handle 'result-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _generate_result_email(
+        version=args.version,
+        rc_num=args.rc_num,
+        binding_yes=args.binding_yes,
+        non_binding_yes=args.non_binding_yes,
+        abstain=args.abstain,
+        no_votes=args.no_votes,
+        vote_thread_url=args.vote_thread_url,
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
+
+
+def cmd_announce_email(args) -> bool:
+    """Handle 'announce-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _generate_announcement_email(
+        version=args.version,
+        pypi_url=args.pypi_url,
+        downloads_url=args.downloads_url,
+        changelog_summary=args.changelog_summary,
+        previous_tag=args.previous_tag,
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
+
+
 def cmd_all(args) -> bool:
     """Handle 'all' subcommand - run complete workflow."""
     _print_section(f"Apache Burr Release Process - v{args.version}-RC{args.rc_num}")
@@ -935,8 +1235,14 @@ def cmd_all(args) -> bool:
 # ============================================================================
 
 
-def main():
-    """Main entry point."""
+def _add_email_common_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add common CLI arguments shared by email-generation commands."""
+    parser.add_argument("--version", required=True, help="Version (e.g., '0.41.0')")
+    parser.add_argument("--copy", action="store_true", help="Copy rendered email to clipboard")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(description="Apache Burr Release Script (Simplified)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -972,6 +1278,57 @@ def main():
     verify_parser.add_argument("rc_num", help="RC number")
     verify_parser.add_argument("--artifacts-dir", default="dist")
 
+    # vote-email subcommand
+    vote_email_parser = subparsers.add_parser("vote-email", help="Generate release vote email")
+    _add_email_common_arguments(vote_email_parser)
+    vote_email_parser.add_argument("--rc", dest="rc_num", required=True, help="RC number")
+    vote_email_parser.add_argument("--svn-url", help="Override the Apache SVN RC URL")
+    vote_email_parser.add_argument("--pypi-url", help="Override the PyPI RC package URL")
+    vote_email_parser.add_argument("--keys-url", help="Override the Apache KEYS URL")
+    vote_email_parser.add_argument(
+        "--previous-tag",
+        help="Use a specific previous release tag when building the changelog summary",
+    )
+    vote_email_parser.add_argument(
+        "--changelog-summary",
+        help="Provide a custom changelog summary instead of generating one from git history",
+    )
+
+    # result-email subcommand
+    result_email_parser = subparsers.add_parser(
+        "result-email", help="Generate release vote result email"
+    )
+    _add_email_common_arguments(result_email_parser)
+    result_email_parser.add_argument("--rc", dest="rc_num", required=True, help="RC number")
+    result_email_parser.add_argument(
+        "--binding-yes", type=int, default=3, help="Number of binding +1 votes"
+    )
+    result_email_parser.add_argument(
+        "--non-binding-yes", type=int, default=0, help="Number of non-binding +1 votes"
+    )
+    result_email_parser.add_argument("--abstain", type=int, default=0, help="Number of 0 votes")
+    result_email_parser.add_argument("--no-votes", type=int, default=0, help="Number of -1 votes")
+    result_email_parser.add_argument("--vote-thread-url", help="Link to the vote thread archive")
+
+    # announce-email subcommand
+    announce_email_parser = subparsers.add_parser(
+        "announce-email", help="Generate release announcement email"
+    )
+    _add_email_common_arguments(announce_email_parser)
+    announce_email_parser.add_argument("--pypi-url", help="Override the PyPI release URL")
+    announce_email_parser.add_argument(
+        "--downloads-url",
+        help="Override the Apache downloads URL",
+    )
+    announce_email_parser.add_argument(
+        "--previous-tag",
+        help="Use a specific previous release tag when building the changelog summary",
+    )
+    announce_email_parser.add_argument(
+        "--changelog-summary",
+        help="Provide a custom changelog summary instead of generating one from git history",
+    )
+
     # all subcommand
     all_parser = subparsers.add_parser("all", help="Run complete workflow")
     all_parser.add_argument("version", help="Version")
@@ -981,6 +1338,12 @@ def main():
     all_parser.add_argument("--dry-run", action="store_true")
     all_parser.add_argument("--no-upload", action="store_true")
 
+    return parser
+
+
+def main():
+    """Main entry point."""
+    parser = _build_parser()
     args = parser.parse_args()
 
     # Validate environment
@@ -998,6 +1361,12 @@ def main():
             success = cmd_upload(args)
         elif args.command == "verify":
             success = cmd_verify(args)
+        elif args.command == "vote-email":
+            success = cmd_vote_email(args)
+        elif args.command == "result-email":
+            success = cmd_result_email(args)
+        elif args.command == "announce-email":
+            success = cmd_announce_email(args)
         elif args.command == "all":
             success = cmd_all(args)
         else:
