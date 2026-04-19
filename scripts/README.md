@@ -96,6 +96,11 @@ python scripts/apache_release.py verify 0.41.0 0
 
 # Skip upload step in 'all' command
 python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
+
+# Generate release emails from templates
+python scripts/apache_release.py vote-email --version 0.41.0 --rc 0
+python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-yes 3 --non-binding-yes 2
+python scripts/apache_release.py announce-email --version 0.41.0
 ```
 
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
