@@ -26,7 +26,6 @@ variables) and optionally set ``BEDROCK_MODEL_ID`` and ``AWS_REGION`` /
 from __future__ import annotations
 
 import os
-from typing import Tuple
 
 from burr.core import Application, ApplicationBuilder, State, default
 from burr.core.action import action
@@ -47,14 +46,14 @@ def _aws_region() -> str | None:
 def prompt_mapper(state: State) -> dict:
     """Map Burr state to Bedrock Converse ``messages`` / ``system``."""
     return {
-        "messages": [{"role": "user", "content": state["user_input"]}],
+        "messages": [{"role": "user", "content": [{"text": state["user_input"]}]}],
         "system": [{"text": "You are a concise assistant."}],
     }
 
 
 @action(reads=[], writes=["user_input"])
-def set_user_input(state: State, user_input: str) -> Tuple[dict, State]:
-    return {"user_input": user_input}, state.update(user_input=user_input)
+def set_user_input(state: State, user_input: str) -> State:
+    return state.update(user_input=user_input)
 
 
 def application(

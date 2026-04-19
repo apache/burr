@@ -25,7 +25,7 @@ Example usage:
 
     def prompt_mapper(state):
         return {
-            "messages": [{"role": "user", "content": state["user_input"]}],
+            "messages": [{"role": "user", "content": [{"text": state["user_input"]}]}],
             "system": [{"text": "You are a helpful assistant."}],
         }
 
