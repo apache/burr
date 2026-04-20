@@ -23,34 +23,32 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
+from burr.core.action import SingleStepAction, StreamingAction
 from burr.core.state import State
 
 boto3 = pytest.importorskip("boto3", reason="boto3 required for Bedrock tests")
+import burr.integrations as integrations
+from burr.integrations import bedrock
+from burr.integrations.bedrock import (
+    BedrockAction,
+    BedrockStreamingAction,
+    StateToPromptMapper,
+)
 
 
 class TestBedrockImports:
-    """Test that Bedrock classes can be imported via lazy loading."""
+    """Test Bedrock import paths."""
 
-    def test_lazy_import_bedrock_action(self):
-        """Verify BedrockAction can be imported from burr.integrations."""
-        from burr.integrations import BedrockAction
+    def test_import_bedrock_module_from_integrations(self):
+        """Verify `from burr.integrations import bedrock` works."""
+        assert bedrock is not None
 
-        assert BedrockAction is not None
-
-    def test_lazy_import_bedrock_streaming_action(self):
-        """Verify BedrockStreamingAction can be imported from burr.integrations."""
-        from burr.integrations import BedrockStreamingAction
-
-        assert BedrockStreamingAction is not None
+    def test_bedrock_module_has_expected_classes(self):
+        assert hasattr(bedrock, "BedrockAction")
+        assert hasattr(bedrock, "BedrockStreamingAction")
 
     def test_direct_import_bedrock_module(self):
         """Verify bedrock.py module exists and has expected classes."""
-        from burr.integrations.bedrock import (
-            BedrockAction,
-            BedrockStreamingAction,
-            StateToPromptMapper,
-        )
-
         assert BedrockAction is not None
         assert BedrockStreamingAction is not None
         assert StateToPromptMapper is not None
@@ -60,8 +58,6 @@ class TestBedrockGuardrailValidation:
     """guardrail_id requires an explicit guardrail_version."""
 
     def test_raises_when_guardrail_id_without_version(self):
-        from burr.integrations.bedrock import BedrockAction
-
         with pytest.raises(ValueError, match="guardrail_version is required"):
             BedrockAction(
                 model_id="test-model",
@@ -72,8 +68,6 @@ class TestBedrockGuardrailValidation:
             )
 
     def test_accepts_explicit_draft_version(self):
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "ok"}]}},
@@ -99,22 +93,14 @@ class TestBedrockActionInterface:
 
     def test_bedrock_action_extends_single_step_action(self):
         """Verify BedrockAction extends SingleStepAction."""
-        from burr.core.action import SingleStepAction
-        from burr.integrations.bedrock import BedrockAction
-
         assert issubclass(BedrockAction, SingleStepAction)
 
     def test_bedrock_streaming_action_extends_streaming_action(self):
         """Verify BedrockStreamingAction extends StreamingAction."""
-        from burr.core.action import StreamingAction
-        from burr.integrations.bedrock import BedrockStreamingAction
-
         assert issubclass(BedrockStreamingAction, StreamingAction)
 
     def test_bedrock_action_has_required_properties(self):
         """Verify BedrockAction has reads, writes, name properties."""
-        from burr.integrations.bedrock import BedrockAction
-
         action = BedrockAction(
             model_id="test-model",
             input_mapper=lambda s: {"messages": []},
@@ -127,8 +113,6 @@ class TestBedrockActionInterface:
 
     def test_bedrock_action_accepts_all_parameters(self):
         """Verify BedrockAction accepts all specified parameters."""
-        from burr.integrations.bedrock import BedrockAction
-
         sig = inspect.signature(BedrockAction.__init__)
         params = list(sig.parameters.keys())
         assert "model_id" in params
@@ -145,8 +129,6 @@ class TestBedrockActionInterface:
 
     def test_bedrock_action_uses_injected_client(self):
         """Verify BedrockAction uses injected client when provided."""
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "hi"}]}},
@@ -168,8 +150,6 @@ class TestBedrockActionInterface:
 
     def test_empty_inference_config_passed_through(self):
         """inference_config={} must not be replaced by defaults (falsy dict bug)."""
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "x"}]}},
@@ -190,8 +170,6 @@ class TestBedrockActionInterface:
 
     def test_default_inference_config_when_omitted(self):
         """When inference_config is None, Bedrock receives default maxTokens."""
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "ok"}]}},
@@ -210,8 +188,6 @@ class TestBedrockActionInterface:
 
     def test_converse_request_includes_model_id_and_system(self):
         """Request passes modelId, messages, and optional system from input_mapper."""
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "x"}]}},
@@ -239,8 +215,6 @@ class TestBedrockActionInterface:
         assert kw["system"] == [{"text": "You are concise."}]
 
     def test_empty_content_blocks_return_empty_string(self):
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": []}},
@@ -258,8 +232,6 @@ class TestBedrockActionInterface:
         assert result["response"] == ""
 
     def test_multiple_text_blocks_joined_with_newline(self):
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {
@@ -284,8 +256,6 @@ class TestBedrockActionInterface:
         assert result["response"] == "first\nsecond"
 
     def test_custom_write_key_updates_state(self):
-        from burr.integrations.bedrock import BedrockAction
-
         mock_client = MagicMock()
         mock_client.converse.return_value = {
             "output": {"message": {"content": [{"text": "hello"}]}},
@@ -303,8 +273,6 @@ class TestBedrockActionInterface:
         assert new_state.get("answer") == "hello"
 
     def test_client_error_from_converse_propagates(self):
-        from burr.integrations.bedrock import BedrockAction
-
         err = ClientError({"Error": {"Code": "ValidationException", "Message": "bad"}}, "Converse")
         mock_client = MagicMock()
         mock_client.converse.side_effect = err
@@ -325,8 +293,6 @@ class TestBedrockStreamingActionInterface:
 
     def test_bedrock_streaming_action_uses_injected_client(self):
         """Verify BedrockStreamingAction uses injected client when provided."""
-        from burr.integrations.bedrock import BedrockStreamingAction
-
         mock_client = MagicMock()
         mock_client.converse_stream.return_value = {
             "stream": [
@@ -352,8 +318,6 @@ class TestBedrockStreamingActionInterface:
         mock_client.converse_stream.assert_called_once()
 
     def test_streaming_guardrail_requires_version(self):
-        from burr.integrations.bedrock import BedrockStreamingAction
-
         with pytest.raises(ValueError, match="guardrail_version is required"):
             BedrockStreamingAction(
                 model_id="test-model",
@@ -365,8 +329,6 @@ class TestBedrockStreamingActionInterface:
 
     def test_streaming_update_only_merges_on_complete(self):
         """Non-final chunks should not update state via update()."""
-        from burr.integrations.bedrock import BedrockStreamingAction
-
         action = BedrockStreamingAction(
             model_id="test-model",
             input_mapper=lambda s: {"messages": []},
@@ -380,8 +342,6 @@ class TestBedrockStreamingActionInterface:
         assert s2.get("response") == "final"
 
     def test_streaming_custom_write_key_updates_state(self):
-        from burr.integrations.bedrock import BedrockStreamingAction
-
         action = BedrockStreamingAction(
             model_id="test-model",
             input_mapper=lambda s: {"messages": []},
@@ -406,14 +366,10 @@ class TestStateToPromptMapperProtocol:
 
     def test_protocol_exists(self):
         """Verify StateToPromptMapper Protocol is defined."""
-        from burr.integrations.bedrock import StateToPromptMapper
-
         assert StateToPromptMapper is not None
 
 
 class TestIntegrationsLazyExports:
     def test_unknown_attribute_raises(self):
-        import burr.integrations as integrations
-
         with pytest.raises(AttributeError, match="has no attribute"):
             _ = integrations.NotARealBedrockClass  # noqa: SLF001
