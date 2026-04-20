@@ -52,6 +52,7 @@ REQUIRED_EXAMPLES = [
     "multi-modal-chatbot",
     "streaming-fastapi",
     "deep-researcher",
+    "hello-world-counter",
 ]
 
 

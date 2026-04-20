@@ -260,6 +260,7 @@ include = [
   "examples/multi-modal-chatbot/**",
   "examples/streaming-fastapi/**",
   "examples/deep-researcher/**",
+  "examples/hello-world-counter/**",
 ]
 exclude = [
   "telemetry/ui/node_modules/**",
@@ -290,7 +291,6 @@ exclude = [
   "examples/deployment/**",
   "examples/hamilton-integration/**",
   "examples/haystack-integration/**",
-  "examples/hello-world-counter/**",
   "examples/image-telephone/**",
   "examples/instructor-gemini-flash/**",
   "examples/integrations/**",
