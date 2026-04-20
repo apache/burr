@@ -26,12 +26,21 @@ robots\.txt
 .*\.json
 
 # Third-party MIT-licensed files (attributed in LICENSE)
-examples/deep-researcher/prompts\.py
-examples/deep-researcher/utils\.py
+.*examples/deep-researcher/prompts\.py
+.*examples/deep-researcher/utils\.py
 website/src/components/ui/.*\.tsx
 
 # SVG files (third-party logos and graphics, headers impractical)
 .*\.svg
+
+# GitHub templates and config (YAML/MD with frontmatter, headers impractical)
+\.github/.*
+
+# Image files (binary, cannot contain headers)
+.*\.png
+.*\.gif
+.*\.ico
+.*\.jpg
 
 # Examples pattern (legacy - keeping for compatibility)
 apache_burr-.*/burr/examples
