@@ -201,3 +201,6 @@ examples/deployment/aws/terraform/*.tfstate
 examples/deployment/aws/terraform/*.tfstate.*
 examples/deployment/aws/terraform/.terraform.tfstate.lock.info
 examples/deployment/aws/terraform/*.tfplan
+
+# Claude Code session data
+.claude/
