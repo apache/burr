@@ -126,7 +126,7 @@ def test_examples_include_exclude_coverage():
             f"\n   To fix: Add to pyproject.toml [tool.flit.sdist]:\n"
             f"   - To INCLUDE in Apache release: add 'examples/<name>/**' to 'include' list\n"
             f"   - To EXCLUDE from Apache release: add 'examples/<name>/**' to 'exclude' list\n"
-            f"\n   Currently only these 4 examples should be included:\n"
+            f"\n   Currently only these 5 examples should be included:\n"
             f"   email-assistant, multi-modal-chatbot, streaming-fastapi, deep-researcher, hello-world-counter\n"
         )
 

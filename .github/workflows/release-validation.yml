@@ -38,7 +38,9 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'website/**'
-      - '**/*.md'
+      # Note: do NOT use '**/*.md' here. Some bundled examples ship .md files
+      # (e.g. examples/deployment/aws/terraform/tutorial.md) and a missing
+      # ASF header on those would cause a real RAT failure we want to catch.
   workflow_dispatch:
 
 concurrency:

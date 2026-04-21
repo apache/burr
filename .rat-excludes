@@ -42,7 +42,14 @@ feature_request\.md
 PULL_REQUEST_TEMPLATE\.md
 
 # Third-party MIT-licensed files (attributed in LICENSE).
-# These names are unique within the repo so basename matching is safe.
+# Most names are unique within the repo so basename matching is safe.
+# Known collisions:
+#   - utils.py: also matches our own ASF code in burr/tracking/, etc.
+#     (4 other utils.py files; all currently have ASF headers)
+#   - button.tsx: also matches telemetry/ui/src/components/common/button.tsx
+#     (our own ASF code with header)
+# A future regression in any of those collision targets would silently pass
+# RAT. Tracked as a follow-up to rename or restructure.
 prompts\.py
 utils\.py
 animated-beam\.tsx
