@@ -1,3 +1,12 @@
+# Apache RAT exclude patterns.
+#
+# IMPORTANT: RAT's -E flag matches each pattern as a regex, but only
+# reliably matches against the file basename. Path-style patterns like
+# 'examples/foo/bar.py' don't work, especially through symlinked dirs
+# (burr/examples is a symlink to ../examples in the source tree).
+# Use basename patterns. Be aware that broad basenames like 'utils.py'
+# will skip license checks on every utils.py in the repo.
+
 # Python marker file
 .*py\.typed
 
@@ -25,22 +34,38 @@ robots\.txt
 # JSON config files (cannot contain comments)
 .*\.json
 
-# Third-party MIT-licensed files (attributed in LICENSE)
-.*examples/deep-researcher/prompts\.py
-.*examples/deep-researcher/utils\.py
-website/src/components/ui/.*\.tsx
+# YAML config files in .github/ (templates with frontmatter, headers impractical)
+labeler\.yml
+config\.yml
+bug_report\.md
+feature_request\.md
+PULL_REQUEST_TEMPLATE\.md
+
+# Third-party MIT-licensed files (attributed in LICENSE).
+# These names are unique within the repo so basename matching is safe.
+prompts\.py
+utils\.py
+animated-beam\.tsx
+animated-shiny-text\.tsx
+blur-fade\.tsx
+border-beam\.tsx
+button\.tsx
+dot-pattern\.tsx
+icon-cloud\.tsx
+magic-card\.tsx
+marquee\.tsx
+number-ticker\.tsx
+safari\.tsx
+shimmer-button\.tsx
+
+# Tutorial markdown for the AWS terraform deployment example
+tutorial\.md
 
 # SVG files (third-party logos and graphics, headers impractical)
 .*\.svg
-
-# GitHub templates and config (YAML/MD with frontmatter, headers impractical)
-\.github/.*
 
 # Image files (binary, cannot contain headers)
 .*\.png
 .*\.gif
 .*\.ico
 .*\.jpg
-
-# Examples pattern (legacy - keeping for compatibility)
-apache_burr-.*/burr/examples
