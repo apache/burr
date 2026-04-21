@@ -147,6 +147,10 @@ def _validate_environment_for_command(args) -> None:
     if getattr(args, "skip_signing", False) and "gpg" in required_tools:
         required_tools.remove("gpg")
 
+    # Drop svn if user opted out of upload (svn is only used for upload)
+    if getattr(args, "no_upload", False) and "svn" in required_tools:
+        required_tools.remove("svn")
+
     # Check for RAT if needed
     if hasattr(args, "check_licenses") or hasattr(args, "check_licenses_report"):
         if getattr(args, "check_licenses", False) or getattr(args, "check_licenses_report", False):
