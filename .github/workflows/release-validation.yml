@@ -1,0 +1,172 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+# Validates the Apache release pipeline on every PR: builds the real release
+# artifacts (git archive, sdist, wheel) using the release script with
+# --skip-signing, runs Apache RAT on the source tarball, then installs the
+# wheel into a fresh venv outside the source tree and smoke-tests the server.
+#
+# This is designed to catch the class of bugs that have broken recent RCs:
+# license/header issues (RAT), examples missing from the wheel (smoke test),
+# and general "voter tries to install this and it breaks" failures.
+
+name: Release Validation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*-incubating-RC*'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'website/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+concurrency:
+  group: release-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-artifacts:
+    name: build-artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: telemetry/ui/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install system deps
+        run: sudo apt-get install -y --no-install-recommends graphviz
+
+      - name: Install Python build deps
+        run: pip install flit twine
+
+      - name: Cache Apache RAT
+        id: cache-rat
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apache-rat
+          key: apache-rat-0.16.1
+
+      - name: Download Apache RAT if not cached
+        if: steps.cache-rat.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/apache-rat
+          curl -fL -o ~/.cache/apache-rat/apache-rat-0.16.1.jar \
+            https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.16.1/apache-rat-0.16.1.jar
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(python -c 'import re; print(re.search(r"version\s*=\s*\"([^\"]+)\"", open("pyproject.toml").read()).group(1))')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "BURR_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build release artifacts (no signing, no upload)
+        run: |
+          python scripts/apache_release.py all "$BURR_VERSION" 0 ci-runner \
+            --skip-signing --no-upload
+
+      - name: Verify all 3 artifacts exist
+        run: |
+          test -f "dist/apache-burr-${BURR_VERSION}-incubating-src.tar.gz"
+          test -f "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
+          test -f "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+
+      - name: Run Apache RAT on source and sdist tarballs
+        run: |
+          python scripts/verify_apache_artifacts.py licenses \
+            --rat-jar ~/.cache/apache-rat/apache-rat-0.16.1.jar \
+            --artifacts-dir dist
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/*.tar.gz
+            dist/*.whl
+            dist/*.sha512
+            dist/rat-report-*.xml
+            dist/rat-report-*.txt
+          retention-days: 14
+
+  install-and-smoke:
+    name: install-and-smoke
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is skipped because burr/cli/__main__.py uses PEP 604 union syntax
+        # (dict | None) which requires Python 3.10+. Tracked separately.
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Run smoke test
+        env:
+          BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
+        run: |
+          python scripts/ci_smoke_server.py \
+            --wheel "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+
+      - name: Upload smoke workspace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-workspace-${{ matrix.python-version }}
+          path: /tmp/burr-smoke-*
+          retention-days: 7
+          if-no-files-found: ignore
