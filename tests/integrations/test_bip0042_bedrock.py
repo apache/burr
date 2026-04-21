@@ -29,11 +29,7 @@ from burr.core.state import State
 boto3 = pytest.importorskip("boto3", reason="boto3 required for Bedrock tests")
 import burr.integrations as integrations
 from burr.integrations import bedrock
-from burr.integrations.bedrock import (
-    BedrockAction,
-    BedrockStreamingAction,
-    StateToPromptMapper,
-)
+from burr.integrations.bedrock import BedrockAction, BedrockStreamingAction, StateToPromptMapper
 
 
 class TestBedrockImports:
