@@ -168,7 +168,7 @@ def _run_server(
     # TODO: Implement server running logic here
     # Example: Start a web server, configure ports, etc.
     logger.info(f"Starting server on port {port}")
-    cmd = f"uvicorn burr.tracking.server.run:app --port {port} --host {host}"
+    cmd = f"{sys.executable} -m uvicorn burr.tracking.server.run:app --port {port} --host {host}"
     if dev_mode:
         cmd += " --reload"
 
