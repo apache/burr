@@ -516,7 +516,11 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
     was_symlink = False
     symlink_target = None
 
-    if os.path.exists(burr_examples_dir):
+    # Use lexists (not exists) so we detect broken symlinks too — CI runners
+    # sometimes check out burr/examples as a symlink whose relative target
+    # doesn't resolve from the working directory, and os.path.exists would
+    # return False for such a link while os.makedirs would still blow up on it.
+    if os.path.lexists(burr_examples_dir):
         if os.path.islink(burr_examples_dir):
             was_symlink = True
             symlink_target = os.readlink(burr_examples_dir)
