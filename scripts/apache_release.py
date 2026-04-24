@@ -309,11 +309,12 @@ def _build_result_email_context(
     binding_yes: int,
     non_binding_yes: int,
     abstain: int,
-    no_votes: int,
+    binding_no: int,
+    non_binding_no: int,
     vote_thread_url: Optional[str] = None,
 ) -> dict[str, str]:
     """Build rendering context for the result email template."""
-    release_passed = binding_yes >= 3 and binding_yes > no_votes
+    release_passed = binding_yes >= 3 and binding_yes > binding_no
     return {
         "project_short_name": PROJECT_SHORT_NAME,
         "project_display_name": PROJECT_SHORT_NAME.capitalize(),
@@ -323,7 +324,8 @@ def _build_result_email_context(
         "binding_yes": str(binding_yes),
         "non_binding_yes": str(non_binding_yes),
         "abstain": str(abstain),
-        "no_votes": str(no_votes),
+        "binding_no": str(binding_no),
+        "non_binding_no": str(non_binding_no),
         "vote_thread_url": vote_thread_url or "[add link to vote thread]",
         "result_outcome": (
             "Therefore, the release candidate has passed."
@@ -986,7 +988,8 @@ def _generate_result_email(
     binding_yes: int,
     non_binding_yes: int,
     abstain: int,
-    no_votes: int,
+    binding_no: int,
+    non_binding_no: int,
     vote_thread_url: Optional[str] = None,
 ) -> str:
     """Generate [RESULT] email from template."""
@@ -996,7 +999,8 @@ def _generate_result_email(
         binding_yes=binding_yes,
         non_binding_yes=non_binding_yes,
         abstain=abstain,
-        no_votes=no_votes,
+        binding_no=binding_no,
+        non_binding_no=non_binding_no,
         vote_thread_url=vote_thread_url,
     )
     return _render_template("result_email.j2", context)
@@ -1163,7 +1167,8 @@ def cmd_result_email(args) -> bool:
         binding_yes=args.binding_yes,
         non_binding_yes=args.non_binding_yes,
         abstain=args.abstain,
-        no_votes=args.no_votes,
+        binding_no=args.binding_no,
+        non_binding_no=args.non_binding_no,
         vote_thread_url=args.vote_thread_url,
     )
     _emit_email_output(content, copy_to_clipboard=args.copy)
@@ -1316,7 +1321,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--non-binding-yes", type=int, default=0, help="Number of non-binding +1 votes"
     )
     result_email_parser.add_argument("--abstain", type=int, default=0, help="Number of 0 votes")
-    result_email_parser.add_argument("--no-votes", type=int, default=0, help="Number of -1 votes")
+    result_email_parser.add_argument(
+        "--binding-no", type=int, default=0, help="Number of binding -1 votes"
+    )
+    result_email_parser.add_argument(
+        "--non-binding-no", type=int, default=0, help="Number of non-binding -1 votes"
+    )
     result_email_parser.add_argument("--vote-thread-url", help="Link to the vote thread archive")
 
     # announce-email subcommand

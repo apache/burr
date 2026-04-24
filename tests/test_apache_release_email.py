@@ -86,7 +86,8 @@ def test_result_email_template_includes_vote_tally():
         binding_yes=3,
         non_binding_yes=2,
         abstain=1,
-        no_votes=0,
+        binding_no=0,
+        non_binding_no=1,
         vote_thread_url="https://lists.apache.org/thread/example",
     )
 
@@ -94,7 +95,7 @@ def test_result_email_template_includes_vote_tally():
     assert "Apache Burr is an effort undergoing incubation" in content
     assert "+1: 3 (binding), 2 (non-binding)" in content
     assert "+0: 1" in content
-    assert "-1: 0" in content
+    assert "-1: 0 (binding), 1 (non-binding)" in content
     assert "Therefore, the release candidate has passed." in content
     assert "https://lists.apache.org/thread/example" in content
 
@@ -106,11 +107,28 @@ def test_result_email_template_supports_failed_vote_outcome():
         binding_yes=2,
         non_binding_yes=4,
         abstain=1,
-        no_votes=2,
+        binding_no=2,
+        non_binding_no=0,
         vote_thread_url="https://lists.apache.org/thread/example",
     )
 
     assert "Therefore, the release candidate has not passed." in content
+
+
+def test_result_email_template_ignores_non_binding_no_votes_for_pass_fail():
+    content = apache_release._generate_result_email(
+        version="0.41.0",
+        rc_num="1",
+        binding_yes=3,
+        non_binding_yes=0,
+        abstain=0,
+        binding_no=2,
+        non_binding_no=3,
+        vote_thread_url="https://lists.apache.org/thread/example",
+    )
+
+    assert "-1: 2 (binding), 3 (non-binding)" in content
+    assert "Therefore, the release candidate has passed." in content
 
 
 def test_announce_email_template_includes_release_links_and_summary():

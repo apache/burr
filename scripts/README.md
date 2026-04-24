@@ -99,7 +99,7 @@ python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 
 # Generate release emails from templates
 python scripts/apache_release.py vote-email --version 0.41.0 --rc 0
-python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-yes 3 --non-binding-yes 2
+python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-yes 3 --non-binding-yes 2 --binding-no 0 --non-binding-no 1
 python scripts/apache_release.py announce-email --version 0.41.0
 ```
 
