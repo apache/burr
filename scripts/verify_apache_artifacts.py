@@ -318,7 +318,15 @@ def _check_licenses_with_rat(
                 )
 
             if result.returncode != 0:
-                print(f"    ⚠️  RAT exited with code {result.returncode}")
+                # A nonzero exit means RAT crashed mid-scan (e.g. on a broken
+                # symlink). The XML report it produced will be truncated and
+                # parsing it gives a falsely clean result, so fail hard here.
+                print(f"    ✗ RAT exited with code {result.returncode}")
+                if result.stderr:
+                    print("    --- RAT stderr ---")
+                    for line in result.stderr.splitlines()[-25:]:
+                        print(f"      {line}")
+                return False
 
             print(f"    ✓ RAT XML report: {rat_report_xml}")
         except Exception as e:
