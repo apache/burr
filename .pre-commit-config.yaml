@@ -32,8 +32,17 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-      # ensures files are either empty or end with a blank line
+        # burr/examples is a symlink. trailing-whitespace would mangle the
+        # link target text (treating "../examples" as a "trailing whitespace"
+        # situation) and break the symlink.
+        exclude: '^burr/examples$'
+      # ensures files are either empty or end with a blank line.
+      # NOTE: burr/examples is excluded — end-of-file-fixer will append "\n"
+      # to the symlink target turning "../examples" into "../examples\n",
+      # which makes the symlink unresolvable on strict consumers (Apache RAT
+      # and several Linux tarball extractors). See PR #748.
       - id: end-of-file-fixer
+        exclude: '^burr/examples$'
       # sorts requirements
       - id: requirements-txt-fixer
       # valid python file
