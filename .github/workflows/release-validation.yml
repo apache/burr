@@ -52,7 +52,7 @@ permissions:
 
 jobs:
   build-artifacts:
-    name: build-artifacts
+    name: "Release Validation / build-artifacts"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -133,7 +133,7 @@ jobs:
           retention-days: 14
 
   install-and-smoke:
-    name: install-and-smoke
+    name: "Release Validation / install-and-smoke"
     needs: build-artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 10
