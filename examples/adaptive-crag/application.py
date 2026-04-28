@@ -282,7 +282,7 @@ def router(state: State, query: str, attempts: int = ATTEMPTS) -> tuple[dict[str
     table_names = db.table_names()
     chat_history = state["chat_history"]
     # using this as a `response_model` to ensure the route is valid
-    routes = Literal[*table_names, "web_search", "assistant"]  # type: ignore
+    routes = Literal.__getitem__((*table_names, "web_search", "assistant"))  # type: ignore
     try:
         route = ask_gemini.create(
             messages=[
