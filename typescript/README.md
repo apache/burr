@@ -284,3 +284,5 @@ This implementation aims to match the Python version's core functionality with T
 - OpenTelemetry integration
 - Integrations (LangChain, etc.)
 
+<!-- TODO: Set up npm publishing workflow for @apache-burr/core (see .github/workflows/release-validation.yml for the Python pattern) -->
+
