@@ -52,6 +52,7 @@ REQUIRED_EXAMPLES = [
     "multi-modal-chatbot",
     "streaming-fastapi",
     "deep-researcher",
+    "hello-world-counter",
 ]
 
 
@@ -140,7 +141,15 @@ def _validate_environment_for_command(args) -> None:
         "verify": ["git", "gpg", "twine"],
     }
 
-    required_tools = command_requirements.get(args.command, ["git", "gpg"])
+    required_tools = list(command_requirements.get(args.command, ["git", "gpg"]))
+
+    # Drop gpg if user opted out of signing
+    if getattr(args, "skip_signing", False) and "gpg" in required_tools:
+        required_tools.remove("gpg")
+
+    # Drop svn if user opted out of upload (svn is only used for upload)
+    if getattr(args, "no_upload", False) and "svn" in required_tools:
+        required_tools.remove("svn")
 
     # Check for RAT if needed
     if hasattr(args, "check_licenses") or hasattr(args, "check_licenses_report"):
@@ -236,30 +245,35 @@ def _check_git_working_tree() -> None:
 # ============================================================================
 
 
-def _sign_artifact(artifact_path: str) -> tuple[str, str]:
-    """Sign artifact with GPG and create SHA512 checksum."""
-    signature_path = f"{artifact_path}.asc"
+def _checksum_artifact(artifact_path: str) -> str:
+    """Create SHA512 checksum for artifact."""
     checksum_path = f"{artifact_path}.sha512"
-
-    # GPG signature
-    _run_command(
-        ["gpg", "--armor", "--output", signature_path, "--detach-sig", artifact_path],
-        description="",
-        error_message="Error signing artifact",
-        capture_output=False,
-    )
-    print(f"  ✓ Created GPG signature: {signature_path}")
-
-    # SHA512 checksum
     sha512_hash = hashlib.sha512()
     with open(artifact_path, "rb") as f:
         while chunk := f.read(65536):
             sha512_hash.update(chunk)
-
     with open(checksum_path, "w", encoding="utf-8") as f:
         f.write(f"{sha512_hash.hexdigest()}\n")
     print(f"  ✓ Created SHA512 checksum: {checksum_path}")
+    return checksum_path
 
+
+def _sign_artifact(artifact_path: str, skip_signing: bool = False) -> tuple[Optional[str], str]:
+    """Sign artifact with GPG (unless skipped) and create SHA512 checksum."""
+    signature_path: Optional[str] = None
+    if not skip_signing:
+        signature_path = f"{artifact_path}.asc"
+        _run_command(
+            ["gpg", "--armor", "--output", signature_path, "--detach-sig", artifact_path],
+            description="",
+            error_message="Error signing artifact",
+            capture_output=False,
+        )
+        print(f"  ✓ Created GPG signature: {signature_path}")
+    else:
+        print("  ⊘ Skipping GPG signature (--skip-signing)")
+
+    checksum_path = _checksum_artifact(artifact_path)
     return (signature_path, checksum_path)
 
 
@@ -311,7 +325,7 @@ def _verify_artifact_checksum(artifact_path: str, checksum_path: str) -> bool:
         return False
 
 
-def _verify_artifact_complete(artifact_path: str) -> bool:
+def _verify_artifact_complete(artifact_path: str, skip_signing: bool = False) -> bool:
     """Verify artifact and its signature/checksum files."""
     print(f"\nVerifying artifact: {os.path.basename(artifact_path)}")
 
@@ -319,12 +333,18 @@ def _verify_artifact_complete(artifact_path: str) -> bool:
         print(f"    ✗ Artifact not found: {artifact_path}")
         return False
 
-    # Verify signature and checksum
-    signature_path = f"{artifact_path}.asc"
+    # Verify signature (unless skipped) and checksum
     checksum_path = f"{artifact_path}.sha512"
-
-    sig_valid = _verify_artifact_signature(artifact_path, signature_path)
     checksum_valid = _verify_artifact_checksum(artifact_path, checksum_path)
+
+    if skip_signing:
+        if checksum_valid:
+            print(f"  ✓ Checks passed for {os.path.basename(artifact_path)} (signing skipped)\n")
+            return True
+        return False
+
+    signature_path = f"{artifact_path}.asc"
+    sig_valid = _verify_artifact_signature(artifact_path, signature_path)
 
     if sig_valid and checksum_valid:
         print(f"  ✓ All checks passed for {os.path.basename(artifact_path)}\n")
@@ -337,7 +357,9 @@ def _verify_artifact_complete(artifact_path: str) -> bool:
 # ============================================================================
 
 
-def _create_git_archive(version: str, rc_num: str, output_dir: str = "dist") -> str:
+def _create_git_archive(
+    version: str, rc_num: str, output_dir: str = "dist", skip_signing: bool = False
+) -> str:
     """Create git archive tar.gz for voting."""
     print(f"Creating git archive for version {version}-incubating...")
 
@@ -366,12 +388,11 @@ def _create_git_archive(version: str, rc_num: str, output_dir: str = "dist") -> 
     file_size = os.path.getsize(archive_path)
     print(f"  ✓ Archive size: {file_size:,} bytes")
 
-    # Sign the archive
-    print("Signing archive...")
-    _sign_artifact(archive_path)
+    print("Signing archive..." if not skip_signing else "Creating checksum for archive...")
+    _sign_artifact(archive_path, skip_signing=skip_signing)
 
     # Verify
-    if not _verify_artifact_complete(archive_path):
+    if not _verify_artifact_complete(archive_path, skip_signing=skip_signing):
         _fail("Archive verification failed!")
 
     return archive_path
@@ -495,7 +516,11 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
     was_symlink = False
     symlink_target = None
 
-    if os.path.exists(burr_examples_dir):
+    # Use lexists (not exists) so we detect broken symlinks too — CI runners
+    # sometimes check out burr/examples as a symlink whose relative target
+    # doesn't resolve from the working directory, and os.path.exists would
+    # return False for such a link while os.makedirs would still blow up on it.
+    if os.path.lexists(burr_examples_dir):
         if os.path.islink(burr_examples_dir):
             was_symlink = True
             symlink_target = os.readlink(burr_examples_dir)
@@ -774,12 +799,15 @@ On behalf of the Apache {PROJECT_SHORT_NAME} PPMC,
 def cmd_archive(args) -> bool:
     """Handle 'archive' subcommand."""
     _print_section(f"Creating Git Archive - v{args.version}-RC{args.rc_num}")
+    skip_signing = getattr(args, "skip_signing", False)
 
     _verify_project_root()
     _validate_version(args.version)
     _check_git_working_tree()
 
-    archive_path = _create_git_archive(args.version, args.rc_num, args.output_dir)
+    archive_path = _create_git_archive(
+        args.version, args.rc_num, args.output_dir, skip_signing=skip_signing
+    )
     print(f"\n✅ Archive created: {archive_path}")
     return True
 
@@ -787,16 +815,17 @@ def cmd_archive(args) -> bool:
 def cmd_sdist(args) -> bool:
     """Handle 'sdist' subcommand."""
     _print_section(f"Building Source Distribution - v{args.version}-RC{args.rc_num}")
+    skip_signing = getattr(args, "skip_signing", False)
 
     _verify_project_root()
     _validate_version(args.version)
 
     sdist_path = _build_sdist_from_git(args.version, args.output_dir)
 
-    _print_step(2, 2, "Signing sdist")
-    _sign_artifact(sdist_path)
+    _print_step(2, 2, "Signing sdist" if not skip_signing else "Checksumming sdist")
+    _sign_artifact(sdist_path, skip_signing=skip_signing)
 
-    if not _verify_artifact_complete(sdist_path):
+    if not _verify_artifact_complete(sdist_path, skip_signing=skip_signing):
         _fail("sdist verification failed!")
 
     print(f"\n✅ Source distribution created: {sdist_path}")
@@ -806,6 +835,7 @@ def cmd_sdist(args) -> bool:
 def cmd_wheel(args) -> bool:
     """Handle 'wheel' subcommand."""
     _print_section(f"Building Wheel - v{args.version}-RC{args.rc_num}")
+    skip_signing = getattr(args, "skip_signing", False)
 
     _verify_project_root()
     _validate_version(args.version)
@@ -820,10 +850,10 @@ def cmd_wheel(args) -> bool:
     if not _verify_wheel(wheel_path):
         _fail("Wheel verification failed!")
 
-    print("\nSigning wheel...")
-    _sign_artifact(wheel_path)
+    print("\nSigning wheel..." if not skip_signing else "\nChecksumming wheel...")
+    _sign_artifact(wheel_path, skip_signing=skip_signing)
 
-    if not _verify_artifact_complete(wheel_path):
+    if not _verify_artifact_complete(wheel_path, skip_signing=skip_signing):
         _fail("Wheel signature/checksum verification failed!")
 
     print(f"\n✅ Wheel created and verified: {os.path.basename(wheel_path)}")
@@ -883,6 +913,9 @@ def cmd_all(args) -> bool:
 
     if args.dry_run:
         print("*** DRY RUN MODE ***\n")
+    skip_signing = getattr(args, "skip_signing", False)
+    if skip_signing:
+        print("*** SKIP SIGNING MODE ***\n")
 
     _verify_project_root()
     _validate_version(args.version)
@@ -890,13 +923,13 @@ def cmd_all(args) -> bool:
 
     # Step 1: Git Archive
     _print_step(1, 4, "Creating git archive")
-    _create_git_archive(args.version, args.rc_num, args.output_dir)
+    _create_git_archive(args.version, args.rc_num, args.output_dir, skip_signing=skip_signing)
 
     # Step 2: Build sdist
     _print_step(2, 4, "Building sdist")
     sdist_path = _build_sdist_from_git(args.version, args.output_dir)
-    _sign_artifact(sdist_path)
-    if not _verify_artifact_complete(sdist_path):
+    _sign_artifact(sdist_path, skip_signing=skip_signing)
+    if not _verify_artifact_complete(sdist_path, skip_signing=skip_signing):
         _fail("sdist verification failed!")
 
     # Step 3: Build wheel
@@ -904,8 +937,10 @@ def cmd_all(args) -> bool:
     wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
     if not _verify_wheel_with_twine(wheel_path):
         _fail("Twine verification failed!")
-    _sign_artifact(wheel_path)
-    if not _verify_wheel(wheel_path) or not _verify_artifact_complete(wheel_path):
+    _sign_artifact(wheel_path, skip_signing=skip_signing)
+    if not _verify_wheel(wheel_path) or not _verify_artifact_complete(
+        wheel_path, skip_signing=skip_signing
+    ):
         _fail("Wheel verification failed!")
 
     # Step 4: Upload (if not disabled)
@@ -945,18 +980,25 @@ def main():
     archive_parser.add_argument("version", help="Version (e.g., '0.41.0')")
     archive_parser.add_argument("rc_num", help="RC number (e.g., '0')")
     archive_parser.add_argument("--output-dir", default="dist", help="Output directory")
+    archive_parser.add_argument(
+        "--skip-signing",
+        action="store_true",
+        help="Skip GPG signing (for CI). SHA512 checksum is still generated.",
+    )
 
     # sdist subcommand
     sdist_parser = subparsers.add_parser("sdist", help="Build source distribution")
     sdist_parser.add_argument("version", help="Version")
     sdist_parser.add_argument("rc_num", help="RC number")
     sdist_parser.add_argument("--output-dir", default="dist")
+    sdist_parser.add_argument("--skip-signing", action="store_true")
 
     # wheel subcommand
     wheel_parser = subparsers.add_parser("wheel", help="Build wheel")
     wheel_parser.add_argument("version", help="Version")
     wheel_parser.add_argument("rc_num", help="RC number")
     wheel_parser.add_argument("--output-dir", default="dist")
+    wheel_parser.add_argument("--skip-signing", action="store_true")
 
     # upload subcommand
     upload_parser = subparsers.add_parser("upload", help="Upload to SVN")
@@ -980,6 +1022,11 @@ def main():
     all_parser.add_argument("--output-dir", default="dist")
     all_parser.add_argument("--dry-run", action="store_true")
     all_parser.add_argument("--no-upload", action="store_true")
+    all_parser.add_argument(
+        "--skip-signing",
+        action="store_true",
+        help="Skip GPG signing (for CI). SHA512 checksum is still generated.",
+    )
 
     args = parser.parse_args()
 

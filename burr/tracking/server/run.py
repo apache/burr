@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import importlib
 import logging
 import os
@@ -30,6 +31,7 @@ from burr.tracking.server import workspace
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
+    EventDrivenBackendMixin,
     IndexingBackendMixin,
     SnapshottingBackendMixin,
 )
@@ -135,9 +137,20 @@ async def lifespan(app: FastAPI):
     await backend.lifespan(app).__anext__()
     await sync_index()  # this will trigger the repeat every N seconds
     await save_snapshot()  # this will trigger the repeat every N seconds
+    # Start event consumer for event-driven tracking when configured
+    event_consumer_task = None
+    if isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven():
+        event_consumer_task = asyncio.create_task(backend.start_event_consumer())
     global initialized
     initialized = True
     yield
+    # Graceful shutdown: cancel event consumer task
+    if event_consumer_task is not None:
+        event_consumer_task.cancel()
+        try:
+            await event_consumer_task
+        except asyncio.CancelledError:
+            pass
     try:
         await workspace.cleanup_processes()
     finally:
@@ -164,17 +177,16 @@ app_spec = _get_app_spec()
 logger = logging.getLogger(__name__)
 
 if app_spec.indexing:
-    update_interval = backend.update_interval_milliseconds() / 1000 if app_spec.indexing else None
-    sync_index = repeat_every(
-        seconds=backend.update_interval_milliseconds() / 1000,
-        wait_first=True,
-        logger=logger,
-    )(sync_index)
+    # Only use polling when not in event-driven mode
+    _event_driven = isinstance(backend, EventDrivenBackendMixin) and backend.is_event_driven()
+    if not _event_driven:
+        sync_index = repeat_every(
+            seconds=backend.update_interval_milliseconds() / 1000,
+            wait_first=True,
+            logger=logger,
+        )(sync_index)
 
 if app_spec.snapshotting:
-    snapshot_interval = (
-        backend.snapshot_interval_milliseconds() / 1000 if app_spec.snapshotting else None
-    )
     save_snapshot = repeat_every(
         seconds=backend.snapshot_interval_milliseconds() / 1000,
         wait_first=True,

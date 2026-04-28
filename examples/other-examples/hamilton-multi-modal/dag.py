@@ -34,7 +34,7 @@ def client() -> openai.Client:
 
 
 def text_model() -> str:
-    return "gpt-3.5-turbo"
+    return "gpt-4o-mini"
 
 
 def image_model() -> str:

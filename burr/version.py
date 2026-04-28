@@ -20,5 +20,9 @@ import importlib.metadata
 try:
     __version__ = importlib.metadata.version("apache-burr")
 except importlib.metadata.PackageNotFoundError:
-    # Fallback for older installations or development
-    __version__ = importlib.metadata.version("burr")
+    try:
+        # Fallback for older installations
+        __version__ = importlib.metadata.version("burr")
+    except importlib.metadata.PackageNotFoundError:
+        # Development / source tree: no package metadata
+        __version__ = "0.0.0.dev"

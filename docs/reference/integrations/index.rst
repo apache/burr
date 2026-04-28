@@ -34,3 +34,4 @@ Integrations -- we will be adding more
    pydantic
    haystack
    ray
+   bedrock

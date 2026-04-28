@@ -45,11 +45,12 @@ def test_examples_include_exclude_coverage():
     it's a Python package (has __init__.py). Without explicit include/exclude rules,
     ALL examples would be shipped in the Apache release, which is not intended.
 
-    For Apache releases, we only want to include 4 specific examples for voters to test:
+    For Apache releases, we only want to include 5 specific examples for voters to test:
     - email-assistant
     - multi-modal-chatbot
     - streaming-fastapi
     - deep-researcher
+    - hello-world-counter
 
     All other examples must be explicitly excluded. This test ensures the configuration
     stays in sync with the filesystem when examples are added/removed.
@@ -125,8 +126,8 @@ def test_examples_include_exclude_coverage():
             f"\n   To fix: Add to pyproject.toml [tool.flit.sdist]:\n"
             f"   - To INCLUDE in Apache release: add 'examples/<name>/**' to 'include' list\n"
             f"   - To EXCLUDE from Apache release: add 'examples/<name>/**' to 'exclude' list\n"
-            f"\n   Currently only these 4 examples should be included:\n"
-            f"   email-assistant, multi-modal-chatbot, streaming-fastapi, deep-researcher\n"
+            f"\n   Currently only these 5 examples should be included:\n"
+            f"   email-assistant, multi-modal-chatbot, streaming-fastapi, deep-researcher, hello-world-counter\n"
         )
 
     if extra_in_config:

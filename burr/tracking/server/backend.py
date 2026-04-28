@@ -162,6 +162,31 @@ class SnapshottingBackendMixin(abc.ABC):
         pass
 
 
+class EventDrivenBackendMixin(abc.ABC):
+    """Mixin for backends that support event-driven updates.
+
+    Enables backends to receive real-time notifications instead of polling
+    for new files.
+    """
+
+    @abc.abstractmethod
+    async def start_event_consumer(self):
+        """Start the event consumer for event-driven tracking.
+
+        This method should run indefinitely, processing event notifications
+        from the configured message queue.
+        """
+        pass
+
+    @abc.abstractmethod
+    def is_event_driven(self) -> bool:
+        """Check if this backend is configured for event-driven updates.
+
+        :return: True if event-driven mode is enabled and configured, False otherwise
+        """
+        pass
+
+
 class BackendBase(abc.ABC):
     async def lifespan(self, app: FastAPI):
         """Quick tool to allow plugin to the app's lifecycle.

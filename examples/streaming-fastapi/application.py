@@ -95,7 +95,7 @@ async def prompt_for_more(state: State) -> AsyncGenerator[Tuple[dict, Optional[S
 
 @streaming_action(reads=["prompt", "chat_history", "mode"], writes=["response"])
 async def chat_response(
-    state: State, prepend_prompt: str, model: str = "gpt-3.5-turbo"
+    state: State, prepend_prompt: str, model: str = "gpt-4o-mini"
 ) -> AsyncGenerator[Tuple[dict, Optional[State]], None]:
     """Streaming action, as we don't have the result immediately. This makes it more interactive"""
     chat_history = copy.deepcopy(state["chat_history"])

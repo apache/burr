@@ -59,8 +59,9 @@ This will immediately start indexing your s3 bucket (or pick up from the last sn
 
 To track your data, you use the S3TrackingClient. You pass the tracker to the `ApplicationBuilder`:
 
-
 ```python
+from burr.tracking.s3client import S3TrackingClient
+
 app = (
     ApplicationBuilder()
     .with_graph(graph)

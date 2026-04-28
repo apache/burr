@@ -1,0 +1,77 @@
+# Auto-labeling config for actions/labeler
+# Maps file path patterns to area/* labels for PRs
+# Part of #696
+
+"area/core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/core/**
+          - burr/lifecycle/**
+          - burr/system.py
+
+"area/ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - telemetry/ui/**
+
+"area/storage":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/core/persistence.py
+          - burr/integrations/persisters/**
+          - burr/tracking/server/s3/**
+
+"area/streaming":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/core/parallelism.py
+
+"area/hooks":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/lifecycle/**
+
+"area/tracking":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/tracking/**
+          - burr/telemetry.py
+          - burr/visibility/**
+
+"area/integrations":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/integrations/**
+
+"area/visualization":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/visibility/**
+
+"area/website":
+  - changed-files:
+      - any-glob-to-any-file:
+          - website/**
+          - docs/**
+
+"area/ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - scripts/**
+          - .pre-commit-config.yaml
+          - .rat-excludes
+          - pyproject.toml
+          - setup.cfg
+
+"area/examples":
+  - changed-files:
+      - any-glob-to-any-file:
+          - examples/**
+          - burr/examples/**
+
+"area/typing":
+  - changed-files:
+      - any-glob-to-any-file:
+          - burr/core/typing.py
+          - burr/integrations/pydantic.py

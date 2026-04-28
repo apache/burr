@@ -15,14 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import dataclasses
 import datetime
+import enum
 import functools
 import itertools
 import json
 import logging
 import operator
 import os.path
+import tempfile
 import uuid
 from collections import Counter
 from typing import List, Literal, Optional, Sequence, Tuple, Type, TypeVar, Union
@@ -31,6 +34,7 @@ import fastapi
 import pydantic
 from aiobotocore import session
 from fastapi import FastAPI
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from tortoise import functions, transactions
 from tortoise.contrib.fastapi import RegisterTortoise
@@ -42,6 +46,7 @@ from burr.tracking.server import schema
 from burr.tracking.server.backend import (
     BackendBase,
     BurrSettings,
+    EventDrivenBackendMixin,
     IndexingBackendMixin,
     SnapshottingBackendMixin,
 )
@@ -67,10 +72,33 @@ async def _query_s3_file(
     bucket: str,
     key: str,
     client: session.AioBaseClient,
-) -> Union[ContentsModel, List[ContentsModel]]:
+    buffer_size_mb: int = 10,
+) -> bytes:
+    """Query S3 file with buffering to handle large files.
+
+    BIP-0042: Uses SpooledTemporaryFile to buffer content, spilling to disk
+    if the file exceeds buffer_size_mb. This ensures the returned bytes object
+    is seekable for pickle/json deserialization, fixing the UnsupportedOperation
+    error on large state files.
+
+    :param bucket: S3 bucket name
+    :param key: S3 object key
+    :param client: aiobotocore S3 client
+    :param buffer_size_mb: Max MB to hold in RAM before spilling to disk (default 10MB)
+    :return: File contents as bytes
+    """
     response = await client.get_object(Bucket=bucket, Key=key)
-    body = await response["Body"].read()
-    return body
+    buffer_size = buffer_size_mb * 1024 * 1024
+
+    with tempfile.SpooledTemporaryFile(max_size=buffer_size, mode="w+b") as tmp:
+        async with response["Body"] as stream:
+            while True:
+                chunk = await stream.read(8192)
+                if not chunk:
+                    break
+                tmp.write(chunk)
+        tmp.seek(0)
+        return tmp.read()
 
 
 @dataclasses.dataclass
@@ -133,6 +161,13 @@ class DataFile:
         )
 
 
+class TrackingMode(str, enum.Enum):
+    """Tracking mode for S3 backend: polling or event-driven."""
+
+    POLLING = "POLLING"
+    EVENT_DRIVEN = "EVENT_DRIVEN"
+
+
 class S3Settings(BurrSettings):
     s3_bucket: str
     update_interval_milliseconds: int = 120_000
@@ -140,6 +175,20 @@ class S3Settings(BurrSettings):
     snapshot_interval_milliseconds: int = 3_600_000
     load_snapshot_on_start: bool = True
     prior_snapshots_to_keep: int = 5
+    # BIP-0042: Event-driven tracking settings
+    tracking_mode: TrackingMode = TrackingMode.POLLING
+    sqs_queue_url: Optional[str] = None
+    sqs_region: Optional[str] = None
+    sqs_wait_time_seconds: int = 20  # SQS long polling timeout
+    s3_buffer_size_mb: int = 10  # RAM buffer before spilling to disk
+
+    @field_validator("tracking_mode", mode="before")
+    @classmethod
+    def coerce_tracking_mode(cls, v: object) -> object:
+        """Coerce legacy 'SQS' string to EVENT_DRIVEN for backward compatibility."""
+        if v == "SQS":
+            return TrackingMode.EVENT_DRIVEN
+        return v
 
 
 def timestamp_to_reverse_alphabetical(timestamp: datetime) -> str:
@@ -156,7 +205,40 @@ def timestamp_to_reverse_alphabetical(timestamp: datetime) -> str:
     return inverted_str + "-" + timestamp.isoformat()
 
 
-class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixin):
+def _parse_sqs_message_events(
+    body: dict,
+) -> Optional[List[Tuple[str, datetime.datetime]]]:
+    """Parse EventBridge-wrapped or native S3 notification bodies from SQS.
+
+    Returns None if the format is not recognized. Multiple S3 records in one
+    message yield one tuple per record.
+    """
+    if "detail" in body:
+        return [
+            (
+                body["detail"]["object"]["key"],
+                datetime.datetime.fromisoformat(body["time"].replace("Z", "+00:00")),
+            )
+        ]
+    if "Records" in body:
+        out: List[Tuple[str, datetime.datetime]] = []
+        for record in body["Records"]:
+            out.append(
+                (
+                    record["s3"]["object"]["key"],
+                    datetime.datetime.fromisoformat(record["eventTime"].replace("Z", "+00:00")),
+                )
+            )
+        return out
+    return None
+
+
+class SQLiteS3Backend(
+    BackendBase,
+    IndexingBackendMixin,
+    SnapshottingBackendMixin,
+    EventDrivenBackendMixin,
+):
     def __init__(
         self,
         s3_bucket: str,
@@ -165,6 +247,12 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         snapshot_interval_milliseconds: int,
         load_snapshot_on_start: bool,
         prior_snapshots_to_keep: int,
+        # BIP-0042: New parameters for event-driven tracking
+        tracking_mode: Union[TrackingMode, str] = TrackingMode.POLLING,
+        sqs_queue_url: Optional[str] = None,
+        sqs_region: Optional[str] = None,
+        sqs_wait_time_seconds: int = 20,
+        s3_buffer_size_mb: int = 10,
     ):
         self._backend_id = system.now().isoformat() + str(uuid.uuid4())
         self._bucket = s3_bucket
@@ -177,6 +265,17 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
         self._load_snapshot_on_start = load_snapshot_on_start
         self._snapshot_key_history = []
         self._prior_snapshots_to_keep = prior_snapshots_to_keep
+        # BIP-0042: Store event-driven tracking settings (normalize str to enum)
+        if isinstance(tracking_mode, TrackingMode):
+            self._tracking_mode = tracking_mode
+        elif tracking_mode == "SQS":
+            self._tracking_mode = TrackingMode.EVENT_DRIVEN
+        else:
+            self._tracking_mode = TrackingMode(tracking_mode)
+        self._sqs_queue_url = sqs_queue_url
+        self._sqs_region = sqs_region
+        self._sqs_wait_time_seconds = sqs_wait_time_seconds
+        self._s3_buffer_size_mb = s3_buffer_size_mb
 
     async def load_snapshot(self):
         if not self._load_snapshot_on_start:
@@ -631,13 +730,22 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
             "-created_at"
         )
         async with self._session.create_client("s3") as client:
-            # Get all the files
+            # Get all the files (BIP-0042: use buffered reading for large files)
             files = await utils.gather_with_concurrency(
                 1,
-                _query_s3_file(self._bucket, application.graph_file_pointer, client),
-                # _query_s3_files(self.bucket, application.metadata_file_pointer, client),
+                _query_s3_file(
+                    self._bucket,
+                    application.graph_file_pointer,
+                    client,
+                    self._s3_buffer_size_mb,
+                ),
                 *itertools.chain(
-                    _query_s3_file(self._bucket, log_file.s3_path, client)
+                    _query_s3_file(
+                        self._bucket,
+                        log_file.s3_path,
+                        client,
+                        self._s3_buffer_size_mb,
+                    )
                     for log_file in application_logs
                 ),
             )
@@ -655,6 +763,92 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
             spawning_parent_pointer=None,
             application=graph_data,
         )
+
+    # BIP-0042: Event-driven tracking methods
+    async def _handle_s3_event(self, s3_key: str, event_time: datetime.datetime) -> None:
+        """Handle a single S3 event notification - index the file immediately.
+
+        :param s3_key: The S3 object key from the event
+        :param event_time: When the event occurred
+        """
+        try:
+            data_file = DataFile.from_path(s3_key, created_date=event_time)
+            # Path structure: data/{project}/yyyy/mm/dd/hh/minutes/pk/app_id/filename
+            project_name = s3_key.split("/")[1]
+
+            project = await Project.filter(name=project_name).first()
+            if project is None:
+                logger.info(f"Creating project {project_name} from S3 event")
+                project = await Project.create(
+                    name=project_name,
+                    uri=None,
+                    created_at=event_time,
+                    indexed_at=event_time,
+                    updated_at=event_time,
+                )
+
+            all_applications = await self._ensure_applications_exist([data_file], project)
+            await self._update_all_applications(all_applications, [data_file])
+            await self.update_log_files([data_file], all_applications)
+
+            logger.info(f"Indexed S3 event: {s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to handle S3 event {s3_key}: {e}")
+            raise  # Re-raise so message stays in queue for retry / DLQ
+
+    async def start_event_consumer(self) -> None:
+        """Start the event consumer for event-driven tracking.
+
+        Runs indefinitely, processing S3 event notifications from the configured
+        message queue. Handles both EventBridge and direct S3 notification formats.
+        """
+        if self._tracking_mode != TrackingMode.EVENT_DRIVEN or not self._sqs_queue_url:
+            logger.info("Event consumer not configured, skipping")
+            return
+
+        logger.info(f"Starting event consumer for queue: {self._sqs_queue_url}")
+
+        async with self._session.create_client("sqs", region_name=self._sqs_region) as sqs_client:
+            try:
+                while True:
+                    try:
+                        response = await sqs_client.receive_message(
+                            QueueUrl=self._sqs_queue_url,
+                            MaxNumberOfMessages=10,
+                            WaitTimeSeconds=self._sqs_wait_time_seconds,
+                            VisibilityTimeout=300,
+                        )
+
+                        messages = response.get("Messages", [])
+                        for message in messages:
+                            try:
+                                body = json.loads(message["Body"])
+                                events = _parse_sqs_message_events(body)
+                                if events is None:
+                                    logger.warning("Unknown message format: %s", body)
+                                    continue
+
+                                for s3_key, event_time in events:
+                                    if s3_key and s3_key.endswith(".jsonl"):
+                                        await self._handle_s3_event(s3_key, event_time)
+
+                                await sqs_client.delete_message(
+                                    QueueUrl=self._sqs_queue_url,
+                                    ReceiptHandle=message["ReceiptHandle"],
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to process SQS message: {e}")
+
+                    except Exception as e:
+                        logger.error(f"Event consumer error: {e}")
+                        await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                logger.info("Event consumer shutting down")
+                raise
+
+    def is_event_driven(self) -> bool:
+        """Check if this backend is configured for event-driven updates."""
+        return self._tracking_mode == TrackingMode.EVENT_DRIVEN and self._sqs_queue_url is not None
 
     async def indexing_jobs(
         self, offset: int = 0, limit: int = 100, filter_empty: bool = True
@@ -691,7 +885,6 @@ class SQLiteS3Backend(BackendBase, IndexingBackendMixin, SnapshottingBackendMixi
 
 if __name__ == "__main__":
     os.environ["BURR_LOAD_SNAPSHOT_ON_START"] = "True"
-    import asyncio
 
     be = SQLiteS3Backend.from_settings(S3Settings())
     # coro = be.snapshot()  # save to s3

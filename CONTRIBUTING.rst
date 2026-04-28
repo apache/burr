@@ -41,6 +41,24 @@ Please:
 #. Ensure all new features have tests
 #. Add documentation for new features
 
+-----------------------
+Issue assignment policy
+-----------------------
+
+Assigning yourself to an issue signals that you are actively working on it.
+This applies equally to maintainers, committers, and external contributors.
+
+- **Only assign yourself** if you have a PR open or are about to start coding.
+- **14 days without visible activity** (PR, commit, or comment): a triager will
+  comment asking for a status update.
+- **21 days total without response**: the assignee is removed and ``help wanted``
+  is added so someone else can pick it up.
+- **Re-assignment is welcome.** If you want to take over, comment on the issue.
+- **Umbrella and tracking issues** marked with ``lifecycle/frozen`` are exempt.
+
+This is enforced by a weekly automated check. If you need more time, just drop a
+comment on the issue to reset the clock.
+
 
 ---------------
 Developer notes
