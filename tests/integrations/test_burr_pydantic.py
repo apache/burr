@@ -16,6 +16,7 @@
 # under the License.
 
 import asyncio
+import sys
 import warnings
 from typing import AsyncGenerator, Generator, List, Optional, Tuple
 
@@ -441,6 +442,52 @@ def test_streaming_pydantic_action_same_io():
     assert len(result) == 6
     assert [item[0].result for item in result] == [1, 2, 3, 4, 5, 5]
     assert all([isinstance(item[0], IntermediateModel) for item in result])
+    assert all([item[1] is None for item in result[:-1]])
+    assert isinstance(final_state := result[-1][1], State)
+    assert final_state["count"] == 5
+    assert final_state["times_called"] == 1
+    assert final_state.data.count == 5
+    assert final_state.data.times_called == 1
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="PEP 604 union syntax requires Python 3.10+"
+)
+def test_streaming_pydantic_action_union_stream_type():
+    class IntermediateUnionModelOne(BaseModel):
+        result: int
+
+    class IntermediateUnionModelTwo(BaseModel):
+        message: str
+
+    @pydantic_streaming_action(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=IntermediateUnionModelOne | IntermediateUnionModelTwo,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel, total_count: int
+    ) -> Generator[Tuple[IntermediateUnionModelOne, Optional[AppStateModel]], None, None]:
+        initial_value = state.count
+        for i in range(initial_value, initial_value + total_count):
+            yield IntermediateUnionModelOne(result=i), None
+            state.count = i
+        state.times_called += 1
+        yield IntermediateUnionModelOne(result=state.count), state
+
+    assert hasattr(act, "bind")  # has to have bind
+    assert (action_function := getattr(act, FunctionBasedAction.ACTION_FUNCTION, None)) is not None
+    assert action_function.inputs == (["total_count"], [])
+    gen = action_function.fn(
+        State(dict(count=1, times_called=0), typing_system=PydanticTypingSystem(AppStateModel)),
+        total_count=5,
+    )
+    result = list(gen)
+    assert len(result) == 6
+    assert [item[0].result for item in result] == [1, 2, 3, 4, 5, 5]
+    assert all([isinstance(item[0], IntermediateUnionModelOne) for item in result])
     assert all([item[1] is None for item in result[:-1]])
     assert isinstance(final_state := result[-1][1], State)
     assert final_state["count"] == 5

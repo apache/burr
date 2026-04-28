@@ -295,7 +295,9 @@ def _validate_and_extract_signature_types_streaming(
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel],
+    Type[pydantic.BaseModel],
+    Union[Type[dict], Type[pydantic.BaseModel], _UnionType],
 ]:
     if stream_type is None:
         # TODO -- derive from the signature
