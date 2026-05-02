@@ -272,3 +272,16 @@ For local wheel building/testing (simpler, no signing):
 python scripts/build_artifacts.py build-ui    # Build UI only
 python scripts/build_artifacts.py wheel       # Build wheel with UI
 ```
+
+## Milestone Management
+
+Merged PRs are tracked against release milestones so changelog generation can tell which changes shipped in which release.
+
+- Milestone titles use the `X.Y.Z` naming convention, for example `0.43.0`
+- PRs merged to `main` are assigned the earliest open `X.Y.Z` milestone
+- PRs merged to release/test branches use the milestone implied by the branch name, including:
+  - `release-X.Y.Z`
+  - `apache-burr-X.Y.Z-release`
+  - `vX.Y-test` or `vX.Y.Z-test`
+
+The `.github/workflows/milestone-management.yml` workflow also supports manual milestone creation via `workflow_dispatch`. Provide one or more comma- or newline-separated `X.Y.Z` versions in the `versions` input to create or re-open upcoming release milestones.

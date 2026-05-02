@@ -1,0 +1,229 @@
+#<!--
+#     Licensed to the Apache Software Foundation (ASF) under one
+#     or more contributor license agreements.  See the NOTICE file
+#     distributed with this work for additional information
+#     regarding copyright ownership.  The ASF licenses this file
+#     to you under the Apache License, Version 2.0 (the
+#     "License"); you may not use this file except in compliance
+#     with the License.  You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing,
+#     software distributed under the License is distributed on an
+#     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+#     KIND, either express or implied.  See the License for the
+#     specific language governing permissions and limitations
+#     under the License.
+#-->
+# Milestone management for release tracking
+#
+# - Auto-assigns milestones to merged PRs
+# - Supports main plus release/test branch naming conventions
+# - Can create/open upcoming release milestones on demand
+
+name: Milestone Management
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: "Comma- or newline-separated milestone versions in X.Y.Z format"
+        required: true
+        type: string
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  assign-milestone:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign milestone to merged PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+
+            function parseVersion(version) {
+              const match = version.match(SEMVER_RE);
+              if (!match) {
+                return null;
+              }
+              return match.slice(1).map(part => Number(part));
+            }
+
+            function compareVersions(left, right) {
+              const leftParts = parseVersion(left);
+              const rightParts = parseVersion(right);
+              for (let index = 0; index < 3; index += 1) {
+                if (leftParts[index] !== rightParts[index]) {
+                  return leftParts[index] - rightParts[index];
+                }
+              }
+              return 0;
+            }
+
+            // Keep this branch-to-milestone logic in sync with
+            // scripts/milestone_management_preview.py.
+            function milestoneTitleForBranch(branchName) {
+              const exactPatterns = [
+                /^release[-/](\d+\.\d+\.\d+)$/,
+                /^apache-burr-(\d+\.\d+\.\d+)-release$/,
+                /^v(\d+\.\d+\.\d+)-test$/,
+              ];
+              for (const pattern of exactPatterns) {
+                const match = branchName.match(pattern);
+                if (match) {
+                  return match[1];
+                }
+              }
+
+              const minorPatterns = [
+                /^release[-/](\d+\.\d+)$/,
+                /^v(\d+\.\d+)-test$/,
+              ];
+              for (const pattern of minorPatterns) {
+                const match = branchName.match(pattern);
+                if (match) {
+                  return `${match[1]}.0`;
+                }
+              }
+
+              return null;
+            }
+
+            async function listMilestones(state) {
+              return github.paginate(github.rest.issues.listMilestones, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state,
+                per_page: 100,
+              });
+            }
+
+            async function findMilestoneByTitle(title, state = "open") {
+              const milestones = await listMilestones(state);
+              return milestones.find(milestone => milestone.title === title) || null;
+            }
+
+            async function findCurrentOpenMilestone() {
+              const openMilestones = await listMilestones("open");
+              const releaseMilestones = openMilestones
+                .filter(milestone => SEMVER_RE.test(milestone.title))
+                .sort((left, right) => compareVersions(left.title, right.title));
+
+              return releaseMilestones[0] || null;
+            }
+
+            const pr = context.payload.pull_request;
+            if (pr.milestone) {
+              console.log(`#${pr.number}: already has milestone ${pr.milestone.title}, leaving unchanged`);
+              return;
+            }
+
+            let milestone = null;
+            if (pr.base.ref === "main") {
+              milestone = await findCurrentOpenMilestone();
+              if (!milestone) {
+                console.warn(`#${pr.number}: no open X.Y.Z milestone for main, skipping assignment.`);
+                return;
+              }
+            } else {
+              const title = milestoneTitleForBranch(pr.base.ref);
+              if (!title) {
+                console.log(`#${pr.number}: base branch ${pr.base.ref} is not a managed release branch, skipping`);
+                return;
+              }
+
+              milestone = await findMilestoneByTitle(title, "open");
+              if (!milestone) {
+                throw new Error(
+                  `Expected an open milestone named ${title} for base branch ${pr.base.ref}, but none exists.`
+                );
+              }
+            }
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              milestone: milestone.number,
+            });
+
+            console.log(`#${pr.number}: assigned milestone ${milestone.title}`);
+
+  create-milestones:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or open upcoming release milestones
+        uses: actions/github-script@v7
+        env:
+          INPUT_VERSIONS: ${{ github.event.inputs.versions }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+
+            function parseRequestedVersions(rawValue) {
+              return [...new Set(
+                rawValue
+                  .split(/[\n,]/)
+                  .map(value => value.trim())
+                  .filter(Boolean)
+              )];
+            }
+
+            const requestedVersions = parseRequestedVersions(process.env.INPUT_VERSIONS || "");
+            if (requestedVersions.length === 0) {
+              throw new Error("Provide at least one X.Y.Z version.");
+            }
+
+            for (const version of requestedVersions) {
+              if (!SEMVER_RE.test(version)) {
+                throw new Error(`Invalid milestone version: ${version}. Expected X.Y.Z.`);
+              }
+            }
+
+            const existingMilestones = await github.paginate(github.rest.issues.listMilestones, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "all",
+              per_page: 100,
+            });
+
+            for (const version of requestedVersions) {
+              const existing = existingMilestones.find(milestone => milestone.title === version);
+
+              if (!existing) {
+                await github.rest.issues.createMilestone({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: version,
+                  state: "open",
+                  description: `Release tracking for ${version}`,
+                });
+                console.log(`Created milestone ${version}`);
+                continue;
+              }
+
+              if (existing.state === "closed") {
+                await github.rest.issues.updateMilestone({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  milestone_number: existing.number,
+                  title: version,
+                  state: "open",
+                });
+                console.log(`Re-opened milestone ${version}`);
+                continue;
+              }
+
+              console.log(`Milestone ${version} already exists and is open`);
+            }
