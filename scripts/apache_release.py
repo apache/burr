@@ -38,12 +38,18 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import NoReturn, Optional
 
 # --- Configuration ---
 PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
+DEFAULT_DEV_SVN_ROOT = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}"
+DEFAULT_RELEASE_SVN_ROOT = f"https://dist.apache.org/repos/dist/release/incubator/{PROJECT_SHORT_NAME}"
+RC_LABEL_PATTERN = re.compile(
+    r"^(?P<version>\d+\.\d+\.\d+)(?:-incubating)?-RC(?P<rc_num>\d+)$", re.IGNORECASE
+)
 
 # Required examples for wheel (from pyproject.toml)
 REQUIRED_EXAMPLES = [
@@ -120,6 +126,17 @@ def _run_command(
         _fail(f"{error_message}{error_detail}")
 
 
+def _parse_rc_label(rc_label: str) -> tuple[str, str]:
+    """Parse an RC label like 0.42.0-RC1 or 0.42.0-incubating-RC1."""
+    match = RC_LABEL_PATTERN.fullmatch(rc_label.strip())
+    if not match:
+        _fail(
+            "Invalid RC label. Expected format like '0.42.0-RC1' "
+            "or '0.42.0-incubating-RC1'."
+        )
+    return match.group("version"), match.group("rc_num")
+
+
 # ============================================================================
 # Environment Validation
 # ============================================================================
@@ -137,6 +154,7 @@ def _validate_environment_for_command(args) -> None:
         "sdist": ["git", "gpg", "flit"],
         "wheel": ["git", "gpg", "flit", "node", "npm", "twine"],
         "upload": ["git", "gpg", "svn"],
+        "promote": ["svn"],
         "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
         "verify": ["git", "gpg", "twine"],
     }
@@ -791,6 +809,166 @@ On behalf of the Apache {PROJECT_SHORT_NAME} PPMC,
 """
 
 
+def _promotion_source_url(version: str, rc_num: str, dev_svn_root: str) -> str:
+    """Return the SVN URL for a voted RC in dist/dev."""
+    return f"{dev_svn_root}/{version}-incubating-RC{rc_num}"
+
+
+def _promotion_release_url(release_svn_root: str) -> str:
+    """Return the SVN URL for the final release location."""
+    return release_svn_root
+
+
+def _promotion_commit_message(version: str, rc_num: str) -> str:
+    """Return the SVN commit message for a promotion."""
+    return f"Promote Apache Burr {version}-incubating RC{rc_num} to release"
+
+
+def _expected_promotion_artifact_patterns(version: str) -> dict[str, str]:
+    """Return the required artifact patterns for a final release promotion."""
+    return {
+        "source_archive": f"apache-burr-{version}-incubating-src.tar.gz",
+        "sdist": f"apache-burr-{version}-incubating-sdist.tar.gz",
+        "wheel": f"apache_burr-{version}-*.whl",
+    }
+
+
+def _promoted_artifact_name(filename: str, rc_num: str) -> str:
+    """Remove any RC suffix from a promoted artifact name if present."""
+    return filename.replace(f"-RC{rc_num}", "")
+
+
+def _find_single_glob_match(directory: str, pattern: str, description: str) -> str:
+    matches = sorted(glob.glob(os.path.join(directory, pattern)))
+    if not matches:
+        _fail(f"Missing required {description}: {pattern}")
+    if len(matches) > 1:
+        names = ", ".join(os.path.basename(match) for match in matches)
+        _fail(f"Expected exactly one {description} for pattern {pattern}, found: {names}")
+    return matches[0]
+
+
+def _validate_promotion_artifacts(rc_checkout_dir: str, version: str) -> list[str]:
+    """Validate the expected release artifacts exist in the RC checkout."""
+    artifacts: list[str] = []
+    patterns = _expected_promotion_artifact_patterns(version)
+
+    source_archive = _find_single_glob_match(
+        rc_checkout_dir, patterns["source_archive"], "source archive"
+    )
+    sdist = _find_single_glob_match(rc_checkout_dir, patterns["sdist"], "source distribution")
+    wheel = _find_single_glob_match(rc_checkout_dir, patterns["wheel"], "wheel")
+
+    for artifact_path in [source_archive, sdist, wheel]:
+        artifacts.append(artifact_path)
+        for suffix in [".asc", ".sha512"]:
+            companion_path = f"{artifact_path}{suffix}"
+            if not os.path.exists(companion_path):
+                _fail(f"Missing required companion artifact: {os.path.basename(companion_path)}")
+            artifacts.append(companion_path)
+
+    return sorted(artifacts)
+
+
+def _twine_upload_command(promoted_artifacts: list[str]) -> str:
+    """Return the PyPI upload command for the final release artifacts."""
+    upload_candidates = [
+        artifact
+        for artifact in promoted_artifacts
+        if artifact.endswith(".whl") or artifact.endswith("-incubating-sdist.tar.gz")
+    ]
+    upload_names = " ".join(sorted(os.path.basename(artifact) for artifact in upload_candidates))
+    return f"twine upload {upload_names}"
+
+
+def _svn_checkout(url: str, checkout_dir: str) -> None:
+    """Check out an SVN URL into a local directory."""
+    _run_command(
+        ["svn", "checkout", url, checkout_dir],
+        description=f"Checking out SVN path: {url}",
+        error_message=f"SVN checkout failed for {url}",
+        success_message="SVN checkout completed",
+    )
+
+
+def _release_checkout_entries(release_checkout_dir: str) -> list[str]:
+    """List entries in the release checkout, excluding SVN metadata."""
+    entries = []
+    for name in sorted(os.listdir(release_checkout_dir)):
+        if name == ".svn":
+            continue
+        entries.append(os.path.join(release_checkout_dir, name))
+    return entries
+
+
+def _remove_existing_release_entries(release_checkout_dir: str, dry_run: bool = False) -> list[str]:
+    """Remove the current dist/release contents from the SVN working copy."""
+    removed_entries = []
+    for entry in _release_checkout_entries(release_checkout_dir):
+        removed_entries.append(os.path.basename(entry))
+        if dry_run:
+            print(f"  [DRY RUN] Would remove release entry: {os.path.basename(entry)}")
+            continue
+        _run_command(
+            ["svn", "rm", "--force", entry],
+            description=f"Removing old release entry: {os.path.basename(entry)}",
+            error_message=f"Failed to remove existing release entry: {entry}",
+            success_message="Removed",
+        )
+    return removed_entries
+
+
+def _copy_promoted_artifacts(
+    rc_checkout_dir: str,
+    release_checkout_dir: str,
+    artifacts: list[str],
+    rc_num: str,
+    dry_run: bool = False,
+) -> list[str]:
+    """Copy validated RC artifacts into the release checkout with final names."""
+    copied_artifacts = []
+    for artifact in artifacts:
+        destination_name = _promoted_artifact_name(os.path.basename(artifact), rc_num)
+        copied_artifacts.append(destination_name)
+        if dry_run:
+            print(f"  [DRY RUN] Would copy {os.path.basename(artifact)} -> {destination_name}")
+            continue
+
+        source_path = artifact
+        destination_path = os.path.join(release_checkout_dir, destination_name)
+        shutil.copy2(source_path, destination_path)
+        _run_command(
+            ["svn", "add", "--force", destination_path],
+            description=f"Adding promoted artifact: {destination_name}",
+            error_message=f"Failed to add promoted artifact: {destination_name}",
+            success_message="Added",
+        )
+    return copied_artifacts
+
+
+def _commit_promoted_release(
+    release_checkout_dir: str,
+    version: str,
+    rc_num: str,
+    apache_id: str,
+    dry_run: bool = False,
+) -> bool:
+    """Commit the promoted release checkout to SVN."""
+    message = _promotion_commit_message(version, rc_num)
+    if dry_run:
+        print(f"  [DRY RUN] Would commit release checkout with message: {message}")
+        return True
+
+    _run_command(
+        ["svn", "commit", release_checkout_dir, "-m", message, "--username", apache_id],
+        description="Committing promoted release to SVN...",
+        error_message="SVN commit failed for promoted release",
+        success_message="SVN commit completed",
+        capture_output=False,
+    )
+    return True
+
+
 # ============================================================================
 # Command Handlers
 # ============================================================================
@@ -878,6 +1056,64 @@ def cmd_upload(args) -> bool:
 
     if not svn_url:
         return False
+
+    return True
+
+
+def cmd_promote(args) -> bool:
+    """Handle 'promote' subcommand."""
+    _print_section(f"Promoting Release Candidate - {args.rc_label}")
+    _verify_project_root()
+
+    version, rc_num = _parse_rc_label(args.rc_label)
+    source_url = _promotion_source_url(version, rc_num, args.dev_svn_root)
+    release_url = _promotion_release_url(args.release_svn_root)
+
+    print(f"Source RC URL: {source_url}")
+    print(f"Release URL:   {release_url}")
+    if args.dry_run:
+        print("\n*** DRY RUN MODE ***")
+
+    with tempfile.TemporaryDirectory(prefix="burr-promote-") as temp_dir:
+        rc_checkout_dir = os.path.join(temp_dir, "rc")
+        release_checkout_dir = os.path.join(temp_dir, "release")
+
+        _svn_checkout(source_url, rc_checkout_dir)
+        _svn_checkout(release_url, release_checkout_dir)
+
+        print("\nValidating expected artifacts...")
+        validated_artifacts = _validate_promotion_artifacts(rc_checkout_dir, version)
+        for artifact in validated_artifacts:
+            print(f"  ✓ {os.path.basename(artifact)}")
+
+        print("\nCleaning current release artifacts...")
+        _remove_existing_release_entries(release_checkout_dir, dry_run=args.dry_run)
+
+        print("\nCopying voted RC artifacts into release checkout...")
+        promoted_artifacts = _copy_promoted_artifacts(
+            rc_checkout_dir,
+            release_checkout_dir,
+            validated_artifacts,
+            rc_num,
+            dry_run=args.dry_run,
+        )
+
+        print("\nCommitting promoted release...")
+        _commit_promoted_release(
+            release_checkout_dir,
+            version,
+            rc_num,
+            args.apache_id,
+            dry_run=args.dry_run,
+        )
+
+        print("\nPromotion summary:")
+        print(f"  Release path: {release_url}")
+        for artifact_name in promoted_artifacts:
+            print(f"  - {artifact_name}")
+
+        print("\nPyPI upload command:")
+        print(f"  {_twine_upload_command(promoted_artifacts)}")
 
     return True
 
@@ -1008,6 +1244,26 @@ def main():
     upload_parser.add_argument("--artifacts-dir", default="dist")
     upload_parser.add_argument("--dry-run", action="store_true")
 
+    # promote subcommand
+    promote_parser = subparsers.add_parser(
+        "promote", help="Promote a voted RC from dist/dev to dist/release"
+    )
+    promote_parser.add_argument(
+        "rc_label", help="Release candidate label, e.g. '0.42.0-RC1' or '0.42.0-incubating-RC1'"
+    )
+    promote_parser.add_argument("apache_id", help="Apache ID")
+    promote_parser.add_argument("--dry-run", action="store_true")
+    promote_parser.add_argument(
+        "--dev-svn-root",
+        default=DEFAULT_DEV_SVN_ROOT,
+        help="SVN root for RC artifacts in dist/dev",
+    )
+    promote_parser.add_argument(
+        "--release-svn-root",
+        default=DEFAULT_RELEASE_SVN_ROOT,
+        help="SVN root for promoted artifacts in dist/release",
+    )
+
     # verify subcommand
     verify_parser = subparsers.add_parser("verify", help="Verify artifacts")
     verify_parser.add_argument("version", help="Version")
@@ -1043,6 +1299,8 @@ def main():
             success = cmd_wheel(args)
         elif args.command == "upload":
             success = cmd_upload(args)
+        elif args.command == "promote":
+            success = cmd_promote(args)
         elif args.command == "verify":
             success = cmd_verify(args)
         elif args.command == "all":

@@ -91,6 +91,11 @@ python scripts/apache_release.py wheel 0.41.0 0        # Wheel dist
 python scripts/apache_release.py upload 0.41.0 0 your_apache_id
 python scripts/apache_release.py upload 0.41.0 0 your_apache_id --dry-run  # Test first
 
+# Promote a voted RC from dist/dev to dist/release
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id --dry-run
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id --release-svn-root https://dist.apache.org/repos/dist/release/burr  # TLP path override
+
 # Verify artifacts locally
 python scripts/apache_release.py verify 0.41.0 0
 
@@ -99,6 +104,38 @@ python scripts/apache_release.py all 0.41.0 0 your_apache_id --no-upload
 ```
 
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
+
+## Promoting a voted RC
+
+After an RC vote passes, promote the exact voted artifacts from Apache SVN `dist/dev` into
+`dist/release` with:
+
+```bash
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id
+```
+
+What it does:
+- checks out the RC directory from `dist/dev`
+- checks out the release directory from `dist/release`
+- validates the expected source archive, sdist, wheel, and matching `.asc` / `.sha512` files
+- removes the current release contents
+- copies the voted RC artifacts into the release checkout
+- commits the release checkout to SVN
+- prints the final PyPI upload command for the sdist and wheel
+
+Use `--dry-run` to preview the actions without committing:
+
+```bash
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id --dry-run
+```
+
+For post-incubation path changes, override the default SVN roots:
+
+```bash
+python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id \
+  --dev-svn-root https://dist.apache.org/repos/dist/dev/burr \
+  --release-svn-root https://dist.apache.org/repos/dist/release/burr
+```
 
 ## For Voters: Verifying a Release
 
