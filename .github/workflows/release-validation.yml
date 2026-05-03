@@ -35,12 +35,6 @@ on:
       - 'v*.*.*-incubating-RC*'
   pull_request:
     types: [opened, synchronize, reopened]
-    paths-ignore:
-      - 'docs/**'
-      - 'website/**'
-      # Note: do NOT use '**/*.md' here. Some bundled examples ship .md files
-      # (e.g. examples/deployment/aws/terraform/tutorial.md) and a missing
-      # ASF header on those would cause a real RAT failure we want to catch.
   workflow_dispatch:
 
 concurrency:
@@ -51,8 +45,34 @@ permissions:
   contents: read
 
 jobs:
+  check-paths:
+    name: "Release Validation / check-paths"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          # If any changed file is outside docs/ and website/, run the full validation
+          if echo "$CHANGED" | grep -qvE '^(docs/|website/)'; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-artifacts:
     name: "Release Validation / build-artifacts"
+    needs: check-paths
+    if: needs.check-paths.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -134,7 +154,8 @@ jobs:
 
   install-and-smoke:
     name: "Release Validation / install-and-smoke"
-    needs: build-artifacts
+    needs: [check-paths, build-artifacts]
+    if: needs.check-paths.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
