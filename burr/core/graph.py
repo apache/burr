@@ -95,20 +95,20 @@ def _render_graphviz(
 
     if output_file_path.suffix != "":
         # infer format from path; i.e., extract `svg` from the `.svg` suffix
-        format = output_file_path.suffix.partition(".")[-1]
+        fmt = output_file_path.suffix.partition(".")[-1]
     else:
-        format = "png"
+        fmt = "png"
 
     path_without_suffix = pathlib.Path(output_file_path.parent, output_file_path.stem)
     if write_dot or view:
         # `.render()` appends the `format` kwarg to the filename
         # i.e., we need to pass `/my/filepath` to generate `/my/filepath.png`
         # otherwise, passing `/my/filepath.png` will generate `/my/filepath.png.png`
-        graphviz_obj.render(path_without_suffix, format=format, view=view)
+        graphviz_obj.render(path_without_suffix, format=fmt, view=view)
     else:
         # `.pipe()` doesn't append the format to the filename, so we do it explicitly
-        pathlib.Path(f"{path_without_suffix}.{format}").write_bytes(
-            graphviz_obj.pipe(format=format)
+        pathlib.Path(f"{path_without_suffix}.{fmt}").write_bytes(
+            graphviz_obj.pipe(format=fmt)
         )
 
 
