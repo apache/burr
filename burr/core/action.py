@@ -243,16 +243,12 @@ class Function(abc.ABC):
         missing_inputs = required_inputs - given_inputs
         additional_inputs = given_inputs - required_inputs - optional_inputs
         if missing_inputs or additional_inputs:
-            raise ValueError(
-                f"Inputs to function {self} are invalid. "
-                + f"Missing the following inputs: {', '.join(missing_inputs)}."
-                if missing_inputs
-                else (
-                    "" f"Additional inputs: {','.join(additional_inputs)}."
-                    if additional_inputs
-                    else ""
-                )
-            )
+            parts = [f"Inputs to function {self} are invalid."]
+            if missing_inputs:
+                parts.append(f"Missing the following inputs: {', '.join(missing_inputs)}.")
+            if additional_inputs:
+                parts.append(f"Additional inputs: {', '.join(additional_inputs)}.")
+            raise ValueError(" ".join(parts))
 
     def is_async(self) -> bool:
         """Convenience method to check if the function is async or not.
