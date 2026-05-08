@@ -40,3 +40,4 @@ have an example that would add to this guide. We have created a variety of issue
     web-server
     infrastructure
     monitoring
+    aws
