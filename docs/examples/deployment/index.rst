@@ -17,9 +17,9 @@
    under the License.
 
 
-=============
-✈ Deployment
-=============
+==========
+Deployment
+==========
 
 Burr is specifically meant to make getting your product in production easier and faster.
 This section covers examples of getting Burr to production, as well as a brief overview of approaches/requirements.

@@ -19,7 +19,7 @@
 
 Example that goes with [introductory blog post](https://blog.dagworks.io/p/burr-develop-stateful-ai-applications).
 
-## 🏃Quick start
+## Quick start
 
 ```bash
 pip install "apache-burr[start]" jupyter

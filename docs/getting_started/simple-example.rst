@@ -48,7 +48,7 @@ So hold tight! This gets you started with the basics but there's a lot more you 
 
     If you want to skip ahead to the cool stuff (chatbots, ML training, simulations, etc...) feel free to jump into the deep end and start with the :ref:`examples <examples>`.
 
-🤔 If you prefer to learn by video, check out
+If you prefer to learn by video, check out
 `this video walkthrough <https://www.youtube.com/watch?v=rEZ4oDN0GdU>`_
 using `this notebook <https://github.com/apache/burr/blob/main/examples/simple-chatbot-intro/notebook.ipynb>`_.
 
@@ -222,4 +222,4 @@ Now that we've built a basic application, we can do the following with only a fe
 2. :ref:`Persist state to a database + reload <state-persistence>` -- add a ``initialize_from`` line to the builder and select a pre-existing/implement a custom persistence method.
 3. :ref:`Add monitoring to track application data <tracking>` -- leverage ``with_tracker`` to track to the Burr UI and visualize your application live.
 4. :ref:`Stream results back <streaming>` -- minimize time to first token by streaming results back to the user.
-5. `Generate test cases from prior runs <https://github.com/apache/burr/tree/main/examples/test-case-creation>`_ -- use the ``burr-testburr-test-case create`` command to automatically generate test cases for your LLM app.
+5. `Generate test cases from prior runs <https://github.com/apache/burr/tree/main/examples/test-case-creation>`_ -- use the ``burr-test-case create`` command to automatically generate test cases for your LLM app.

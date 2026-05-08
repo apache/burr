@@ -40,7 +40,7 @@ pluggable persisters (e.g. for memory) to save & load application state.
 Link to [documentation](https://burr.apache.org/). Quick (<3min) video intro [here](https://www.loom.com/share/a10f163428b942fea55db1a84b1140d8?sid=1512863b-f533-4a42-a2f3-95b13deb07c9).
 Longer [video intro & walkthrough](https://www.youtube.com/watch?v=rEZ4oDN0GdU). Blog post [here](https://blog.dagworks.io/p/burr-develop-stateful-ai-applications). Join discord for help/questions [here](https://discord.gg/6Zy2DwP4f3).
 
-## 🏃Quick start
+## Quick start
 
 Install from `pypi`:
 
@@ -57,7 +57,7 @@ burr
 ```
 
 This will open up Burr's telemetry UI. It comes loaded with some default data so you can click around.
-It also has a demo chat application to help demonstrate what the UI captures enabling you too see things changing in
+It also has a demo chat application to help demonstrate what the UI captures, enabling you to see things changing in
 real-time. Hit the "Demos" side bar on the left and select `chatbot`. To chat it requires the `OPENAI_API_KEY`
 environment variable to be set, but you can still see how it works if you don't have an API key set.
 
@@ -73,7 +73,7 @@ See if you can find it.
 
 For more details see the [getting started guide](https://burr.apache.org/getting_started/simple-example/).
 
-## 🔩 How does Apache Burr work?
+## How does Apache Burr work?
 
 With Apache Burr you express your application as a state machine (i.e. a graph/flowchart).
 You can (and should!) use it for anything in which you have to manage state, track complex decisions, add human feedback, or dictate an idempotent, self-persisting workflow.
@@ -94,7 +94,7 @@ def ai_response(state: State) -> State:
     # query the LLM however you want (or don't use an LLM, up to you...)
     response = _query_llm(state["chat_history"]) # Burr doesn't care how you use LLMs!
     chat_item = {"role" : "system", "content" : response}
-    return state.update(response=content).append(chat_history=chat_item)
+    return state.update(response=response).append(chat_history=chat_item)
 
 app = (
     ApplicationBuilder()
@@ -113,12 +113,12 @@ print("answer:", app.state["response"])
 Apache Burr includes:
 
 1. A (dependency-free) low-abstraction python library that enables you to build and manage state machines with simple python functions
-2. A UI you can use view execution telemetry for introspection and debugging
+2. A UI you can use to view execution telemetry for introspection and debugging
 3. A set of integrations to make it easier to persist state, connect to telemetry, and integrate with other systems
 
 ![Burr at work](https://github.com/apache/burr/blob/main/chatbot.gif)
 
-## 💻️ What can you do with Apache Burr?
+## What can you do with Apache Burr?
 
 Apache Burr can be used to power a variety of applications, including:
 
@@ -139,12 +139,12 @@ Apache Burr will _not_ tell you how to build your models, how to query APIs, or 
 in a way that scales with your needs and makes following the logic of your system easy. Burr comes out of the box with a host of integrations
 including tooling to build a UI in streamlit and watch your state machine execute.
 
-## 🏗 Start building
+## Start building
 
 See the documentation for [getting started](https://burr.apache.org/getting_started/simple-example), and follow the example.
 Then read through some of the concepts and write your own application!
 
-## 📃 Comparison against common frameworks
+## Comparison against common frameworks
 
 While Apache Burr is attempting something (somewhat) unique, there are a variety of tools that occupy similar spaces:
 
@@ -157,7 +157,7 @@ While Apache Burr is attempting something (somewhat) unique, there are a variety
 | Open-source user-interface for monitoring/tracing |  ✅  |    ❌     |    ❌    |    ❌     |     ❌     |    ✅    |
 | Works with non-LLM use-cases                      |  ✅  |    ❌     |    ❌    |    ❌     |     ❌     |    ✅    |
 
-## 🌯 Why the name Burr?
+## Why the name Burr?
 
 Apache Burr is named after [Aaron Burr](https://en.wikipedia.org/wiki/Aaron_Burr), founding father, third VP of the United States, and murderer/arch-nemesis of [Alexander Hamilton](https://en.wikipedia.org/wiki/Alexander_Hamilton).
 What's the connection with (Apache) Hamilton? We imagine a world in which Burr and Hamilton lived in harmony and saw through their differences to better the union. Originally Apache Burr was built as a _harness_ to handle state between executions of Apache Hamilton DAGs (because DAGs don't have cycles),
@@ -207,7 +207,7 @@ but realized that it has a wide array of applications and decided to release it 
 **Aditya K.**
 *DS Architect, TaskHuman*
 
-## 🛣 Roadmap
+## Roadmap
 
 While Apache Burr is stable and well-tested, we have quite a few tools/features on our roadmap!
 1. FastAPI integration + hosted deployment -- make it really easy to get Apache Burr in an app in production without thinking about REST APIs
@@ -222,11 +222,11 @@ While Apache Burr is stable and well-tested, we have quite a few tools/features 
 If you want to avoid self-hosting the above solutions we're building Burr Cloud. To let us know you're interested
 sign up [here](https://forms.gle/w9u2QKcPrztApRedA) for the waitlist to get access.
 
-## 🤲 Contributing
+## Contributing
 
 We welcome contributors! To get started on developing, see the [developer-facing docs](https://burr.apache.org/contributing).
 
-## 👪 Contributors
+## Contributors
 
 ### Code contributions
 
@@ -249,12 +249,12 @@ Users who have contributed small docs fixes, design suggestions, and found bugs
 - [Evans](https://github.com/sudoevans)
 - [Sasmitha Manathunga](https://github.com/mmz-001)
 
-# 📑 License
+# License
 
 Apache Burr is released under the Apache 2.0 License. See [LICENSE](https://github.com/apache/burr/blob/main/LICENSE) for details.
 
-# 🌎 Community
-## 👨‍💻 Contributing
+# Community
+## Contributing
 We're very supportive of changes by new contributors, big or small! Make sure to discuss potential changes by creating an issue or commenting on an existing one before opening a pull request. Good first contributions include creating an example or an integration with your favorite Python library!
 
  To contribute, checkout our [contributing guidelines](https://github.com/apache/burr/blob/main/CONTRIBUTING.rst), our [developer setup guide](https://github.com/apache/burr/blob/main/developer_setup.md), and our [Code of Conduct](https://github.com/apache/burr/blob/main/CODE_OF_CONDUCT.md).

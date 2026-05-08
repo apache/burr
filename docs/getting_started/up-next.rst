@@ -88,7 +88,7 @@ Once you're comfortable with the UI, you may want to get a sense of a few of the
 of the Burr library and where you can go to learn more about them:
 
 - :ref:`Creating custom actions <actions>` and calling out to integrated frameworks
-- :ref:`Running applications <applications>`, managing their lifeycyle, and inspecting the results
+- :ref:`Running applications <applications>`, managing their lifecycle, and inspecting the results
 - :ref:`Managing state <state>` -- persisting, inspecting, and updating
 - :ref:`Handling transition between nodes <transitions>` and managing the flow of your application
 - :ref:`Adding hooks to customize execution <hooks>` and integrate with other systems

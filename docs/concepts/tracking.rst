@@ -93,7 +93,7 @@ For example, to debug your Burr Application, you'd have some control flow like t
             fork_from_sequence_id=sequence_id,
             fork_from_partition_key=partition_key
         )
-        .with_tracker(tracker)  # tracking + checkpointing; one line 🪄.
+        .with_tracker(tracker)  # tracking + checkpointing in one line.
         .build()
     )
 
