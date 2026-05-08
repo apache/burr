@@ -518,7 +518,7 @@ class MapActionsAndStates(TaskBasedParallelAction):
         def _tasks() -> Generator[SubGraphTask, None, None]:
             for i, action in enumerate(self.actions(state, context, inputs)):
                 for j, substate in enumerate(self.states(state, context, inputs)):
-                    key = f"{i}-{j}"  # this is a stable hash for now but will not handle caching
+                    key = f"{context.sequence_id}-{i}-{j}"
                     yield _create_task(key, action, substate)
 
         async def _atasks() -> AsyncGenerator[SubGraphTask, None]:
@@ -528,7 +528,7 @@ class MapActionsAndStates(TaskBasedParallelAction):
             states = await async_utils.arealize(state_generator)
             for i, action in enumerate(actions):
                 for j, substate in enumerate(states):
-                    key = f"{i}-{j}"
+                    key = f"{context.sequence_id}-{i}-{j}"
                     yield _create_task(key, action, substate)
 
         return _atasks() if self.is_async() else _tasks()
