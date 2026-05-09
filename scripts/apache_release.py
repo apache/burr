@@ -246,14 +246,20 @@ def _check_git_working_tree() -> None:
 
 
 def _checksum_artifact(artifact_path: str) -> str:
-    """Create SHA512 checksum for artifact."""
+    """Create SHA512 checksum for artifact in the standard ``sha512sum`` layout.
+
+    The file is written as ``<digest>  <filename>\n`` so that voters can verify
+    with the standard ``sha512sum -c <file>.sha512`` recipe without having to
+    splice the filename in by hand.
+    """
     checksum_path = f"{artifact_path}.sha512"
     sha512_hash = hashlib.sha512()
     with open(artifact_path, "rb") as f:
         while chunk := f.read(65536):
             sha512_hash.update(chunk)
+    artifact_filename = os.path.basename(artifact_path)
     with open(checksum_path, "w", encoding="utf-8") as f:
-        f.write(f"{sha512_hash.hexdigest()}\n")
+        f.write(f"{sha512_hash.hexdigest()}  {artifact_filename}\n")
     print(f"  ✓ Created SHA512 checksum: {checksum_path}")
     return checksum_path
 
