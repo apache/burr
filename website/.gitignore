@@ -4,3 +4,7 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 public/docs/
+
+# The repo-root .gitignore has `downloads/` (Python packaging convention),
+# which would otherwise hide the Next.js /downloads app route. Re-include it.
+!src/app/downloads/
