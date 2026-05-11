@@ -1462,7 +1462,7 @@ class action:
             from burr.integrations.pydantic import pydantic_action
         except ImportError:
             raise ImportError(
-                "Please install pydantic to use the pydantic decorator. pip install burr[pydantic]"
+                "Please install pydantic to use the pydantic decorator. pip install apache-burr[pydantic]"
             )
 
         return pydantic_action(
@@ -1525,7 +1525,7 @@ class streaming_action:
             from burr.integrations.pydantic import pydantic_streaming_action
         except ImportError:
             raise ImportError(
-                "Please install pydantic to use the pydantic decorator. pip install 'burr[pydantic]'"
+                "Please install pydantic to use the pydantic decorator. pip install 'apache-burr[pydantic]'"
             )
 
         return pydantic_streaming_action(

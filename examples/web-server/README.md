@@ -38,7 +38,7 @@ it requires human assistance at multiple points to build a better product.
 If you want to get a sense for how this looks, open the burr UI:
 
 ```bash
-pip install "burr[start]"
+pip install "apache-burr[start]"
 burr
 ```
 

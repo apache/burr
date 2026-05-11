@@ -33,7 +33,7 @@ More functionality is on the roadmap!
 Install the dependencies:
 
 ```bash
-pip install "burr[start]" -r requirements.txt
+pip install "apache-burr[start]" -r requirements.txt
 ```
 
 Make sure you have the API Keys in your environment:

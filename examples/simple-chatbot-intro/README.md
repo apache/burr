@@ -22,7 +22,7 @@ Example that goes with [introductory blog post](https://blog.dagworks.io/p/burr-
 ## 🏃Quick start
 
 ```bash
-pip install "burr[start]" jupyter
+pip install "apache-burr[start]" jupyter
 ```
 
 Run the notebook:

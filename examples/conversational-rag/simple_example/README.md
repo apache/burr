@@ -34,7 +34,7 @@ of the conversation and asking for user inputs.
 To run this example, install Burr and the necessary dependencies:
 
 ```bash
-pip install "burr[start]" -r requirements.txt
+pip install "apache-burr[start]" -r requirements.txt
 ```
 
 Then run the server in the background:

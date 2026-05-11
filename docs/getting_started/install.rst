@@ -28,7 +28,7 @@ along with a fully built server.
 
 .. code-block:: bash
 
-    pip install "burr[start]"
+    pip install "apache-burr[start]"
 
 This will give you tools to visualize, track, and interact with the UI. You can explore the UI (including some sample projects)
 simply by running the command ``burr``. Up next we'll write our own application and follow it in the UI.
@@ -48,135 +48,135 @@ Description of different targets
 
 .. code-block:: bash
 
-    pip install burr
+    pip install apache-burr
 
 This only installs the framework. Zero other dependencies. All other installs below all install the
 framework + some other dependencies. Note you can combine installing multiple optional dependencies with commas, e.g.
-``pip install "burr[cli,tracking]"`` installs both the CLI and tracking + UI dependencies.
+``pip install "apache-burr[cli,tracking]"`` installs both the CLI and tracking + UI dependencies.
 
 .. code-block:: bash
 
-    pip install "burr[cli]"
+    pip install "apache-burr[cli]"
 
 This installs the dependencies to run the burr CLI, i.e. `burr --help`.
 
 .. code-block:: bash
 
-    pip install "burr[developer]"
+    pip install "apache-burr[developer]"
 
 This installs all the dependencies for developing locally.
 
 .. code-block:: bash
 
-    pip install "burr[documentation]"
+    pip install "apache-burr[documentation]"
 
 This installs the dependencies to build the documentation.
 
 .. code-block:: bash
 
-    pip install "burr[examples]"
+    pip install "apache-burr[examples]"
 
 This installs the dependencies for the examples.
 
 
 .. code-block:: bash
 
-    pip install "burr[graphviz]"
+    pip install "apache-burr[graphviz]"
 
 This installs the dependencies to visualize the graph.
 
 .. code-block:: bash
 
-    pip install "burr[hamilton]"
+    pip install "apache-burr[hamilton]"
 
 This installs the dependencies for Hamilton.
 
 .. code-block:: bash
 
-    pip install "burr[haystack]"
+    pip install "apache-burr[haystack]"
 
 This installs the dependencies for Haystack.
 
 .. code-block:: bash
 
-    pip install "burr[learn]"
+    pip install "apache-burr[learn]"
 
 This installs the dependencies for the UI, CLI, and running demos. It is equivalent to `start` below.
 
 .. code-block:: bash
 
-    pip install "burr[opentelemetry]"
+    pip install "apache-burr[opentelemetry]"
 
 This installs the dependencies for using OpenTelemetry with Burr.
 
 .. code-block:: bash
 
-    pip install "burr[postgresql]"
+    pip install "apache-burr[postgresql]"
 
 This installs the dependencies for PostgreSQL.
 
 .. code-block:: bash
 
-    pip install "burr[pydantic]"
+    pip install "apache-burr[pydantic]"
 
 This installs the dependencies for Pydantic.
 
 .. code-block:: bash
 
-    pip install "burr[redis]"
+    pip install "apache-burr[redis]"
 
 This installs the dependencies for Redis.
 
 .. code-block:: bash
 
-    pip install "burr[start]"
+    pip install "apache-burr[start]"
 
 This installs the dependencies for the UI, CLI, and running demos. It is equivalent to `learn` above.
 
 .. code-block:: bash
 
-    pip install "burr[streamlit]"
+    pip install "apache-burr[streamlit]"
 
 This installs the dependencies for Streamlit.
 
 .. code-block:: bash
 
-    pip install "burr[tests]"
+    pip install "apache-burr[tests]"
 
 This installs the dependencies for running unit tests.
 
 .. code-block:: bash
 
-    pip install "burr[tracking]"
+    pip install "apache-burr[tracking]"
 
 This installs the client and server dependencies for tracking and running the UI from tracking that is on a filesystem.
 
 .. code-block:: bash
 
-    pip install "burr[tracking-client]"
+    pip install "apache-burr[tracking-client]"
 
 This installs the client dependencies for tracking to a filesystem.
 
 .. code-block:: bash
 
-    pip install "burr[tracking-client-s3]"
+    pip install "apache-burr[tracking-client-s3]"
 
 This installs the client dependencies for tracking to S3.
 
 .. code-block:: bash
 
-    pip install "burr[tracking-server-s3]"
+    pip install "apache-burr[tracking-server-s3]"
 
 This installs the server dependencies to run the UI and load tracking that was sent to S3.
 
 .. code-block:: bash
 
-    pip install "burr[tracking-server]"
+    pip install "apache-burr[tracking-server]"
 
 This installs the server dependencies for running the UI off a filesystem.
 
 .. code-block:: bash
 
-    pip install "burr[bedrock]"
+    pip install "apache-burr[bedrock]"
 
 This installs ``boto3`` for the :ref:`Amazon Bedrock integration <bedrock-integration>` (``BedrockAction`` / ``BedrockStreamingAction``).

@@ -27,7 +27,7 @@ Tracking Burr
 
     Burr's telemetry system is built in and easy to integrate. It allows you to understand
     the flow of your application, and watch it make decisions in real time. You can run it
-    with sample projects by running ``burr`` in the terminal after ``pip install "burr[start]"``.
+    with sample projects by running ``burr`` in the terminal after ``pip install "apache-burr[start]"``.
 
 Burr comes with a telemetry system that allows tracking a variety of information for debugging,
 both in development and production.
