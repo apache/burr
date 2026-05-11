@@ -193,3 +193,33 @@ jobs:
           path: /tmp/burr-smoke-*
           retention-days: 7
           if-no-files-found: ignore
+
+  # Single stable required-check name. Always runs (if: always()) so it produces
+  # a definite SUCCESS or FAILURE — never SKIPPED. Branch protection in
+  # .asf.yaml requires this context, not the underlying jobs, so path-filtered
+  # docs/website PRs (where the upstream jobs are skipped) still go green here.
+  summary:
+    name: "Release Validation / summary"
+    needs: [check-paths, build-artifacts, install-and-smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verdict
+        env:
+          CHECK_PATHS: ${{ needs.check-paths.result }}
+          BUILD_ARTIFACTS: ${{ needs.build-artifacts.result }}
+          INSTALL_AND_SMOKE: ${{ needs.install-and-smoke.result }}
+        run: |
+          echo "check-paths:       $CHECK_PATHS"
+          echo "build-artifacts:   $BUILD_ARTIFACTS"
+          echo "install-and-smoke: $INSTALL_AND_SMOKE"
+          # Pass if every needed job is success or skipped; fail if any
+          # failed or was cancelled.
+          for r in "$CHECK_PATHS" "$BUILD_ARTIFACTS" "$INSTALL_AND_SMOKE"; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Release Validation failed (one or more jobs not success/skipped)"; exit 1 ;;
+            esac
+          done
+          echo "Release Validation: all upstream jobs success or skipped."
