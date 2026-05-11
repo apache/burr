@@ -107,9 +107,7 @@ def _render_graphviz(
         graphviz_obj.render(path_without_suffix, format=fmt, view=view)
     else:
         # `.pipe()` doesn't append the format to the filename, so we do it explicitly
-        pathlib.Path(f"{path_without_suffix}.{fmt}").write_bytes(
-            graphviz_obj.pipe(format=fmt)
-        )
+        pathlib.Path(f"{path_without_suffix}.{fmt}").write_bytes(graphviz_obj.pipe(format=fmt))
 
 
 @dataclasses.dataclass
