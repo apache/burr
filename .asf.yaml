@@ -62,10 +62,12 @@ github:
       required_status_checks:
         # strict means "Require branches to be up to date before merging".
         strict: false
-        # contexts are the names of checks that must pass
-        contexts:
-          - "Release Validation / build-artifacts"
-          - "Release Validation / install-and-smoke (3.12)"
+        # No required contexts — the Release Validation workflow still runs on
+        # every PR (and on tags) so failures are visible in the checks UI, but
+        # we don't gate merging on it. Path-filtered docs/website PRs were
+        # getting permanently blocked because GitHub treats SKIPPED jobs as
+        # non-passing for required-status-checks.
+        contexts: []
       required_pull_request_reviews:
         dismiss_stale_reviews: false
         require_code_owner_reviews: false
