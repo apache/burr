@@ -20,17 +20,18 @@
 import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { GITHUB_REPO, DOCS_URL } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: "Downloads — Apache Burr (Incubating)",
+  title: "Download — Apache Burr (Incubating)",
   description:
-    "Download Apache Burr (Incubating) source releases, signatures, and checksums. Includes verification instructions per ASF release policy.",
+    "Install Apache Burr from PyPI, or download the official Apache source releases with signatures and checksums.",
 };
 
-// Apache mirror selection URL prefix (closer.lua) for tarball downloads.
-// Per ASF release policy, signatures (.asc), checksums (.sha512), and the
-// KEYS file MUST be served directly over HTTPS from downloads.apache.org
-// rather than via mirrors.
+const PYPI_URL = "https://pypi.org/project/apache-burr/";
+const EXAMPLES_URL = `${GITHUB_REPO}/tree/main/examples`;
+const DISCORD_URL = "https://discord.gg/6Zy2DwP4f3";
+
 const MIRROR_BASE = "https://www.apache.org/dyn/closer.lua/incubator/burr";
 const DIST_BASE = "https://downloads.apache.org/incubator/burr";
 const KEYS_URL = `${DIST_BASE}/KEYS`;
@@ -38,6 +39,11 @@ const ARCHIVE_URL = "https://archive.apache.org/dist/incubator/burr/";
 const VERIFY_DOC_URL = "https://www.apache.org/info/verification.html";
 const RELEASE_POLICY_URL =
   "https://www.apache.org/legal/release-policy.html#publication";
+
+// Adding a new release: append a single entry to RELEASES below. The
+// artifact filenames, labels, and descriptions are derived from the
+// version via ARTIFACT_TEMPLATES, so no per-release boilerplate is
+// needed beyond the version + date.
 
 type Artifact = {
   filename: string;
@@ -48,57 +54,53 @@ type Artifact = {
 type Release = {
   version: string; // e.g. "0.42.0"
   date: string; // human-readable
-  artifacts: Artifact[];
+  note?: string; // optional caveat shown on the release card
 };
 
-const RELEASES: Release[] = [
+type ArtifactTemplate = {
+  label: string;
+  filename: (version: string) => string;
+  description: (version: string) => string;
+};
+
+const ARTIFACT_TEMPLATES: ArtifactTemplate[] = [
   {
-    version: "0.42.0",
-    date: "May 9, 2026",
-    artifacts: [
-      {
-        filename: "apache-burr-0.42.0-incubating-src.tar.gz",
-        label: "Source release",
-        description:
-          "The official source release. This is the artifact voted on by the IPMC.",
-      },
-      {
-        filename: "apache-burr-0.42.0-incubating-sdist.tar.gz",
-        label: "Python sdist",
-        description:
-          "Python source distribution used by flit to build the wheel. Convenience artifact.",
-      },
-      {
-        filename: "apache_burr-0.42.0-py3-none-any.whl",
-        label: "Python wheel",
-        description:
-          "Pre-built Python wheel. Convenience binary, also published on PyPI as apache-burr 0.42.0.",
-      },
-    ],
+    label: "Source release",
+    filename: (v) => `apache-burr-${v}-incubating-src.tar.gz`,
+    description: () =>
+      "The official source release. This is the artifact voted on by the IPMC.",
   },
+  {
+    label: "Python sdist",
+    filename: (v) => `apache-burr-${v}-incubating-sdist.tar.gz`,
+    description: () =>
+      "Python source distribution used by flit to build the wheel. Convenience artifact.",
+  },
+  {
+    label: "Python wheel",
+    filename: (v) => `apache_burr-${v}-py3-none-any.whl`,
+    description: (v) =>
+      `Pre-built Python wheel. Convenience binary, also published on PyPI as apache-burr ${v}.`,
+  },
+];
+
+// To add a release, prepend an entry. The first entry is rendered as "Latest".
+const RELEASES: Release[] = [
+  { version: "0.42.0", date: "May 9, 2026" },
   {
     version: "0.41.0",
     date: "January 2026",
-    artifacts: [
-      {
-        filename: "apache-burr-0.41.0-incubating-src.tar.gz",
-        label: "Source release",
-        description: "The official source release.",
-      },
-      {
-        filename: "apache-burr-0.41.0-incubating-sdist.tar.gz",
-        label: "Python sdist",
-        description: "Python source distribution used by flit to build the wheel.",
-      },
-      {
-        filename: "apache_burr-0.41.0-py3-none-any.whl",
-        label: "Python wheel",
-        description:
-          "Pre-built Python wheel. Convenience binary, also published on PyPI as apache-burr 0.41.0.",
-      },
-    ],
+    note: "The PyPI wheel for 0.41.0 had packaging issues. Build from the source release if you need this version, or just use 0.42.0.",
   },
 ];
+
+function artifactsFor(version: string): Artifact[] {
+  return ARTIFACT_TEMPLATES.map((t) => ({
+    filename: t.filename(version),
+    label: t.label,
+    description: t.description(version),
+  }));
+}
 
 const LATEST = RELEASES[0];
 
@@ -124,9 +126,10 @@ function ReleaseSection({
       className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1">
-        <h2 className="text-2xl font-bold">
-          {release.version}-incubating
-        </h2>
+        <h3 className="text-xl font-bold">
+          {release.version}{" "}
+          <span className="font-normal text-[var(--muted)]">(incubating)</span>
+        </h3>
         {isLatest && (
           <span className="inline-flex items-center rounded-full border border-[#7B2FBE]/30 bg-[#7B2FBE]/10 px-2.5 py-0.5 text-xs font-semibold text-[#7B2FBE]">
             Latest
@@ -136,6 +139,15 @@ function ReleaseSection({
           Released {release.date}
         </span>
       </div>
+
+      {release.note && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text)]">
+          <span className="font-semibold text-amber-600 dark:text-amber-400">
+            Note:
+          </span>{" "}
+          {release.note}
+        </div>
+      )}
 
       <div className="mt-6 overflow-x-auto">
         <table className="w-full text-sm">
@@ -148,7 +160,7 @@ function ReleaseSection({
             </tr>
           </thead>
           <tbody>
-            {release.artifacts.map((a) => (
+            {artifactsFor(release.version).map((a) => (
               <tr
                 key={a.filename}
                 className="border-b border-[var(--card-border)]/50 last:border-b-0 align-top"
@@ -198,11 +210,35 @@ function ReleaseSection({
           className="underline hover:text-[var(--text)]"
         >
           ASF mirror selection service
-        </a>{" "}
-        to find the closest mirror. Signatures and checksums are served directly
-        from <code className="font-mono">downloads.apache.org</code> over HTTPS.
+        </a>
+        . Signatures and checksums are served directly from{" "}
+        <code className="font-mono">downloads.apache.org</code> over HTTPS.
       </p>
     </section>
+  );
+}
+
+function LinkCard({
+  href,
+  title,
+  description,
+  external = true,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  external?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      className="block rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4 transition hover:border-[#7B2FBE]/50 hover:bg-[var(--card-bg)]/80"
+    >
+      <div className="font-semibold text-[var(--text)]">{title}</div>
+      <div className="mt-1 text-xs text-[var(--muted)]">{description}</div>
+    </a>
   );
 }
 
@@ -213,18 +249,117 @@ export default function DownloadsPage() {
       <main className="py-16 sm:py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <header className="mb-12">
+          <header className="mb-10">
             <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-              Downloads
+              Get Apache Burr{" "}
+              <span className="font-bold text-[var(--muted)]">(incubating)</span>
             </h1>
             <p className="mt-3 text-lg text-[var(--muted)]">
-              Apache Burr (Incubating) — official source releases, signatures,
-              and checksums.
+              Install from PyPI, run the UI locally, or grab the official
+              Apache source release.
             </p>
-            <p className="mt-4 text-sm text-[var(--muted)]">
-              Apache Burr is currently undergoing incubation at the Apache
-              Software Foundation. The source release is the official artifact;
-              binary downloads are provided for convenience. Please see the{" "}
+          </header>
+
+          {/* Install */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Install</h2>
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
+              <p className="text-sm text-[var(--muted)] mb-3">
+                Burr is on PyPI. Install with pip:
+              </p>
+              <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
+                <code>pip install apache-burr</code>
+              </pre>
+
+              <p className="mt-6 text-sm text-[var(--muted)] mb-3">
+                For the tracking UI, examples, and common LLM integrations,
+                install the <code className="font-mono text-xs">[learn]</code>{" "}
+                extras:
+              </p>
+              <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
+                <code>{`pip install "apache-burr[learn]"`}</code>
+              </pre>
+
+              <p className="mt-6 text-sm text-[var(--muted)] mb-3">
+                To pin a specific version:
+              </p>
+              <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
+                <code>{`pip install "apache-burr==${LATEST.version}"`}</code>
+              </pre>
+
+              <p className="mt-4 text-xs text-[var(--muted)]">
+                Requires Python 3.10+. Burr has no required runtime
+                dependencies — extras are opt-in.
+              </p>
+            </div>
+          </section>
+
+          {/* Run the UI */}
+          <section className="mb-10">
+            <h2 className="text-2xl font-bold mb-4">Run the UI</h2>
+            <div className="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
+              <p className="text-sm text-[var(--muted)] mb-3">
+                Once installed with the <code className="font-mono text-xs">[learn]</code>{" "}
+                extras, launch the local tracking UI to inspect and debug
+                your applications:
+              </p>
+              <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
+                <code>burr</code>
+              </pre>
+              <p className="mt-4 text-sm text-[var(--muted)]">
+                Opens at{" "}
+                <code className="font-mono text-xs">http://localhost:7241</code>
+                . Apps that use{" "}
+                <code className="font-mono text-xs">.with_tracker(&quot;local&quot;)</code>{" "}
+                will show up automatically.
+              </p>
+            </div>
+          </section>
+
+          {/* Quick links */}
+          <section className="mb-14">
+            <h2 className="text-2xl font-bold mb-4">Where to next</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LinkCard
+                href={DOCS_URL}
+                external={false}
+                title="Documentation"
+                description="Concepts, API reference, and guides."
+              />
+              <LinkCard
+                href={`${GITHUB_REPO}#getting-started`}
+                title="Getting started"
+                description="A 5-minute tour of building your first Burr application."
+              />
+              <LinkCard
+                href={EXAMPLES_URL}
+                title="Examples"
+                description="Chatbots, agents, multi-modal apps, and more on GitHub."
+              />
+              <LinkCard
+                href={GITHUB_REPO}
+                title="Source on GitHub"
+                description="Browse the code, file issues, send PRs."
+              />
+              <LinkCard
+                href={PYPI_URL}
+                title="PyPI"
+                description="apache-burr package page with version history."
+              />
+              <LinkCard
+                href={DISCORD_URL}
+                title="Discord"
+                description="Ask questions, share what you're building."
+              />
+            </div>
+          </section>
+
+          {/* Apache source releases */}
+          <section className="mb-12">
+            <h2 className="text-2xl font-bold mb-2">Apache source releases</h2>
+            <p className="text-sm text-[var(--muted)] mb-6">
+              Burr is an Apache Software Foundation project. The source release
+              is the official artifact voted on by the IPMC; per the{" "}
               <a
                 href={RELEASE_POLICY_URL}
                 target="_blank"
@@ -232,123 +367,86 @@ export default function DownloadsPage() {
                 className="underline hover:text-[var(--text)]"
               >
                 ASF release policy
-              </a>{" "}
-              and the{" "}
-              <a
-                href="#disclaimer"
-                className="underline hover:text-[var(--text)]"
-              >
-                incubator disclaimer
-              </a>{" "}
-              below.
+              </a>
+              , the wheel and sdist below are the same bits published to PyPI.
+              If you&apos;re packaging Burr for redistribution, or you simply
+              prefer to build from source, start here.
             </p>
-          </header>
 
-          {/* Quick install */}
-          <section className="mb-12 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8">
-            <h2 className="text-2xl font-bold mb-3">Quick install</h2>
-            <p className="text-sm text-[var(--muted)] mb-4">
-              The fastest way to get started is via PyPI. The convenience wheel
-              published there matches the wheel artifact in the source release.
-            </p>
-            <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
-              <code>{`pip install apache-burr==${LATEST.version}`}</code>
-            </pre>
-            <p className="mt-4 text-xs text-[var(--muted)]">
-              For projects that require building from source, download the
-              source release tarball below and verify it before use.
-            </p>
-          </section>
-
-          {/* Latest release */}
-          <div className="mb-12">
-            <h2 className="text-xl font-semibold mb-4 text-[var(--muted)] uppercase tracking-wide text-sm">
-              Latest release
-            </h2>
-            <ReleaseSection release={LATEST} isLatest />
-          </div>
-
-          {/* Previous releases */}
-          {RELEASES.length > 1 && (
-            <div className="mb-12">
-              <h2 className="text-xl font-semibold mb-4 text-[var(--muted)] uppercase tracking-wide text-sm">
-                Previous releases
-              </h2>
-              <div className="space-y-6">
-                {RELEASES.slice(1).map((r) => (
-                  <ReleaseSection
-                    key={r.version}
-                    release={r}
-                    isLatest={false}
-                  />
-                ))}
-              </div>
-              <p className="mt-4 text-xs text-[var(--muted)]">
-                Older releases are kept in the{" "}
-                <a
-                  href={ARCHIVE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-[var(--text)]"
-                >
-                  ASF archive
-                </a>
-                .
-              </p>
+            <div className="mb-8">
+              <h3 className="text-xs font-semibold mb-3 text-[var(--muted)] uppercase tracking-wide">
+                Latest
+              </h3>
+              <ReleaseSection release={LATEST} isLatest />
             </div>
-          )}
+
+            {RELEASES.length > 1 && (
+              <div>
+                <h3 className="text-xs font-semibold mb-3 text-[var(--muted)] uppercase tracking-wide">
+                  Previous
+                </h3>
+                <div className="space-y-6">
+                  {RELEASES.slice(1).map((r) => (
+                    <ReleaseSection
+                      key={r.version}
+                      release={r}
+                      isLatest={false}
+                    />
+                  ))}
+                </div>
+                <p className="mt-4 text-xs text-[var(--muted)]">
+                  Older releases live in the{" "}
+                  <a
+                    href={ARCHIVE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-[var(--text)]"
+                  >
+                    ASF archive
+                  </a>
+                  .
+                </p>
+              </div>
+            )}
+          </section>
 
           {/* Verifying releases */}
           <section
             id="verify"
             className="mb-12 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 sm:p-8"
           >
-            <h2 className="text-2xl font-bold mb-3">Verifying releases</h2>
+            <h2 className="text-2xl font-bold mb-3">Verifying a release</h2>
             <p className="text-sm text-[var(--muted)]">
-              You <strong className="text-[var(--text)]">should</strong> verify
-              the integrity of any downloaded release before using it. The PGP
-              signature (
+              If you&apos;re downloading source releases above, you{" "}
+              <strong className="text-[var(--text)]">should</strong> verify
+              them before use. The PGP signature (
               <code className="font-mono text-xs">.asc</code>) proves the
               release was signed by an Apache Burr release manager; the SHA-512
-              checksum (
-              <code className="font-mono text-xs">.sha512</code>) detects
-              transmission corruption.
+              checksum (<code className="font-mono text-xs">.sha512</code>)
+              detects transmission corruption.
             </p>
 
-            <h3 className="mt-6 mb-2 font-semibold">1. Download the KEYS file</h3>
+            <h3 className="mt-6 mb-2 font-semibold">1. Import the KEYS file</h3>
             <p className="text-sm text-[var(--muted)] mb-3">
-              The KEYS file contains the public PGP keys of all Apache Burr
-              release managers. It is served directly from{" "}
-              <code className="font-mono text-xs">downloads.apache.org</code>{" "}
-              over HTTPS:
+              The KEYS file holds the public PGP keys of all Apache Burr
+              release managers, served from{" "}
+              <code className="font-mono text-xs">downloads.apache.org</code>:
             </p>
-            <p className="text-sm">
-              <a
-                href={KEYS_URL}
-                className="text-[#7B2FBE] hover:underline font-mono text-xs break-all"
-              >
-                {KEYS_URL}
-              </a>
-            </p>
-            <pre className="mt-3 overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
+            <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
               <code>{`curl -O ${KEYS_URL}
 gpg --import KEYS`}</code>
             </pre>
 
             <h3 className="mt-6 mb-2 font-semibold">2. Verify the signature</h3>
-            <p className="text-sm text-[var(--muted)] mb-3">
-              Download the artifact and its{" "}
-              <code className="font-mono text-xs">.asc</code> signature, then:
-            </p>
             <pre className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--bg)] p-4 text-sm font-mono">
               <code>{`gpg --verify apache-burr-${LATEST.version}-incubating-src.tar.gz.asc \\
             apache-burr-${LATEST.version}-incubating-src.tar.gz`}</code>
             </pre>
             <p className="mt-3 text-sm text-[var(--muted)]">
               Look for &quot;Good signature from ...&quot; in the output. A
-              warning about the key not being certified by a trusted signature
-              is expected unless you have set up your trust web; what matters is
-              the key fingerprint matches one in KEYS.
+              warning that the key is not certified by a trusted signature is
+              expected unless you&apos;ve set up a web of trust — what matters
+              is that the fingerprint matches one in KEYS.
             </p>
 
             <h3 className="mt-6 mb-2 font-semibold">3. Verify the checksum</h3>
@@ -363,7 +461,7 @@ gpg --import KEYS`}</code>
             </p>
 
             <p className="mt-6 text-sm text-[var(--muted)]">
-              For more detail on verifying ASF releases, see the{" "}
+              For more detail, see the{" "}
               <a
                 href={VERIFY_DOC_URL}
                 target="_blank"
@@ -394,11 +492,11 @@ gpg --import KEYS`}</code>
               </a>
               . The full <code className="font-mono text-xs">LICENSE</code> and{" "}
               <code className="font-mono text-xs">NOTICE</code> files are
-              included in every source release tarball.
+              included in every source release.
             </p>
             <p className="mt-4 text-sm text-[var(--muted)]">
-              Apache Burr (Incubating) is an effort undergoing incubation at The
-              Apache Software Foundation (ASF), sponsored by the Apache
+              Apache Burr (Incubating) is an effort undergoing incubation at
+              The Apache Software Foundation (ASF), sponsored by the Apache
               Incubator. Incubation is required of all newly accepted projects
               until a further review indicates that the infrastructure,
               communications, and decision making process have stabilized in a
