@@ -37,8 +37,8 @@ RUN apt-get update && apt-get install -y \
 
 # Install the dependencies
 # TODO -- use the right version
-#RUN pip install "git+https://github.com/dagworks-inc/burr.git@tracker-s3#egg=burr[tracking-server-s3]"
-RUN pip install "burr[tracking-server-s3]>=0.29.0"
+#RUN pip install "git+https://github.com/apache/burr.git@tracker-s3#egg=apache-burr[tracking-server-s3]"
+RUN pip install "apache-burr[tracking-server-s3]>=0.29.0"
 
 # Copy the nginx config file
 COPY nginx.conf /etc/nginx/nginx.conf

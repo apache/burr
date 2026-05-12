@@ -56,7 +56,7 @@ You'll then have a text terminal where you can interact. Type exit to stop.
 ![Application Image](statemachine.png)
 
 # Video Walkthrough via Notebook
-Open the notebook <a target="_blank" href="https://colab.research.google.com/github/dagworks-inc/burr/blob/main/examples/conversational-rag/simple_example/notebook.ipynb">
+Open the notebook <a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/conversational-rag/simple_example/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 

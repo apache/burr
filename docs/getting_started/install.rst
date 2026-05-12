@@ -38,7 +38,7 @@ Instead, please install manually using the following command:
 
 .. code-block:: bash
 
-    poetry add loguru "burr[tracking-client,tracking-server,streamlit,graphviz,hamilton]"
+    poetry add loguru "apache-burr[tracking-client,tracking-server,streamlit,graphviz,hamilton]"
 
 This is just the kitchen sink for getting started -- remember, burr is dependency-free/pure python!
 

@@ -44,7 +44,7 @@ We recommend starting with the notebook.
 
 ### notebook.ipynb
 You can use [notebook.ipynb](./notebook.ipynb) to run things. Or
-<a target="_blank" href="https://colab.research.google.com/github/DAGWorks-Inc/burr/blob/main/examples/image-telephone/notebook.ipynb">
+<a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/image-telephone/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 

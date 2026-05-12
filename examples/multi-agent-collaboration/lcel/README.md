@@ -44,7 +44,7 @@ export TAVILY_API_KEY=YOUR_KEY
 ```
 
 Run the notebook:
-<a target="_blank" href="https://colab.research.google.com/github/dagworks-inc/burr/blob/main/examples/multi-agent-collaboration/lcel/notebook.ipynb">
+<a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/multi-agent-collaboration/lcel/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 or do it manually:
