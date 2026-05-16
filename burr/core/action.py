@@ -1545,8 +1545,8 @@ class streaming_action:
         See the following example for how to use this decorator -- this reads ``prompt`` from the state and writes
         ``response`` back out, yielding all intermediate chunks.
 
-        Note that this *must* return a value. If it does not, we will not know how to update the state, and
-        we will error out.
+        Note that this *must* return a final value with a state update. If it does not, we will not know how to update the state, and
+        we will error out. Intermediate yields can be plain dicts (without a state update).
 
         .. code-block:: python
 
@@ -1565,7 +1565,7 @@ class streaming_action:
                     delta = chunk.choices[0].delta.content
                     buffer.append(delta)
                     # yield partial results
-                    yield {'response': delta}, None
+                    yield {'response': delta}
                 full_response = ''.join(buffer)
                 # return the final result
                 return {'response': full_response}, state.update(response=full_response)

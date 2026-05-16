@@ -827,6 +827,25 @@ class SingleStepStreamingCounter(SingleStepStreamingAction):
         return ["count", "tracker"]
 
 
+class SingleStepStreamingCounterYieldsDict(SingleStepStreamingAction):
+    def stream_run_and_update(
+        self, state: State, **run_kwargs
+    ) -> Generator[Tuple[dict, Optional[State]], None, None]:
+        steps_per_count = run_kwargs.get("granularity", 10)
+        count = state["count"]
+        for i in range(steps_per_count):
+            yield {"count": count + ((i + 1) / 10)}
+        yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
+
+    @property
+    def reads(self) -> list[str]:
+        return ["count"]
+
+    @property
+    def writes(self) -> list[str]:
+        return ["count", "tracker"]
+
+
 class SingleStepStreamingCounterAsync(SingleStepStreamingAction):
     async def stream_run_and_update(
         self, state: State, **run_kwargs
@@ -836,6 +855,27 @@ class SingleStepStreamingCounterAsync(SingleStepStreamingAction):
         for i in range(steps_per_count):
             await asyncio.sleep(0.01)
             yield {"count": count + ((i + 1) / 10)}, None
+        await asyncio.sleep(0.01)
+        yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
+
+    @property
+    def reads(self) -> list[str]:
+        return ["count"]
+
+    @property
+    def writes(self) -> list[str]:
+        return ["count", "tracker"]
+
+
+class SingleStepStreamingCounterYieldsDictAsync(SingleStepStreamingAction):
+    async def stream_run_and_update(
+        self, state: State, **run_kwargs
+    ) -> AsyncGenerator[Tuple[dict, Optional[State]], None]:
+        steps_per_count = run_kwargs.get("granularity", 10)
+        count = state["count"]
+        for i in range(steps_per_count):
+            await asyncio.sleep(0.01)
+            yield {"count": count + ((i + 1) / 10)}
         await asyncio.sleep(0.01)
         yield {"count": count + 1}, state.update(count=count + 1).append(tracker=count + 1)
 
@@ -1207,6 +1247,60 @@ def test__run_single_step_streaming_action():
     assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
 
 
+def test__run_single_step_streaming_action_yields_dict():
+    action = SingleStepStreamingCounterYieldsDict().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _run_single_step_streaming_action(
+        action,
+        state,
+        inputs={},
+        sequence_id=0,
+        partition_key="partition_key",
+        app_id="app_id",
+    )
+    last_result = -1
+    result, state = None, None
+    for result, state in generator:
+        if last_result < 1:
+            assert result["count"] > last_result
+        last_result = result["count"]
+    assert result == {"count": 1}
+    assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
+
+
+def test__run_single_step_streaming_action_yields_dict_calls_callbacks():
+    action = SingleStepStreamingCounterYieldsDict().with_name("counter")
+
+    class TrackingCallback(PostStreamItemHook):
+        def __init__(self):
+            self.items = []
+
+        def post_stream_item(self, item: Any, **future_kwargs: Any):
+            self.items.append(item)
+
+    hook = TrackingCallback()
+
+    state = State({"count": 0, "tracker": []})
+    generator = _run_single_step_streaming_action(
+        action,
+        state,
+        inputs={},
+        sequence_id=0,
+        partition_key="partition_key",
+        app_id="app_id",
+        lifecycle_adapters=LifecycleAdapterSet(hook),
+    )
+    last_result = -1
+    result, state = None, None
+    for result, state in generator:
+        if last_result < 1:
+            assert result["count"] > last_result
+        last_result = result["count"]
+    assert result == {"count": 1}
+    assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
+    assert len(hook.items) == 10
+
+
 def test__run_single_step_streaming_action_calls_callbacks():
     action = base_streaming_single_step_counter.with_name("counter")
 
@@ -1264,6 +1358,60 @@ async def test__run_single_step_streaming_action_async():
         last_result = result["count"]
     assert result == {"count": 1}
     assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
+
+
+async def test__run_single_step_streaming_action_yields_dict_async():
+    async_action = SingleStepStreamingCounterYieldsDictAsync().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _arun_single_step_streaming_action(
+        action=async_action,
+        state=state,
+        inputs={},
+        sequence_id=0,
+        app_id="app_id",
+        partition_key="partition_key",
+        lifecycle_adapters=LifecycleAdapterSet(),
+    )
+    last_result = -1
+    result, state = None, None
+    async for result, state in generator:
+        if last_result < 1:
+            assert result["count"] > last_result
+        last_result = result["count"]
+    assert result == {"count": 1}
+    assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
+
+
+async def test__run_single_step_streaming_action_yields_dict_async_callbacks():
+    class TrackingCallback(PostStreamItemHookAsync):
+        def __init__(self):
+            self.items = []
+
+        async def post_stream_item(self, item: Any, **future_kwargs: Any):
+            self.items.append(item)
+
+    hook = TrackingCallback()
+
+    async_action = SingleStepStreamingCounterYieldsDictAsync().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _arun_single_step_streaming_action(
+        action=async_action,
+        state=state,
+        inputs={},
+        sequence_id=0,
+        app_id="app_id",
+        partition_key="partition_key",
+        lifecycle_adapters=LifecycleAdapterSet(hook),
+    )
+    last_result = -1
+    result, state = None, None
+    async for result, state in generator:
+        if last_result < 1:
+            assert result["count"] > last_result
+        last_result = result["count"]
+    assert result == {"count": 1}
+    assert state.subset("count", "tracker").get_all() == {"count": 1, "tracker": [1]}
+    assert len(hook.items) == 10
 
 
 async def test__run_single_step_streaming_action_async_callbacks():
