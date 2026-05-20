@@ -95,7 +95,7 @@ def load_state_from_log_file(jsonl_log_file: str, app: Application) -> AppState:
     :return: AppState
     """
     out = []
-    for i, line in enumerate(open(jsonl_log_file)):
+    for i, line in enumerate(open(jsonl_log_file, encoding="utf-8")):
         json_line = json.loads(line)
         record = Record(
             state=json_line["state"],

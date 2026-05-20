@@ -375,7 +375,7 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
         ui_app.mount("/public", StaticFiles(directory=base_asset_directory, html=True), "/public")
 
         # Read index.html once at startup
-        with open(os.path.join(base_asset_directory, "index.html")) as f:
+        with open(os.path.join(base_asset_directory, "index.html"), encoding="utf-8") as f:
             _index_html_template = f.read()
 
         @ui_app.get("/manifest.json")
