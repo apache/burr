@@ -72,7 +72,17 @@ class SuspensionRecord:
 @dataclasses.dataclass
 class JournalEntry:
     """One memoized ``ctx.durable()`` sub-step. ``result`` is serialized through
-    ``burr.core.serde``."""
+    ``burr.core.serde``.
+
+    .. note::
+        The in-state codec (``write_journal_into_state`` / ``read_journal_from_state``)
+        serializes entries via ``dataclasses.asdict``, which recurses into nested
+        dataclasses and converts them to plain dicts. Those dicts are NOT
+        reconstructed back into their original types on read. Callers must keep
+        ``result`` (and any nested fields) to plain JSON-friendly types, or accept
+        that nested dataclasses come back as plain dicts after a round-trip through
+        the in-state codec.
+    """
 
     partition_key: Optional[str]
     app_id: str
@@ -84,7 +94,16 @@ class JournalEntry:
 
 def supports_durable_storage(persister) -> bool:
     """True if the persister overrides the durable-storage methods. When False,
-    the Application stores suspensions and journal entries inside the State."""
+    the Application stores suspensions and journal entries inside the State.
+
+    .. note::
+        All-or-nothing override contract: a persister is considered to support
+        durable storage only when it overrides ALL five durable-storage methods
+        (``save_suspension``, ``load_suspension``, ``save_journal_entry``,
+        ``load_journal``, ``mark_suspension_resolved``). Detection is based solely
+        on ``save_suspension``; partial overrides are not detected and will raise
+        ``NotImplementedError`` at call time.
+    """
     from burr.core.persistence import (
         AsyncBaseStatePersister,
         BaseStatePersister,
@@ -117,7 +136,14 @@ def read_suspension_from_state(state, channel: str) -> "Optional[SuspensionRecor
 
 
 def write_journal_into_state(state, entries: "list"):
-    """Return a new State with the journal entries embedded."""
+    """Return a new State with the journal entries embedded.
+
+    .. warning::
+        Serializes via ``dataclasses.asdict``, which recursively converts nested
+        dataclasses to plain dicts. They are NOT reconstructed to their original
+        types when read back via ``read_journal_from_state``. Keep ``JournalEntry.result``
+        and any nested fields as plain JSON-friendly types to avoid type loss.
+    """
     bucket = dict(state.get(DURABLE_STATE_KEY, {}) or {})
     bucket["journal"] = [dataclasses.asdict(e) for e in entries]
     return state.update(**{DURABLE_STATE_KEY: bucket})

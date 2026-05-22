@@ -25,6 +25,7 @@ from typing import Any, Dict, Literal, Optional, TypedDict
 
 from burr.common.types import BaseCopyable
 from burr.core import Action
+from burr.core.durable import JournalEntry, SuspensionRecord
 from burr.core.state import State, logger
 from burr.lifecycle import PostRunStepHook, PostRunStepHookAsync
 
@@ -207,17 +208,17 @@ class BaseStatePersister(BaseStateLoader, BaseStateSaver, metaclass=ABCMeta):
     # --- Durable execution: optional. Default raises; the Application falls
     # --- back to storing this data inside the State (see burr.core.durable).
 
-    def save_suspension(self, record: "SuspensionRecord") -> None:
+    def save_suspension(self, record: SuspensionRecord) -> None:
         """Persist a suspension record. Override for dedicated storage."""
         raise NotImplementedError
 
     def load_suspension(
         self, partition_key: Optional[str], app_id: str, channel: str
-    ) -> "Optional[SuspensionRecord]":
+    ) -> Optional[SuspensionRecord]:
         """Load the unresolved suspension for (partition_key, app_id, channel)."""
         raise NotImplementedError
 
-    def save_journal_entry(self, entry: "JournalEntry") -> None:
+    def save_journal_entry(self, entry: JournalEntry) -> None:
         """Persist one memoized sub-step. Override for dedicated storage."""
         raise NotImplementedError
 
@@ -241,17 +242,17 @@ class AsyncBaseStatePersister(AsyncBaseStateLoader, AsyncBaseStateSaver, metacla
     # --- Durable execution: optional. Default raises; the Application falls
     # --- back to storing this data inside the State (see burr.core.durable).
 
-    async def save_suspension(self, record: "SuspensionRecord") -> None:
+    async def save_suspension(self, record: SuspensionRecord) -> None:
         """Persist a suspension record. Override for dedicated storage."""
         raise NotImplementedError
 
     async def load_suspension(
         self, partition_key: Optional[str], app_id: str, channel: str
-    ) -> "Optional[SuspensionRecord]":
+    ) -> Optional[SuspensionRecord]:
         """Load the unresolved suspension for (partition_key, app_id, channel)."""
         raise NotImplementedError
 
-    async def save_journal_entry(self, entry: "JournalEntry") -> None:
+    async def save_journal_entry(self, entry: JournalEntry) -> None:
         """Persist one memoized sub-step. Override for dedicated storage."""
         raise NotImplementedError
 

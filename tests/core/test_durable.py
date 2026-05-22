@@ -17,6 +17,8 @@
 
 import dataclasses
 
+import pytest
+
 from burr.core.durable import (
     DeterminismError,
     JournalEntry,
@@ -93,12 +95,52 @@ def test_durable_symbols_exported_from_burr_core():
 
 
 def test_base_persister_durable_methods_raise_not_implemented():
+    from burr.core.durable import JournalEntry, SuspensionRecord
     from burr.core.persistence import BaseStatePersister
 
-    assert hasattr(BaseStatePersister, "save_suspension")
-    assert hasattr(BaseStatePersister, "load_suspension")
-    assert hasattr(BaseStatePersister, "save_journal_entry")
-    assert hasattr(BaseStatePersister, "load_journal")
+    # Use DevNullPersister which satisfies the abstract methods but does not
+    # override the durable methods, so all five should raise NotImplementedError.
+    from burr.core.persistence import DevNullPersister
+
+    p = DevNullPersister()
+
+    dummy_record = SuspensionRecord(
+        suspension_id="s1",
+        partition_key="p",
+        app_id="a",
+        sequence_id=1,
+        position="action",
+        channel="ch",
+        schema_json=None,
+        metadata=None,
+        inputs={},
+        state={},
+        created_at="2026-05-22T00:00:00",
+        resolved=False,
+    )
+    dummy_entry = JournalEntry(
+        partition_key="p",
+        app_id="a",
+        sequence_id=1,
+        step_key="k",
+        call_index=0,
+        result=None,
+    )
+
+    with pytest.raises(NotImplementedError):
+        p.save_suspension(dummy_record)
+
+    with pytest.raises(NotImplementedError):
+        p.load_suspension("p", "a", "ch")
+
+    with pytest.raises(NotImplementedError):
+        p.save_journal_entry(dummy_entry)
+
+    with pytest.raises(NotImplementedError):
+        p.load_journal("p", "a", 1)
+
+    with pytest.raises(NotImplementedError):
+        p.mark_suspension_resolved("s1")
 
 
 def test_supports_durable_storage_false_for_base_sqlite():
