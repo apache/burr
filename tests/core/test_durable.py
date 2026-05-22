@@ -883,3 +883,125 @@ async def test_ahandle_suspension_persists_via_async_durable_persister():
     assert record is not None
     assert record.channel == "approval"
     assert record.resolved is False
+
+
+# ---------------------------------------------------------------------------
+# Milestone 5.2: lifecycle hook integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_post_action_suspend_hook_fires():
+    from burr.core import ApplicationBuilder, State, action
+    from burr.core.persistence import InMemoryPersister
+    from burr.lifecycle import PostActionSuspendHook
+
+    fired = []
+
+    class Recorder(PostActionSuspendHook):
+        def post_action_suspend(self, *, app_id, partition_key, action,
+                                sequence_id, suspension, **kw):
+            fired.append((suspension.channel, app_id, partition_key))
+
+    @action(reads=[], writes=["done"])
+    def gate(state, __context):
+        return state.update(done=__context.suspend("approval"))
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(gate=gate)
+        .with_entrypoint("gate")
+        .with_state(State({}))
+        .with_identifiers(app_id="h1", partition_key="pk")
+        .with_state_persister(InMemoryPersister())
+        .with_hooks(Recorder())
+        .build()
+    )
+    app.run(halt_after=["gate"])
+    assert fired == [("approval", "h1", "pk")]
+
+
+def test_pre_action_resume_hook_fires():
+    from burr.core import ApplicationBuilder, GraphBuilder, State, action
+    from burr.core.graph import Graph
+    from burr.core.persistence import InMemoryPersister
+    from burr.core.resume import resume
+    from burr.lifecycle import PreActionResumeHook
+
+    fired = []
+
+    class Recorder(PreActionResumeHook):
+        def pre_action_resume(self, *, app_id, partition_key, action,
+                              sequence_id, channel, **kw):
+            fired.append((channel, app_id, action.name))
+
+    @action(reads=[], writes=["approved"])
+    def gate(state, __context):
+        return state.update(approved=__context.suspend("approval"))
+
+    persister = InMemoryPersister()
+    graph: Graph = (
+        GraphBuilder()
+        .with_actions(gate=gate)
+        .with_transitions()
+        .build()
+    )
+    app = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("gate")
+        .with_state(State({}))
+        .with_identifiers(app_id="r1", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    app.run(halt_after=["gate"])
+
+    resume(
+        persister=persister, graph=graph, app_id="r1", partition_key="pk",
+        channel="approval", payload=True, hooks=[Recorder()],
+    )
+    assert fired == [("approval", "r1", "gate")]
+
+
+@pytest.mark.asyncio
+async def test_pre_action_resume_hook_fires_async():
+    from burr.core import ApplicationBuilder, GraphBuilder, State, action
+    from burr.core.graph import Graph
+    from burr.core.persistence import AsyncInMemoryPersister
+    from burr.core.resume import aresume
+    from burr.lifecycle import PreActionResumeHookAsync
+
+    fired = []
+
+    class Recorder(PreActionResumeHookAsync):
+        async def pre_action_resume(self, *, app_id, partition_key, action,
+                                    sequence_id, channel, **kw):
+            fired.append((channel, app_id, action.name))
+
+    @action(reads=[], writes=["approved"])
+    async def gate(state, __context):
+        return state.update(approved=__context.suspend("approval"))
+
+    persister = AsyncInMemoryPersister()
+    graph: Graph = (
+        GraphBuilder()
+        .with_actions(gate=gate)
+        .with_transitions()
+        .build()
+    )
+    app = await (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("gate")
+        .with_state(State({}))
+        .with_identifiers(app_id="ar1", partition_key="pk")
+        .with_state_persister(persister)
+        .abuild()
+    )
+    await app.arun(halt_after=["gate"])
+
+    await aresume(
+        persister=persister, graph=graph, app_id="ar1", partition_key="pk",
+        channel="approval", payload=True, hooks=[Recorder()],
+    )
+    assert fired == [("approval", "ar1", "gate")]

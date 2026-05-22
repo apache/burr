@@ -1146,19 +1146,14 @@ class Application(Generic[ApplicationStateType]):
             state = write_suspension_into_state(self._state, record)
             state = write_journal_into_state(state, self._journal_sink)
             self._set_state(state)
-        # NOTE: post_action_suspend is registered in Milestone 5. Guard it so it is a
-        # safe no-op until the hook is added to REGISTERED_SYNC_HOOKS.
-        try:
-            self._adapter_set.call_all_lifecycle_hooks_sync(
-                "post_action_suspend",
-                app_id=self._uid,
-                partition_key=self._partition_key,
-                action=action,
-                sequence_id=self.sequence_id,
-                suspension=record,
-            )
-        except ValueError:
-            pass
+        self._adapter_set.call_all_lifecycle_hooks_sync(
+            "post_action_suspend",
+            app_id=self._uid,
+            partition_key=self._partition_key,
+            action=action,
+            sequence_id=self.sequence_id,
+            suspension=record,
+        )
         self._suspended = record
 
     async def _ahandle_suspension(self, action, action_inputs, suspended):
@@ -1204,19 +1199,14 @@ class Application(Generic[ApplicationStateType]):
             state = write_suspension_into_state(self._state, record)
             state = write_journal_into_state(state, self._journal_sink)
             self._set_state(state)
-        # NOTE: post_action_suspend is registered in Milestone 5. Guard it so it is a
-        # safe no-op until the hook is added to REGISTERED_SYNC_HOOKS.
-        try:
-            await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                "post_action_suspend",
-                app_id=self._uid,
-                partition_key=self._partition_key,
-                action=action,
-                sequence_id=self.sequence_id,
-                suspension=record,
-            )
-        except ValueError:
-            pass
+        await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+            "post_action_suspend",
+            app_id=self._uid,
+            partition_key=self._partition_key,
+            action=action,
+            sequence_id=self.sequence_id,
+            suspension=record,
+        )
         self._suspended = record
 
     @property

@@ -18,7 +18,7 @@
 """Top-level resume helpers for durable execution."""
 
 import warnings
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from burr.core.durable import (
     read_journal_from_state,
@@ -65,7 +65,7 @@ async def _aload_journal(persister, partition_key, app_id, sequence_id, state):
     return read_journal_from_state(state)
 
 
-async def _arebuild(persister, graph, app_id, partition_key, record):
+async def _arebuild(persister, graph, app_id, partition_key, record, hooks=None):
     from burr.core.application import ApplicationBuilder
 
     builder = (
@@ -76,6 +76,8 @@ async def _arebuild(persister, graph, app_id, partition_key, record):
         .with_state(State(record.state))
         .with_state_persister(persister)
     )
+    for hook in (hooks or []):
+        builder = builder.with_hooks(hook)
     if persister.is_async():
         return await builder.abuild()
     return builder.build()
@@ -101,19 +103,20 @@ def _validate_payload(schema_json, payload):
     jsonschema.validate(instance=payload, schema=schema_json)
 
 
-def _rebuild(persister, graph, app_id, partition_key, record):
+def _rebuild(persister, graph, app_id, partition_key, record, hooks=None):
     from burr.core.application import ApplicationBuilder
 
-    app = (
+    builder = (
         ApplicationBuilder()
         .with_graph(graph)
         .with_identifiers(app_id=app_id, partition_key=partition_key)
         .with_entrypoint(record.position)
         .with_state(State(record.state))
         .with_state_persister(persister)
-        .build()
     )
-    return app
+    for hook in (hooks or []):
+        builder = builder.with_hooks(hook)
+    return builder.build()
 
 
 def resume(
@@ -124,6 +127,7 @@ def resume(
     partition_key: Optional[str],
     channel: str,
     payload: Any,
+    hooks: Optional[List] = None,
 ):
     """Resume a suspended run by delivering ``payload`` to ``channel``.
 
@@ -151,12 +155,21 @@ def resume(
 
     _validate_payload(record.schema_json, payload)
 
-    app = _rebuild(persister, graph, app_id, partition_key, record)
+    app = _rebuild(persister, graph, app_id, partition_key, record, hooks=hooks)
     app._resume_signals = {channel: payload}
     app._loaded_journal = _load_journal(
         persister, partition_key, app_id, record.sequence_id, record.state
     )
     app._suspended = None
+
+    app._adapter_set.call_all_lifecycle_hooks_sync(
+        "pre_action_resume",
+        app_id=app_id,
+        partition_key=partition_key,
+        action=graph.get_action(record.position),
+        sequence_id=record.sequence_id,
+        channel=channel,
+    )
 
     app.run(halt_after=[])  # run to completion or the next suspend
 
@@ -176,6 +189,7 @@ async def aresume(
     partition_key: Optional[str],
     channel: str,
     payload: Any,
+    hooks: Optional[List] = None,
 ):
     """Resume a suspended run by delivering ``payload`` to ``channel``.
 
@@ -214,12 +228,21 @@ async def aresume(
 
     _validate_payload(record.schema_json, payload)
 
-    app = await _arebuild(persister, graph, app_id, partition_key, record)
+    app = await _arebuild(persister, graph, app_id, partition_key, record, hooks=hooks)
     app._resume_signals = {channel: payload}
     app._loaded_journal = await _aload_journal(
         persister, partition_key, app_id, record.sequence_id, record.state
     )
     app._suspended = None
+
+    await app._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+        "pre_action_resume",
+        app_id=app_id,
+        partition_key=partition_key,
+        action=graph.get_action(record.position),
+        sequence_id=record.sequence_id,
+        channel=channel,
+    )
 
     await app.arun(halt_after=[])
 
