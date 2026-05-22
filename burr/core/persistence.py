@@ -24,7 +24,7 @@ from collections import defaultdict
 from typing import Any, Dict, Literal, Optional, TypedDict
 
 from burr.common.types import BaseCopyable
-from burr.core import Action
+from burr.core import Action, serde
 from burr.core.durable import JournalEntry, SuspensionRecord
 from burr.core.state import State, logger
 from burr.lifecycle import PostRunStepHook, PostRunStepHookAsync
@@ -496,6 +496,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         """Creates the table if it doesn't exist"""
         # Usage
         self.create_table_if_not_exists(self.table_name)
+        self.create_durable_tables_if_not_exist()
         self._initialized = True
 
     def is_initialized(self) -> bool:
@@ -652,6 +653,162 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
                 ) from e
             raise
         self.connection.commit()
+
+    def create_durable_tables_if_not_exist(self):
+        """Creates the durable-execution tables (suspensions + journal) if they don't exist."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS burr_suspensions (
+                suspension_id TEXT PRIMARY KEY,
+                partition_key TEXT,
+                app_id TEXT NOT NULL,
+                sequence_id INTEGER NOT NULL,
+                position TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                schema_json TEXT,
+                metadata_json TEXT,
+                inputs_json TEXT,
+                state_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS burr_journal (
+                partition_key TEXT,
+                app_id TEXT NOT NULL,
+                sequence_id INTEGER NOT NULL,
+                step_key TEXT NOT NULL,
+                call_index INTEGER NOT NULL,
+                result_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (partition_key, app_id, sequence_id, step_key)
+            )"""
+        )
+        self.connection.commit()
+
+    def save_suspension(self, record: SuspensionRecord) -> None:
+        """Persist a suspension record into the burr_suspensions table."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """INSERT OR REPLACE INTO burr_suspensions
+               (suspension_id, partition_key, app_id, sequence_id, position,
+                channel, schema_json, metadata_json, inputs_json, state_json,
+                created_at, resolved)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                record.suspension_id,
+                record.partition_key,
+                record.app_id,
+                record.sequence_id,
+                record.position,
+                record.channel,
+                json.dumps(record.schema_json),
+                json.dumps(serde.serialize(record.metadata, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.inputs, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.state, **self.serde_kwargs)),
+                record.created_at,
+                1 if record.resolved else 0,
+            ),
+        )
+        self.connection.commit()
+
+    def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        """Load the most recent suspension record for (partition_key, app_id, channel).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists for this combination.
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """SELECT suspension_id, partition_key, app_id, sequence_id, position,
+                      channel, schema_json, metadata_json, inputs_json, state_json,
+                      created_at, resolved
+               FROM burr_suspensions
+               WHERE partition_key IS ? AND app_id = ? AND channel = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (partition_key, app_id, channel),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return SuspensionRecord(
+            suspension_id=row[0],
+            partition_key=row[1],
+            app_id=row[2],
+            sequence_id=row[3],
+            position=row[4],
+            channel=row[5],
+            schema_json=json.loads(row[6]) if row[6] else None,
+            metadata=serde.deserialize(json.loads(row[7]), **self.serde_kwargs) if row[7] else None,
+            inputs=serde.deserialize(json.loads(row[8]), **self.serde_kwargs),
+            state=serde.deserialize(json.loads(row[9]), **self.serde_kwargs),
+            created_at=row[10],
+            resolved=bool(row[11]),
+        )
+
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Conditional UPDATE for resume-once idempotency.
+
+        :return: True if a row was updated (first call), False if already resolved (no-op).
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "UPDATE burr_suspensions SET resolved = 1 "
+            "WHERE suspension_id = ? AND resolved = 0",
+            (suspension_id,),
+        )
+        self.connection.commit()
+        return cursor.rowcount > 0
+
+    def save_journal_entry(self, entry: JournalEntry) -> None:
+        """Persist one memoized sub-step into the burr_journal table."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """INSERT OR REPLACE INTO burr_journal
+               (partition_key, app_id, sequence_id, step_key, call_index,
+                result_json)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                entry.partition_key,
+                entry.app_id,
+                entry.sequence_id,
+                entry.step_key,
+                entry.call_index,
+                json.dumps(serde.serialize(entry.result, **self.serde_kwargs)),
+            ),
+        )
+        self.connection.commit()
+
+    def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """SELECT partition_key, app_id, sequence_id, step_key, call_index,
+                      result_json
+               FROM burr_journal
+               WHERE partition_key IS ? AND app_id = ? AND sequence_id = ?
+               ORDER BY call_index ASC""",
+            (partition_key, app_id, sequence_id),
+        )
+        return [
+            JournalEntry(
+                partition_key=row[0],
+                app_id=row[1],
+                sequence_id=row[2],
+                step_key=row[3],
+                call_index=row[4],
+                result=serde.deserialize(json.loads(row[5]), **self.serde_kwargs),
+            )
+            for row in cursor.fetchall()
+        ]
 
     def cleanup(self):
         """Closes the connection to the database."""
