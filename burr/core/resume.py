@@ -109,7 +109,7 @@ def resume(
         )
     if record.resolved:
         loaded = persister.load(partition_key, app_id)
-        return State(loaded["state"]) if loaded else State(record.state)
+        return loaded["state"] if loaded else State(record.state)
 
     _validate_payload(record.schema_json, payload)
 
@@ -140,21 +140,16 @@ async def aresume(
     channel: str,
     payload: Any,
 ):
-    """Resume a suspended run by delivering ``payload`` to ``channel``. Use with
-    async actions and/or an async run loop.
+    """Resume a suspended run by delivering ``payload`` to ``channel``.
 
-    .. note::
-        **Async persisters must implement durable storage.** An async persister
-        that does *not* override ``save_suspension`` / ``load_suspension`` /
-        ``mark_suspension_resolved`` raises :exc:`NotImplementedError` immediately.
-        Full async non-durable support is planned for a future milestone.
+    Runs the async action loop (``await app.arun(...)``), so async actions are
+    fully supported. Requires a **sync** persister in this release; passing an
+    async persister raises :exc:`NotImplementedError`. Full async-persister
+    support is deferred to a later milestone.
 
-    **Sync non-durable persisters** (e.g. ``SQLitePersister``) fall back to
-    loading the suspension from ``state['__burr_durable__']``, the same path as
-    :func:`resume`.
-
-    :param persister: State persister. Async persisters must support durable
-        storage; sync persisters may use the in-state fallback.
+    :param persister: A sync state persister (durable or non-durable). Async
+        persisters are not supported in this release and raise
+        :exc:`NotImplementedError`.
     :param graph: The :class:`~burr.core.graph.Graph` to rebuild the application.
     :param app_id: Identifier of the application run to resume.
     :param partition_key: Partition key used when the run was persisted.
@@ -170,50 +165,35 @@ async def aresume(
       progresses. A second ``aresume()`` call after the first completes raises
       :exc:`ValueError`.
     """
-    is_async = persister.is_async()
-    if is_async and not supports_durable_storage(persister):
+    if persister.is_async():
         raise NotImplementedError(
-            "aresume() does not support async persisters without durable storage "
-            "in this release; use a sync persister, or a persister that overrides "
-            "save_suspension/load_suspension/mark_suspension_resolved."
+            "aresume() does not support async persisters in this release; "
+            "use a sync persister (durable or non-durable). Async actions are "
+            "still supported with a sync persister."
         )
-    if is_async:
-        record = await persister.load_suspension(partition_key, app_id, channel)
-    else:
-        record = _load_suspension(persister, partition_key, app_id, channel)
+    record = _load_suspension(persister, partition_key, app_id, channel)
     if record is None:
         raise ValueError(
             f"No suspension found for app_id={app_id!r} "
             f"(never suspended, or already resolved on a persister without durable storage)."
         )
     if record.resolved:
-        if is_async:
-            loaded = await persister.load(partition_key, app_id)
-        else:
-            loaded = persister.load(partition_key, app_id)
-        return State(loaded["state"]) if loaded else State(record.state)
+        loaded = persister.load(partition_key, app_id)
+        return loaded["state"] if loaded else State(record.state)
 
     _validate_payload(record.schema_json, payload)
 
     app = _rebuild(persister, graph, app_id, partition_key, record)
     app._resume_signals = {channel: payload}
-    if is_async and supports_durable_storage(persister):
-        app._loaded_journal = await persister.load_journal(
-            partition_key, app_id, record.sequence_id
-        )
-    else:
-        app._loaded_journal = _load_journal(
-            persister, partition_key, app_id, record.sequence_id, record.state
-        )
+    app._loaded_journal = _load_journal(
+        persister, partition_key, app_id, record.sequence_id, record.state
+    )
     app._suspended = None
 
     await app.arun(halt_after=[])
 
     if supports_durable_storage(persister):
-        if is_async:
-            await persister.mark_suspension_resolved(record.suspension_id)
-        else:
-            persister.mark_suspension_resolved(record.suspension_id)
+        persister.mark_suspension_resolved(record.suspension_id)
     else:
         # In-state fallback does not durably mark suspensions resolved; a second resume will raise (see docstring).
         pass

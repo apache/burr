@@ -211,18 +211,19 @@ def test_resume_in_state_fallback_second_call_raises():
         )
 
 
-async def test_aresume_async_non_durable_persister_raises():
-    """aresume() must raise NotImplementedError immediately for an async persister
-    that does not implement durable storage (save_suspension / load_suspension /
-    mark_suspension_resolved). AsyncInMemoryPersister extends AsyncBaseStatePersister
-    without overriding those methods, so it is the canonical non-durable async persister.
+async def test_aresume_async_persister_raises():
+    """aresume() must raise NotImplementedError immediately for any async persister.
+
+    In this release, aresume() rejects all async persisters regardless of whether
+    they implement durable storage. AsyncInMemoryPersister is used here as the
+    canonical async persister example.
     """
     from burr.core import aresume
 
     persister = AsyncInMemoryPersister()
     graph = _graph()
 
-    with pytest.raises(NotImplementedError, match="async persisters without durable storage"):
+    with pytest.raises(NotImplementedError, match="does not support async persisters"):
         await aresume(
             persister=persister,
             graph=graph,
