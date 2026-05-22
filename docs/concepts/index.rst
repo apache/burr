@@ -36,6 +36,7 @@ Overview of the concepts -- read these to get a mental model for how Burr works.
     transitions
     tracking
     state-persistence
+    durable-execution
     serde
     streaming-actions
     state-typing
