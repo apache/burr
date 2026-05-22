@@ -457,3 +457,35 @@ def test_suspend_resume_with_sqlite_dedicated_storage(tmp_path):
     )
     assert final_state["done"] is True
     p2.connection.close()
+
+
+def test_example_application_suspends_and_resumes(tmp_path):
+    import importlib.util
+    import pathlib
+    import sys
+
+    path = (
+        pathlib.Path(__file__).parents[2]
+        / "examples" / "durable-execution" / "application.py"
+    )
+    spec = importlib.util.spec_from_file_location("durable_example", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["durable_example"] = module
+    spec.loader.exec_module(module)
+    try:
+        # The example exposes build_application() and the graph it used.
+        # Use tmp_path for the SQLite DB so the test does not pollute ~/.
+        app, graph, persister = module.build_application(
+            app_id="ex1", db_path=str(tmp_path / "durable.db")
+        )
+        app.run(halt_after=["review"])
+        assert app.suspended is not None
+        assert app.suspended.channel == "human_approval"
+
+        final = resume(
+            persister=persister, graph=graph, app_id="ex1", partition_key=None,
+            channel="human_approval", payload={"approved": True},
+        )
+        assert "approved" in final
+    finally:
+        sys.modules.pop("durable_example", None)
