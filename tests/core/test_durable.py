@@ -651,3 +651,53 @@ def test_journal_accumulates_across_multiple_actions():
     assert len(journal) == 2
     keys = {e.step_key for e in journal}
     assert keys == {"a_calc", "b_calc"}
+
+
+def test_journal_no_double_count_via_stream_result():
+    """Regression guard: step_a's journal entry must not be double-counted
+    when stream_result() fast-forwards through it and then executes a
+    non-streaming step_b.  The fix is self._journal_sink = [] at line ~1744
+    of application.py, immediately before the direct self._step() call in
+    the non-streaming branch of stream_result().  Deleting that line causes
+    this test to observe 3 journal entries instead of 2."""
+    from burr.core import ApplicationBuilder, State, action
+    from burr.core.durable import read_journal_from_state
+    from burr.core.persistence import SQLitePersister
+
+    @action(reads=[], writes=["a"])
+    def step_a(state, __context):
+        v = __context.durable("a_calc", lambda: 1)
+        return state.update(a=v)
+
+    @action(reads=["a"], writes=["b"])
+    def step_b(state, __context):
+        v = __context.durable("b_calc", lambda: 2)
+        return state.update(b=v)
+
+    persister = SQLitePersister.from_values(":memory:")
+    persister.initialize()
+    app = (
+        ApplicationBuilder()
+        .with_actions(step_a=step_a, step_b=step_b)
+        .with_transitions(("step_a", "step_b"))
+        .with_entrypoint("step_a")
+        .with_state(State({}))
+        .with_identifiers(app_id="j3", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    # step_a is NOT in halt_after, so stream_result fast-forwards through it
+    # via self.run(), then hits the non-streaming branch for step_b.
+    # The fix resets _journal_sink before that branch so step_a's entry is
+    # not accumulated a second time into the persisted state.
+    action_, container = app.stream_result(halt_after=["step_b"])
+    result, final_state = container.get()
+
+    # Verify via the persisted state (the source of truth for the bug).
+    loaded = persister.load("pk", "j3")
+    journal = read_journal_from_state(loaded["state"])
+    assert len(journal) == 2, (
+        f"Expected 2 journal entries (a_calc + b_calc), got {len(journal)}: "
+        f"{[e.step_key for e in journal]}"
+    )
+    assert {e.step_key for e in journal} == {"a_calc", "b_calc"}
