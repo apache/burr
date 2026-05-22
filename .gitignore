@@ -176,3 +176,6 @@ burr/tracking/server/build
 examples/*/statemachine
 examples/*/*/statemachine
 .vscode
+
+# Agent-authored planning artifacts (never commit)
+docs/superpowers/
