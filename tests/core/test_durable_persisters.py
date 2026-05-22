@@ -466,6 +466,92 @@ async def test_async_redis_journal_round_trip(async_redis_persister):
     assert [e.result for e in journal] == ["result-a", "result-b"]
 
 
+# ---------------------------------------------------------------------------
+# MongoDB (pymongo) durable storage tests — skipped unless BURR_CI_INTEGRATION_TESTS=true
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mongo_persister():
+    from burr.integrations.persisters.b_pymongo import MongoDBBasePersister
+    from pymongo import MongoClient
+
+    client = MongoClient(os.environ.get("MONGO_URI", "mongodb://localhost:27017"))
+    db_name = os.environ.get("MONGO_DB", "burr_durable_test")
+    persister = MongoDBBasePersister(
+        client=client, db_name=db_name, collection_name="burr_state_durable_test"
+    )
+    persister.initialize()
+    yield persister
+    client.drop_database(db_name)
+    client.close()
+
+
+@_pg_integration
+def test_pymongo_supports_durable_storage(mongo_persister):
+    assert supports_durable_storage(mongo_persister) is True
+
+
+@_pg_integration
+def test_pymongo_suspension_round_trip(mongo_persister):
+    mongo_persister.save_suspension(_record())
+    loaded = mongo_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@_pg_integration
+def test_pymongo_load_suspension_returns_resolved_record(mongo_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    mongo_persister.save_suspension(_record())
+    mongo_persister.mark_suspension_resolved("sus-1")
+    loaded = mongo_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@_pg_integration
+def test_pymongo_mark_resolved_is_conditional(mongo_persister):
+    mongo_persister.save_suspension(_record())
+    first = mongo_persister.mark_suspension_resolved("sus-1")
+    second = mongo_persister.mark_suspension_resolved("sus-1")
+    # First call resolves a row; second call resolves nothing (resume-once).
+    assert first is True
+    assert second is False
+
+
+@_pg_integration
+def test_pymongo_journal_round_trip(mongo_persister):
+    mongo_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    mongo_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = mongo_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
+def test_deprecated_mongodb_shim_inherits_durable_storage():
+    """The deprecated ``burr.integrations.persisters.b_mongodb.MongoDBBasePersister``
+    is a subclass of the canonical pymongo persister, so it must inherit the
+    durable-storage overrides without re-declaring them."""
+    from unittest.mock import MagicMock
+
+    from burr.integrations.persisters.b_mongodb import (
+        MongoDBBasePersister as DeprecatedMongoShim,
+    )
+
+    client = MagicMock()
+    instance = DeprecatedMongoShim(client=client, db_name="x", collection_name="y")
+    assert supports_durable_storage(instance) is True
+
+
 def test_deprecated_postgresql_shim_inherits_durable_storage():
     """The deprecated ``burr.integrations.persisters.postgresql.PostgreSQLPersister``
     is a subclass of the canonical psycopg2 persister, so it must inherit the

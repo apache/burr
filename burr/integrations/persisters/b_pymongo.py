@@ -20,9 +20,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pymongo import MongoClient
+from pymongo import ASCENDING, DESCENDING, MongoClient
 
-from burr.core import persistence, state
+from burr.core import persistence, serde, state
+from burr.core.durable import JournalEntry, SuspensionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,139 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
         self.db = self.client[db_name]
         self.collection = self.db[collection_name]
         self.serde_kwargs = serde_kwargs or {}
+
+    def initialize(self):
+        """Creates indexes for the state collection and the two durable-execution
+        collections (``burr_suspensions`` and ``burr_journal``).
+
+        Index creation in MongoDB is idempotent — calling this multiple times
+        is safe.
+        """
+        self.db["burr_suspensions"].create_index(
+            [
+                ("partition_key", ASCENDING),
+                ("app_id", ASCENDING),
+                ("channel", ASCENDING),
+                ("created_at", DESCENDING),
+            ]
+        )
+        self.db["burr_journal"].create_index(
+            [
+                ("partition_key", ASCENDING),
+                ("app_id", ASCENDING),
+                ("sequence_id", ASCENDING),
+                ("step_key", ASCENDING),
+            ],
+            unique=True,
+        )
+
+    def save_suspension(self, record: SuspensionRecord) -> None:
+        """Persist a suspension record into the ``burr_suspensions`` collection."""
+        doc = {
+            "_id": record.suspension_id,
+            "suspension_id": record.suspension_id,
+            "partition_key": record.partition_key,
+            "app_id": record.app_id,
+            "sequence_id": record.sequence_id,
+            "position": record.position,
+            "channel": record.channel,
+            "schema_json": record.schema_json,
+            "metadata": serde.serialize(record.metadata, **self.serde_kwargs)
+            if record.metadata is not None
+            else None,
+            "inputs": serde.serialize(record.inputs, **self.serde_kwargs),
+            "state": serde.serialize(record.state, **self.serde_kwargs),
+            "created_at": record.created_at,
+            "resolved": record.resolved,
+        }
+        self.db["burr_suspensions"].update_one(
+            {"_id": record.suspension_id},
+            {"$set": doc},
+            upsert=True,
+        )
+
+    def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        """Load the most recent suspension record for (partition_key, app_id, channel).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists for this combination.
+        """
+        doc = self.db["burr_suspensions"].find_one(
+            {"partition_key": partition_key, "app_id": app_id, "channel": channel},
+            sort=[("created_at", DESCENDING)],
+        )
+        if doc is None:
+            return None
+        return SuspensionRecord(
+            suspension_id=doc["suspension_id"],
+            partition_key=doc["partition_key"],
+            app_id=doc["app_id"],
+            sequence_id=doc["sequence_id"],
+            position=doc["position"],
+            channel=doc["channel"],
+            schema_json=doc.get("schema_json"),
+            metadata=serde.deserialize(doc["metadata"], **self.serde_kwargs)
+            if doc.get("metadata") is not None
+            else None,
+            inputs=serde.deserialize(doc["inputs"], **self.serde_kwargs),
+            state=serde.deserialize(doc["state"], **self.serde_kwargs),
+            created_at=doc["created_at"],
+            resolved=bool(doc["resolved"]),
+        )
+
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Conditional update for resume-once idempotency.
+
+        :return: ``True`` if a document was updated (first call), ``False`` if
+                 already resolved or not found (no-op).
+        """
+        result = self.db["burr_suspensions"].update_one(
+            {"_id": suspension_id, "resolved": False},
+            {"$set": {"resolved": True}},
+        )
+        return result.modified_count == 1
+
+    def save_journal_entry(self, entry: JournalEntry) -> None:
+        """Persist one memoized sub-step into the ``burr_journal`` collection."""
+        filter_doc = {
+            "partition_key": entry.partition_key,
+            "app_id": entry.app_id,
+            "sequence_id": entry.sequence_id,
+            "step_key": entry.step_key,
+        }
+        update_doc = {
+            "$set": {
+                "partition_key": entry.partition_key,
+                "app_id": entry.app_id,
+                "sequence_id": entry.sequence_id,
+                "step_key": entry.step_key,
+                "call_index": entry.call_index,
+                "result": serde.serialize(entry.result, **self.serde_kwargs),
+            }
+        }
+        self.db["burr_journal"].update_one(filter_doc, update_doc, upsert=True)
+
+    def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        cursor = self.db["burr_journal"].find(
+            {"partition_key": partition_key, "app_id": app_id, "sequence_id": sequence_id}
+        ).sort("call_index", ASCENDING)
+        return [
+            JournalEntry(
+                partition_key=doc["partition_key"],
+                app_id=doc["app_id"],
+                sequence_id=doc["sequence_id"],
+                step_key=doc["step_key"],
+                call_index=doc["call_index"],
+                result=serde.deserialize(doc["result"], **self.serde_kwargs),
+            )
+            for doc in cursor
+        ]
 
     def __enter__(self):
         return self
