@@ -229,7 +229,7 @@ class BaseStatePersister(BaseStateLoader, BaseStateSaver, metaclass=ABCMeta):
 
     def load_journal(
         self, partition_key: Optional[str], app_id: str, sequence_id: int
-    ) -> list:
+    ) -> list[JournalEntry]:
         """Load journal entries for a suspended action, ordered by call_index."""
         raise NotImplementedError
 
@@ -268,7 +268,7 @@ class AsyncBaseStatePersister(AsyncBaseStateLoader, AsyncBaseStateSaver, metacla
 
     async def load_journal(
         self, partition_key: Optional[str], app_id: str, sequence_id: int
-    ) -> list:
+    ) -> list[JournalEntry]:
         """Load journal entries for a suspended action, ordered by call_index."""
         raise NotImplementedError
 
@@ -747,7 +747,7 @@ class InMemoryPersister(BaseStatePersister):
         )
         bucket.append(entry)
 
-    def load_journal(self, partition_key: Optional[str], app_id: str, sequence_id: int) -> list:
+    def load_journal(self, partition_key: Optional[str], app_id: str, sequence_id: int) -> list[JournalEntry]:
         bucket = self._journal.get((partition_key, app_id, sequence_id), [])
         return sorted(bucket, key=lambda e: e.call_index)
 

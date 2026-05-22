@@ -303,3 +303,64 @@ def test_journal_codec_preserves_json_friendly_result():
 
     assert len(loaded) == 1
     assert loaded[0].result == original_result
+
+
+# --- InMemoryPersister: mark_suspension_resolved tests -----------------------
+
+
+def test_in_memory_persister_mark_suspension_resolved_flips_flag():
+    from burr.core.durable import SuspensionRecord
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    record = SuspensionRecord(
+        suspension_id="s99",
+        partition_key="p",
+        app_id="a",
+        sequence_id=1,
+        position="review",
+        channel="approval",
+        schema_json=None,
+        metadata=None,
+        inputs={},
+        state={},
+        created_at="2026-05-22T00:00:00",
+        resolved=False,
+    )
+    persister.save_suspension(record)
+    persister.mark_suspension_resolved("s99")
+    loaded = persister.load_suspension("p", "a", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+def test_in_memory_persister_mark_suspension_resolved_unknown_id_is_noop():
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    # Must not raise for an id that was never stored.
+    persister.mark_suspension_resolved("does-not-exist")
+
+
+# --- InMemoryPersister: load_journal ordering test ---------------------------
+
+
+def test_in_memory_persister_journal_ordered_by_call_index():
+    from burr.core.durable import JournalEntry
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    # Insert out of order: 2, 0, 1
+    for idx in (2, 0, 1):
+        persister.save_journal_entry(
+            JournalEntry(
+                partition_key="p",
+                app_id="a",
+                sequence_id=5,
+                step_key=f"step_{idx}",
+                call_index=idx,
+                result=f"result_{idx}",
+            )
+        )
+    journal = persister.load_journal("p", "a", 5)
+    assert [e.call_index for e in journal] == [0, 1, 2]
