@@ -282,3 +282,51 @@ def test_durable_side_effect_runs_once_across_suspend_resume():
     assert len(_side_effect_calls) == 1
     assert final_state["approved"] is True
     assert final_state["summary"] == "summary of draft text"
+
+
+# --- Task 3.7: non-deterministic branch raises DeterminismError ---------------
+
+_branch_toggle = {"value": True}
+
+
+@action(reads=[], writes=["out"])
+def nondeterministic(state, __context):
+    # ANTI-PATTERN under test: a durable() call behind a branch that flips
+    # between the first run and the resume re-run.
+    if _branch_toggle["value"]:
+        __context.durable("branch_a", lambda: "a")
+    else:
+        __context.durable("branch_b", lambda: "b")
+    decision = __context.suspend("approval")
+    return state.update(out=decision["ok"])
+
+
+def test_nondeterministic_branch_raises_determinism_error():
+    from burr.core.durable import DeterminismError
+
+    _branch_toggle["value"] = True
+    graph = (
+        GraphBuilder()
+        .with_actions(nondeterministic=nondeterministic)
+        .with_transitions()
+        .build()
+    )
+    persister = InMemoryPersister()
+    app = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("nondeterministic")
+        .with_state(State({}))
+        .with_identifiers(app_id="det1", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    app.run(halt_after=["nondeterministic"])
+
+    # Flip the branch before resume: the re-run takes branch_b.
+    _branch_toggle["value"] = False
+    with pytest.raises(DeterminismError):
+        resume(
+            persister=persister, graph=graph, app_id="det1", partition_key="pk",
+            channel="approval", payload={"ok": True},
+        )
