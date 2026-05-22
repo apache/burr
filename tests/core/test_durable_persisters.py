@@ -254,6 +254,73 @@ async def test_asyncpg_journal_round_trip(asyncpg_persister):
     assert [e.result for e in journal] == ["result-a", "result-b"]
 
 
+# ---------------------------------------------------------------------------
+# aiosqlite durable storage tests — no integration marker, uses :memory: DB
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def aiosqlite_persister():
+    from burr.integrations.persisters.b_aiosqlite import AsyncSQLitePersister
+
+    persister = await AsyncSQLitePersister.from_values(db_path=":memory:")
+    await persister.initialize()
+    yield persister
+    await persister.connection.close()
+
+
+@pytest.mark.asyncio
+async def test_aiosqlite_supports_durable_storage(aiosqlite_persister):
+    from burr.core.durable import supports_durable_storage
+
+    assert supports_durable_storage(aiosqlite_persister) is True
+
+
+@pytest.mark.asyncio
+async def test_aiosqlite_suspension_round_trip(aiosqlite_persister):
+    await aiosqlite_persister.save_suspension(_record())
+    loaded = await aiosqlite_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@pytest.mark.asyncio
+async def test_aiosqlite_load_suspension_returns_resolved_record(aiosqlite_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    await aiosqlite_persister.save_suspension(_record())
+    await aiosqlite_persister.mark_suspension_resolved("sus-1")
+    loaded = await aiosqlite_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@pytest.mark.asyncio
+async def test_aiosqlite_mark_resolved_is_conditional(aiosqlite_persister):
+    await aiosqlite_persister.save_suspension(_record())
+    first = await aiosqlite_persister.mark_suspension_resolved("sus-1")
+    second = await aiosqlite_persister.mark_suspension_resolved("sus-1")
+    # First call resolves a row; second call resolves nothing (resume-once).
+    assert first is True
+    assert second is False
+
+
+@pytest.mark.asyncio
+async def test_aiosqlite_journal_round_trip(aiosqlite_persister):
+    await aiosqlite_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    await aiosqlite_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = await aiosqlite_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
 def test_deprecated_postgresql_shim_inherits_durable_storage():
     """The deprecated ``burr.integrations.persisters.postgresql.PostgreSQLPersister``
     is a subclass of the canonical psycopg2 persister, so it must inherit the
