@@ -26,6 +26,7 @@ from burr.core.durable import (
     supports_durable_storage,
 )
 from burr.core.state import State
+from burr.lifecycle.base import LifecycleAdapter
 
 
 def _load_suspension(persister, partition_key, app_id, channel):
@@ -65,7 +66,7 @@ async def _aload_journal(persister, partition_key, app_id, sequence_id, state):
     return read_journal_from_state(state)
 
 
-async def _arebuild(persister, graph, app_id, partition_key, record, hooks=None):
+async def _arebuild(persister, graph, app_id, partition_key, record, hooks: Optional[List[LifecycleAdapter]] = None):
     from burr.core.application import ApplicationBuilder
 
     builder = (
@@ -103,7 +104,7 @@ def _validate_payload(schema_json, payload):
     jsonschema.validate(instance=payload, schema=schema_json)
 
 
-def _rebuild(persister, graph, app_id, partition_key, record, hooks=None):
+def _rebuild(persister, graph, app_id, partition_key, record, hooks: Optional[List[LifecycleAdapter]] = None):
     from burr.core.application import ApplicationBuilder
 
     builder = (
@@ -127,7 +128,7 @@ def resume(
     partition_key: Optional[str],
     channel: str,
     payload: Any,
-    hooks: Optional[List] = None,
+    hooks: Optional[List[LifecycleAdapter]] = None,
 ):
     """Resume a suspended run by delivering ``payload`` to ``channel``.
 
@@ -142,6 +143,10 @@ def resume(
     durable storage, the suspension lives in ``state['__burr_durable__']`` and is
     overwritten as the resumed run progresses; a second ``resume()`` call after the
     first completes raises ``ValueError``.
+
+    :param hooks: Optional lifecycle adapters to register on the rebuilt application
+        before firing ``pre_action_resume``. Pass any adapter implementing
+        :class:`~burr.lifecycle.PreActionResumeHook` (or its async variant) here.
     """
     record = _load_suspension(persister, partition_key, app_id, channel)
     if record is None:
@@ -189,7 +194,7 @@ async def aresume(
     partition_key: Optional[str],
     channel: str,
     payload: Any,
-    hooks: Optional[List] = None,
+    hooks: Optional[List[LifecycleAdapter]] = None,
 ):
     """Resume a suspended run by delivering ``payload`` to ``channel``.
 
@@ -203,6 +208,9 @@ async def aresume(
     :param partition_key: Partition key used when the run was persisted.
     :param channel: Name of the suspension channel to deliver ``payload`` to.
     :param payload: Value returned by ``suspend(channel)`` inside the action.
+    :param hooks: Optional lifecycle adapters to register on the rebuilt application
+        before firing ``pre_action_resume``. Pass any adapter implementing
+        :class:`~burr.lifecycle.PreActionResumeHook` (or its async variant) here.
 
     **Idempotency:**
 
