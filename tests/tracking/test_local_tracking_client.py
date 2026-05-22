@@ -494,3 +494,49 @@ def test_local_tracking_client_copy():
     assert copy.project_id == tracking_client.project_id
     assert copy.serde_kwargs == tracking_client.serde_kwargs
     assert copy.storage_dir == tracking_client.storage_dir
+
+
+def test_application_tracks_suspended_run(tmpdir: str):
+    """Tests that LocalTrackingClient writes a suspend_entry line when an action suspends."""
+    from burr.core.persistence import InMemoryPersister
+    from burr.tracking.common.models import SuspendEntryModel
+
+    app_id = str(uuid.uuid4())
+    log_dir = os.path.join(tmpdir, "tracking")
+    project_name = "test_application_tracks_suspended_run"
+
+    @action(reads=[], writes=[])
+    def suspending_action(state: State, __context) -> State:
+        __context.suspend("approval", metadata={"reason": "needs review"})
+        return state  # never reached
+
+    tracker = LocalTrackingClient(project=project_name, storage_dir=log_dir)
+    app = (
+        ApplicationBuilder()
+        .with_actions(suspending_action)
+        .with_transitions(("suspending_action", "suspending_action", default))
+        .with_entrypoint("suspending_action")
+        .with_state(State({}))
+        .with_identifiers(app_id=app_id)
+        .with_tracker(tracker)
+        .with_state_persister(InMemoryPersister())
+        .build()
+    )
+    app.run(halt_after=["suspending_action"])
+
+    results_dir = os.path.join(log_dir, project_name, app_id)
+    log_output = os.path.join(results_dir, LocalTrackingClient.LOG_FILENAME)
+    assert os.path.exists(log_output)
+
+    with open(log_output) as f:
+        log_contents = [json.loads(line) for line in f.readlines()]
+
+    suspend_entries = [
+        SuspendEntryModel.model_validate(line)
+        for line in log_contents
+        if line["type"] == "suspend_entry"
+    ]
+    assert len(suspend_entries) >= 1
+    entry = suspend_entries[0]
+    assert entry.channel == "approval"
+    assert entry.metadata == {"reason": "needs review"}

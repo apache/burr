@@ -180,6 +180,18 @@ class EndEntryModel(IdentifyingModel):
     type: str = "end_entry"
 
 
+class SuspendEntryModel(IdentifyingModel):
+    """Pydantic model that represents a step that suspended the run."""
+
+    suspend_time: datetime.datetime
+    action: str
+    sequence_id: int
+    channel: str
+    metadata: Dict[str, Any]
+    suspension_id: str
+    type: str = "suspend_entry"
+
+
 class BeginSpanModel(IdentifyingModel):
     """Pydantic model that represents an entry for the beginning of a span"""
 

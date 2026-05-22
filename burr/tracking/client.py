@@ -49,12 +49,15 @@ import os
 import re
 import traceback
 from abc import ABC
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 try:
     from typing import Self
 except ImportError:
     Self = "Self"
+
+if TYPE_CHECKING:
+    from burr.core.durable import SuspensionRecord
 
 from burr import system
 from burr.common import types as burr_types
@@ -62,6 +65,7 @@ from burr.core import Action, ApplicationGraph, State, serde
 from burr.core.persistence import BaseStateLoader, PersistedStateData
 from burr.integrations.base import require_plugin
 from burr.lifecycle import (
+    PostActionSuspendHook,
     PostApplicationCreateHook,
     PostEndSpanHook,
     PostRunStepHook,
@@ -81,6 +85,7 @@ from burr.tracking.common.models import (
     FirstItemStreamModel,
     InitializeStreamModel,
     PointerModel,
+    SuspendEntryModel,
 )
 from burr.visibility import ActionSpan
 
@@ -131,6 +136,7 @@ class SyncTrackingClient(
     PostApplicationCreateHook,
     PreRunStepHook,
     PostRunStepHook,
+    PostActionSuspendHook,
     PreStartSpanHook,
     PostEndSpanHook,
     DoLogAttributeHook,
@@ -477,6 +483,26 @@ class LocalTrackingClient(
             state=state.serialize(**self.serde_kwargs),
         )
         self._append_write_line(post_run_entry)
+
+    def post_action_suspend(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        action: Action,
+        sequence_id: int,
+        suspension: "SuspensionRecord",
+        **future_kwargs: Any,
+    ):
+        suspend_entry = SuspendEntryModel(
+            suspend_time=datetime.datetime.now(),
+            action=action.name,
+            sequence_id=sequence_id,
+            channel=suspension.channel,
+            metadata=suspension.metadata if suspension.metadata is not None else {},
+            suspension_id=suspension.suspension_id,
+        )
+        self._append_write_line(suspend_entry)
 
     def pre_start_span(
         self,
