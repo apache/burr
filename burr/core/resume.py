@@ -43,6 +43,44 @@ def _load_journal(persister, partition_key, app_id, sequence_id, state):
     return read_journal_from_state(state)
 
 
+async def _aload_suspension(persister, partition_key, app_id, channel):
+    if supports_durable_storage(persister):
+        if persister.is_async():
+            return await persister.load_suspension(partition_key, app_id, channel)
+        return persister.load_suspension(partition_key, app_id, channel)
+    if persister.is_async():
+        loaded = await persister.load(partition_key, app_id)
+    else:
+        loaded = persister.load(partition_key, app_id)
+    if loaded is None:
+        return None
+    return read_suspension_from_state(loaded["state"], channel)
+
+
+async def _aload_journal(persister, partition_key, app_id, sequence_id, state):
+    if supports_durable_storage(persister):
+        if persister.is_async():
+            return await persister.load_journal(partition_key, app_id, sequence_id)
+        return persister.load_journal(partition_key, app_id, sequence_id)
+    return read_journal_from_state(state)
+
+
+async def _arebuild(persister, graph, app_id, partition_key, record):
+    from burr.core.application import ApplicationBuilder
+
+    builder = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_identifiers(app_id=app_id, partition_key=partition_key)
+        .with_entrypoint(record.position)
+        .with_state(State(record.state))
+        .with_state_persister(persister)
+    )
+    if persister.is_async():
+        return await builder.abuild()
+    return builder.build()
+
+
 def _validate_payload(schema_json, payload):
     """Validate *payload* against *schema_json* using jsonschema.
 
@@ -142,13 +180,10 @@ async def aresume(
     """Resume a suspended run by delivering ``payload`` to ``channel``.
 
     Runs the async action loop (``await app.arun(...)``), so async actions are
-    fully supported. Requires a **sync** persister in this release; passing an
-    async persister raises :exc:`NotImplementedError`. Full async-persister
-    support is deferred to a later milestone.
+    fully supported. Both sync and async persisters are supported (durable or
+    non-durable).
 
-    :param persister: A sync state persister (durable or non-durable). Async
-        persisters are not supported in this release and raise
-        :exc:`NotImplementedError`.
+    :param persister: A state persister (sync or async, durable or non-durable).
     :param graph: The :class:`~burr.core.graph.Graph` to rebuild the application.
     :param app_id: Identifier of the application run to resume.
     :param partition_key: Partition key used when the run was persisted.
@@ -159,32 +194,29 @@ async def aresume(
 
     * *Durable persisters* -- resuming an already-resolved suspension is an
       idempotent no-op: the call returns the latest persisted state unchanged.
-    * *Sync non-durable persisters* -- the suspension lives in
+    * *Non-durable persisters* -- the suspension lives in
       ``state['__burr_durable__']`` and is overwritten as the resumed run
       progresses. A second ``aresume()`` call after the first completes raises
       :exc:`ValueError`.
     """
-    if persister.is_async():
-        raise NotImplementedError(
-            "aresume() does not support async persisters in this release; "
-            "use a sync persister (durable or non-durable). Async actions are "
-            "still supported with a sync persister."
-        )
-    record = _load_suspension(persister, partition_key, app_id, channel)
+    record = await _aload_suspension(persister, partition_key, app_id, channel)
     if record is None:
         raise ValueError(
             f"No suspension found for app_id={app_id!r} "
             f"(never suspended, or already resolved on a persister without durable storage)."
         )
     if record.resolved:
-        loaded = persister.load(partition_key, app_id)
+        if persister.is_async():
+            loaded = await persister.load(partition_key, app_id)
+        else:
+            loaded = persister.load(partition_key, app_id)
         return loaded["state"] if loaded else State(record.state)
 
     _validate_payload(record.schema_json, payload)
 
-    app = _rebuild(persister, graph, app_id, partition_key, record)
+    app = await _arebuild(persister, graph, app_id, partition_key, record)
     app._resume_signals = {channel: payload}
-    app._loaded_journal = _load_journal(
+    app._loaded_journal = await _aload_journal(
         persister, partition_key, app_id, record.sequence_id, record.state
     )
     app._suspended = None
@@ -194,6 +226,9 @@ async def aresume(
     # In-state fallback does not durably mark suspensions resolved; a second
     # resume will raise (see docstring).
     if supports_durable_storage(persister):
-        persister.mark_suspension_resolved(record.suspension_id)
+        if persister.is_async():
+            await persister.mark_suspension_resolved(record.suspension_id)
+        else:
+            persister.mark_suspension_resolved(record.suspension_id)
 
     return app.state

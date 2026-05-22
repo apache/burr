@@ -268,27 +268,55 @@ def test_resume_in_state_fallback_second_call_raises():
         )
 
 
-async def test_aresume_async_persister_raises():
-    """aresume() must raise NotImplementedError immediately for any async persister.
+async def test_async_suspend_resume_with_async_durable_persister():
+    """aresume() works end-to-end with an async durable persister.
 
-    In this release, aresume() rejects all async persisters regardless of whether
-    they implement durable storage. AsyncInMemoryPersister is used here as the
-    canonical async persister example.
+    Uses AsyncInMemoryPersister (async + durable storage) to exercise the full
+    async load/journal/rebuild path introduced in Task 4.6.
     """
     from burr.core import aresume
 
-    persister = AsyncInMemoryPersister()
-    graph = _graph()
+    @action(reads=[], writes=["seen"])
+    async def astart(state):
+        return state.update(seen=True)
 
-    with pytest.raises(NotImplementedError, match="does not support async persisters"):
-        await aresume(
-            persister=persister,
-            graph=graph,
-            app_id="dummy-run",
-            partition_key="pk1",
-            channel="approval",
-            payload={},
-        )
+    @action(reads=["seen"], writes=["done"])
+    async def agate(state, __context):
+        decision = __context.suspend("approval")
+        return state.update(done=decision["approved"])
+
+    graph = (
+        GraphBuilder()
+        .with_actions(astart=astart, agate=agate)
+        .with_transitions(("astart", "agate"))
+        .build()
+    )
+    persister = AsyncInMemoryPersister()
+    app = await (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("astart")
+        .with_state(State({}))
+        .with_identifiers(app_id="async_durable_run1", partition_key="pk1")
+        .with_state_persister(persister)
+        .abuild()
+    )
+    await app.arun(halt_after=["agate"])
+    assert app.suspended is not None
+
+    final_state = await aresume(
+        persister=persister,
+        graph=graph,
+        app_id="async_durable_run1",
+        partition_key="pk1",
+        channel="approval",
+        payload={"approved": True},
+    )
+    assert final_state["done"] is True
+
+    # Confirm async mark_suspension_resolved was called.
+    record = await persister.load_suspension("pk1", "async_durable_run1", "approval")
+    assert record.resolved is True
 
 
 # --- Task 3.6: durable side effect runs exactly once across suspend/resume ----
