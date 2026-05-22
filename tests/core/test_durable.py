@@ -527,6 +527,12 @@ def test_durable_executes_fn_and_journals_on_first_run():
     assert ctx._journal_sink[0].result == 42
 
 
+def test_durable_forwards_positional_and_keyword_args():
+    ctx = _make_context()
+    result = ctx.durable("combine", lambda x, y: (x, y), 1, y=2)
+    assert result == (1, 2)
+
+
 def test_durable_assigns_increasing_call_index():
     ctx = _make_context()
     ctx.durable("a", lambda: 1)

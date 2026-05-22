@@ -628,9 +628,12 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
 
         ``key`` must be stable and called in the same order across re-runs of
         the same action invocation (see the determinism contract). Do not call
-        ``suspend()`` from inside ``fn``.
+        ``suspend()`` from inside ``fn``, and do not wrap ``durable()`` in a
+        try/except that varies the key on the exception branch: the call index
+        is consumed even when ``fn`` raises, so a retry with a different key
+        triggers a ``DeterminismError``.
         """
-        from burr.core.durable import DeterminismError, JournalEntry
+        from burr.core.durable import DeterminismError, JournalEntry, supports_durable_storage
 
         idx = self._journal_call_index
         self._journal_call_index += 1
@@ -656,12 +659,11 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
             result=result,
         )
         self._journal_sink.append(entry)
-        if self.state_persister is not None:
-            from burr.core.durable import supports_durable_storage
-
-            if supports_durable_storage(self.state_persister):
-                # First-party storage: persist immediately for crash resilience.
-                self.state_persister.save_journal_entry(entry)
+        if self.state_persister is not None and supports_durable_storage(
+            self.state_persister
+        ):
+            # First-party storage: persist immediately for crash resilience.
+            self.state_persister.save_journal_entry(entry)
         return result
 
     @staticmethod
