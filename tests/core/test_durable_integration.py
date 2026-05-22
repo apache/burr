@@ -18,7 +18,7 @@
 import pytest
 
 from burr.core import ApplicationBuilder, GraphBuilder, State, action, resume
-from burr.core.persistence import InMemoryPersister, SQLitePersister
+from burr.core.persistence import AsyncInMemoryPersister, InMemoryPersister, SQLitePersister
 
 
 @action(reads=[], writes=["seen"])
@@ -208,4 +208,26 @@ def test_resume_in_state_fallback_second_call_raises():
             partition_key="pk1",
             channel="approval",
             payload={"approved": True},
+        )
+
+
+async def test_aresume_async_non_durable_persister_raises():
+    """aresume() must raise NotImplementedError immediately for an async persister
+    that does not implement durable storage (save_suspension / load_suspension /
+    mark_suspension_resolved). AsyncInMemoryPersister extends AsyncBaseStatePersister
+    without overriding those methods, so it is the canonical non-durable async persister.
+    """
+    from burr.core import aresume
+
+    persister = AsyncInMemoryPersister()
+    graph = _graph()
+
+    with pytest.raises(NotImplementedError, match="async persisters without durable storage"):
+        await aresume(
+            persister=persister,
+            graph=graph,
+            app_id="dummy-run",
+            partition_key="pk1",
+            channel="approval",
+            payload={},
         )

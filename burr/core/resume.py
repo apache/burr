@@ -140,24 +140,44 @@ async def aresume(
     channel: str,
     payload: Any,
 ):
-    """Async mirror of :func:`resume`. Use with async actions and async persisters.
+    """Resume a suspended run by delivering ``payload`` to ``channel``. Use with
+    async actions and/or an async run loop.
 
-    Idempotency: resuming an already-resolved suspension is an idempotent no-op for
-    persisters with durable storage (those implementing ``save_suspension`` /
-    ``load_suspension`` / ``mark_suspension_resolved``). For persisters without
-    durable storage, the suspension lives in ``state['__burr_durable__']`` and is
-    overwritten as the resumed run progresses; a second ``aresume()`` call after the
-    first completes raises ``ValueError``.
+    .. note::
+        **Async persisters must implement durable storage.** An async persister
+        that does *not* override ``save_suspension`` / ``load_suspension`` /
+        ``mark_suspension_resolved`` raises :exc:`NotImplementedError` immediately.
+        Full async non-durable support is planned for a future milestone.
+
+    **Sync non-durable persisters** (e.g. ``SQLitePersister``) fall back to
+    loading the suspension from ``state['__burr_durable__']``, the same path as
+    :func:`resume`.
+
+    :param persister: State persister. Async persisters must support durable
+        storage; sync persisters may use the in-state fallback.
+    :param graph: The :class:`~burr.core.graph.Graph` to rebuild the application.
+    :param app_id: Identifier of the application run to resume.
+    :param partition_key: Partition key used when the run was persisted.
+    :param channel: Name of the suspension channel to deliver ``payload`` to.
+    :param payload: Value returned by ``suspend(channel)`` inside the action.
+
+    **Idempotency:**
+
+    * *Durable persisters* -- resuming an already-resolved suspension is an
+      idempotent no-op: the call returns the latest persisted state unchanged.
+    * *Sync non-durable persisters* -- the suspension lives in
+      ``state['__burr_durable__']`` and is overwritten as the resumed run
+      progresses. A second ``aresume()`` call after the first completes raises
+      :exc:`ValueError`.
     """
     is_async = persister.is_async()
-    # Require durable support before awaiting load_suspension; without it the
-    # persister has not overridden that method and would raise NotImplementedError.
-    # When is_async but NOT supports_durable_storage we fall through to
-    # _load_suspension, which calls persister.load() synchronously. That works
-    # for sync persisters but raises TypeError for async non-durable persisters
-    # (the sync call returns an un-awaited coroutine). A full fix requires an
-    # async-aware _aload_suspension helper; deferred to M3/M4 (M2 limitation).
-    if is_async and supports_durable_storage(persister):
+    if is_async and not supports_durable_storage(persister):
+        raise NotImplementedError(
+            "aresume() does not support async persisters without durable storage "
+            "in this release; use a sync persister, or a persister that overrides "
+            "save_suspension/load_suspension/mark_suspension_resolved."
+        )
+    if is_async:
         record = await persister.load_suspension(partition_key, app_id, channel)
     else:
         record = _load_suspension(persister, partition_key, app_id, channel)
