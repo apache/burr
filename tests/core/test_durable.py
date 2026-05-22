@@ -90,3 +90,61 @@ def test_durable_symbols_exported_from_burr_core():
 
     assert hasattr(core, "DeterminismError")
     assert hasattr(core, "SuspensionRecord")
+
+
+def test_base_persister_durable_methods_raise_not_implemented():
+    from burr.core.persistence import BaseStatePersister
+
+    assert hasattr(BaseStatePersister, "save_suspension")
+    assert hasattr(BaseStatePersister, "load_suspension")
+    assert hasattr(BaseStatePersister, "save_journal_entry")
+    assert hasattr(BaseStatePersister, "load_journal")
+
+
+def test_supports_durable_storage_false_for_base_sqlite():
+    from burr.core.durable import supports_durable_storage
+    from burr.core.persistence import SQLitePersister
+
+    persister = SQLitePersister.from_values(":memory:")
+    # No SQLite override ships in this task; that lands in M4.
+    assert supports_durable_storage(persister) is False
+
+
+def test_supports_durable_storage_true_for_in_memory():
+    from burr.core.durable import supports_durable_storage
+    from burr.core.persistence import InMemoryPersister
+
+    assert supports_durable_storage(InMemoryPersister()) is True
+
+
+def test_in_memory_persister_suspension_round_trip():
+    from burr.core.durable import SuspensionRecord
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    record = SuspensionRecord(
+        suspension_id="s1", partition_key="p", app_id="a", sequence_id=2,
+        position="review", channel="approval", schema_json=None,
+        metadata=None, inputs={}, state={"draft": "d"},
+        created_at="2026-05-22T00:00:00", resolved=False,
+    )
+    persister.save_suspension(record)
+    loaded = persister.load_suspension("p", "a", "approval")
+    assert loaded.suspension_id == "s1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.resolved is False
+
+
+def test_in_memory_persister_journal_round_trip():
+    from burr.core.durable import JournalEntry
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    entry = JournalEntry(
+        partition_key="p", app_id="a", sequence_id=2,
+        step_key="summarize", call_index=0, result="cached",
+    )
+    persister.save_journal_entry(entry)
+    journal = persister.load_journal("p", "a", 2)
+    assert len(journal) == 1
+    assert journal[0].result == "cached"

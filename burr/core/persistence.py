@@ -204,11 +204,67 @@ class BaseStatePersister(BaseStateLoader, BaseStateSaver, metaclass=ABCMeta):
     Extend this class if you want an easy way to implement custom state storage.
     """
 
+    # --- Durable execution: optional. Default raises; the Application falls
+    # --- back to storing this data inside the State (see burr.core.durable).
+
+    def save_suspension(self, record: "SuspensionRecord") -> None:
+        """Persist a suspension record. Override for dedicated storage."""
+        raise NotImplementedError
+
+    def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> "Optional[SuspensionRecord]":
+        """Load the unresolved suspension for (partition_key, app_id, channel)."""
+        raise NotImplementedError
+
+    def save_journal_entry(self, entry: "JournalEntry") -> None:
+        """Persist one memoized sub-step. Override for dedicated storage."""
+        raise NotImplementedError
+
+    def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        raise NotImplementedError
+
+    def mark_suspension_resolved(self, suspension_id: str) -> None:
+        """Mark a suspension consumed. First-party SQL persisters do this with a
+        conditional UPDATE for resume-once; the default raises."""
+        raise NotImplementedError
+
 
 class AsyncBaseStatePersister(AsyncBaseStateLoader, AsyncBaseStateSaver, metaclass=ABCMeta):
     """Utility interface for an asynchronous state reader/writer. This both persists and initializes state.
     Extend this class if you want an easy way to implement custom state storage.
     """
+
+    # --- Durable execution: optional. Default raises; the Application falls
+    # --- back to storing this data inside the State (see burr.core.durable).
+
+    async def save_suspension(self, record: "SuspensionRecord") -> None:
+        """Persist a suspension record. Override for dedicated storage."""
+        raise NotImplementedError
+
+    async def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> "Optional[SuspensionRecord]":
+        """Load the unresolved suspension for (partition_key, app_id, channel)."""
+        raise NotImplementedError
+
+    async def save_journal_entry(self, entry: "JournalEntry") -> None:
+        """Persist one memoized sub-step. Override for dedicated storage."""
+        raise NotImplementedError
+
+    async def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        raise NotImplementedError
+
+    async def mark_suspension_resolved(self, suspension_id: str) -> None:
+        """Mark a suspension consumed. First-party SQL persisters do this with a
+        conditional UPDATE for resume-once; the default raises."""
+        raise NotImplementedError
 
 
 class PersisterHook(PostRunStepHook):
@@ -614,6 +670,8 @@ class InMemoryPersister(BaseStatePersister):
 
     def __init__(self):
         self._storage = defaultdict(lambda: defaultdict(list))
+        self._suspensions = {}
+        self._journal = {}
 
     def load(
         self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
@@ -660,6 +718,27 @@ class InMemoryPersister(BaseStatePersister):
 
         # Store the state
         self._storage[partition_key][app_id].append(persisted_state)
+
+    def save_suspension(self, record):
+        self._suspensions[(record.partition_key, record.app_id, record.channel)] = record
+
+    def load_suspension(self, partition_key, app_id, channel):
+        return self._suspensions.get((partition_key, app_id, channel))
+
+    def mark_suspension_resolved(self, suspension_id):
+        for key, record in self._suspensions.items():
+            if record.suspension_id == suspension_id:
+                record.resolved = True
+
+    def save_journal_entry(self, entry):
+        bucket = self._journal.setdefault(
+            (entry.partition_key, entry.app_id, entry.sequence_id), []
+        )
+        bucket.append(entry)
+
+    def load_journal(self, partition_key, app_id, sequence_id):
+        bucket = self._journal.get((partition_key, app_id, sequence_id), [])
+        return sorted(bucket, key=lambda e: e.call_index)
 
 
 class AsyncInMemoryPersister(AsyncBaseStatePersister):

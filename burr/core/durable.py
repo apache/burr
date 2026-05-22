@@ -80,3 +80,49 @@ class JournalEntry:
     step_key: str
     call_index: int
     result: Any
+
+
+def supports_durable_storage(persister) -> bool:
+    """True if the persister overrides the durable-storage methods. When False,
+    the Application stores suspensions and journal entries inside the State."""
+    from burr.core.persistence import (
+        AsyncBaseStatePersister,
+        BaseStatePersister,
+    )
+
+    base = AsyncBaseStatePersister if persister.is_async() else BaseStatePersister
+    return type(persister).save_suspension is not base.save_suspension
+
+
+# --- In-state fallback codec --------------------------------------------------
+# When the persister has no dedicated storage, suspensions and journal entries
+# ride inside a reserved State namespace, which the existing PersisterHook saves.
+
+DURABLE_STATE_KEY = "__burr_durable__"
+
+
+def write_suspension_into_state(state, record: "SuspensionRecord"):
+    """Return a new State with the suspension record embedded."""
+    bucket = dict(state.get(DURABLE_STATE_KEY, {}) or {})
+    bucket["suspension"] = dataclasses.asdict(record)
+    return state.update(**{DURABLE_STATE_KEY: bucket})
+
+
+def read_suspension_from_state(state, channel: str) -> "Optional[SuspensionRecord]":
+    bucket = state.get(DURABLE_STATE_KEY, {}) or {}
+    raw = bucket.get("suspension")
+    if raw is None or raw.get("channel") != channel:
+        return None
+    return SuspensionRecord(**raw)
+
+
+def write_journal_into_state(state, entries: "list"):
+    """Return a new State with the journal entries embedded."""
+    bucket = dict(state.get(DURABLE_STATE_KEY, {}) or {})
+    bucket["journal"] = [dataclasses.asdict(e) for e in entries]
+    return state.update(**{DURABLE_STATE_KEY: bucket})
+
+
+def read_journal_from_state(state) -> "list":
+    bucket = state.get(DURABLE_STATE_KEY, {}) or {}
+    return [JournalEntry(**raw) for raw in bucket.get("journal", [])]
