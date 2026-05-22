@@ -109,10 +109,11 @@ def pg_persister():
     )
     persister.initialize()
     yield persister
-    # Teardown: drop durable tables so the next run starts clean.
+    # Teardown: drop durable + state tables so the next run starts clean.
     cursor = persister.connection.cursor()
     cursor.execute("DROP TABLE IF EXISTS burr_suspensions")
     cursor.execute("DROP TABLE IF EXISTS burr_journal")
+    cursor.execute("DROP TABLE IF EXISTS burr_state_durable_test")
     persister.connection.commit()
     persister.cleanup()
 

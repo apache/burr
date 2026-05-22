@@ -26,7 +26,8 @@ import json
 import logging
 from typing import Literal, Optional
 
-from burr.core import persistence, state
+from burr.core import persistence, serde, state
+from burr.core.durable import JournalEntry, SuspensionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +296,8 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         )
         self.connection.commit()
 
-    def save_suspension(self, record) -> None:
+    def save_suspension(self, record: SuspensionRecord) -> None:
         """Persist a suspension record into the burr_suspensions table."""
-        import json
-
-        from burr.core import serde
-        from burr.core.durable import SuspensionRecord  # noqa: F401 — type reference only
-
         cursor = self.connection.cursor()
         cursor.execute(
             """INSERT INTO burr_suspensions
@@ -338,16 +334,15 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         )
         self.connection.commit()
 
-    def load_suspension(self, partition_key, app_id: str, channel: str):
+    def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
         """Load the most recent suspension record for (partition_key, app_id, channel).
 
         Returns the record whether or not it is resolved; callers check
         ``record.resolved`` for resume-once idempotency. Returns ``None``
         when no record exists for this combination.
         """
-        from burr.core import serde
-        from burr.core.durable import SuspensionRecord
-
         cursor = self.connection.cursor()
         cursor.execute(
             """SELECT suspension_id, partition_key, app_id, sequence_id, position,
@@ -391,12 +386,8 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         self.connection.commit()
         return cursor.rowcount > 0
 
-    def save_journal_entry(self, entry) -> None:
+    def save_journal_entry(self, entry: JournalEntry) -> None:
         """Persist one memoized sub-step into the burr_journal table."""
-        import json
-
-        from burr.core import serde
-
         cursor = self.connection.cursor()
         cursor.execute(
             """INSERT INTO burr_journal
@@ -416,11 +407,10 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         )
         self.connection.commit()
 
-    def load_journal(self, partition_key, app_id: str, sequence_id: int) -> list:
+    def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
         """Load journal entries for a suspended action, ordered by call_index."""
-        from burr.core import serde
-        from burr.core.durable import JournalEntry
-
         cursor = self.connection.cursor()
         cursor.execute(
             """SELECT partition_key, app_id, sequence_id, step_key, call_index,
