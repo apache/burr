@@ -233,9 +233,12 @@ class BaseStatePersister(BaseStateLoader, BaseStateSaver, metaclass=ABCMeta):
         """Load journal entries for a suspended action, ordered by call_index."""
         raise NotImplementedError
 
-    def mark_suspension_resolved(self, suspension_id: str) -> None:
-        """Mark a suspension consumed. First-party SQL persisters do this with a
-        conditional UPDATE for resume-once; the default raises."""
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Marks the suspension as resolved.
+
+        Returns True if a previously-unresolved row was flipped, False otherwise
+        (already resolved, or unknown id). Callers use this for resume-once idempotency.
+        """
         raise NotImplementedError
 
 
@@ -744,8 +747,8 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
             sequence_id=row[3],
             position=row[4],
             channel=row[5],
-            schema_json=json.loads(row[6]) if row[6] else None,
-            metadata=serde.deserialize(json.loads(row[7]), **self.serde_kwargs) if row[7] else None,
+            schema_json=json.loads(row[6]) if row[6] is not None else None,
+            metadata=serde.deserialize(json.loads(row[7]), **self.serde_kwargs) if row[7] is not None else None,
             inputs=serde.deserialize(json.loads(row[8]), **self.serde_kwargs),
             state=serde.deserialize(json.loads(row[9]), **self.serde_kwargs),
             created_at=row[10],
@@ -893,10 +896,14 @@ class InMemoryPersister(BaseStatePersister):
     def load_suspension(self, partition_key: Optional[str], app_id: str, channel: str) -> Optional[SuspensionRecord]:
         return self._suspensions.get((partition_key, app_id, channel))
 
-    def mark_suspension_resolved(self, suspension_id: str) -> None:
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
         for key, record in self._suspensions.items():
             if record.suspension_id == suspension_id:
+                if record.resolved:
+                    return False
                 record.resolved = True
+                return True
+        return False
 
     def save_journal_entry(self, entry: JournalEntry) -> None:
         bucket = self._journal.setdefault(

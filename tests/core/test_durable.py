@@ -399,6 +399,42 @@ def test_in_memory_persister_mark_suspension_resolved_unknown_id_is_noop():
     persister.mark_suspension_resolved("does-not-exist")
 
 
+def test_in_memory_persister_mark_suspension_resolved_is_conditional():
+    """mark_suspension_resolved must match SQLite semantics: True on first call,
+    False on second call (already resolved), and False for an unknown id."""
+    from burr.core.durable import SuspensionRecord
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    record = SuspensionRecord(
+        suspension_id="s-cond",
+        partition_key="p",
+        app_id="a",
+        sequence_id=1,
+        position="review",
+        channel="approval",
+        schema_json=None,
+        metadata=None,
+        inputs={},
+        state={},
+        created_at="2026-05-22T00:00:00",
+        resolved=False,
+    )
+    persister.save_suspension(record)
+
+    # First call: row was unresolved, should flip and return True.
+    first = persister.mark_suspension_resolved("s-cond")
+    assert first is True
+
+    # Second call: already resolved, should be a no-op and return False.
+    second = persister.mark_suspension_resolved("s-cond")
+    assert second is False
+
+    # Unknown id: nothing to flip, must return False.
+    unknown = persister.mark_suspension_resolved("does-not-exist")
+    assert unknown is False
+
+
 # --- InMemoryPersister: load_journal ordering test ---------------------------
 
 
