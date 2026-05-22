@@ -533,3 +533,38 @@ def test_durable_assigns_increasing_call_index():
     ctx.durable("b", lambda: 2)
     assert [e.call_index for e in ctx._journal_sink] == [0, 1]
     assert [e.step_key for e in ctx._journal_sink] == ["a", "b"]
+
+
+# --- ApplicationContext.durable() replay tests (Task 3.2) ---------------------
+
+
+def test_durable_replays_from_loaded_journal_without_executing_fn():
+    from burr.core.durable import JournalEntry
+
+    recorded = [
+        JournalEntry("p", "a", 1, "double", 0, 42),
+    ]
+    ctx = _make_context()
+    ctx._loaded_journal = recorded
+
+    calls = []
+
+    def side_effect(x):
+        calls.append(x)
+        return x * 2
+
+    result = ctx.durable("double", side_effect, 21)
+    assert result == 42
+    assert calls == []  # fn must NOT run on replay
+
+
+def test_durable_replay_then_execute_for_calls_past_the_journal():
+    from burr.core.durable import JournalEntry
+
+    ctx = _make_context()
+    ctx._loaded_journal = [JournalEntry("p", "a", 1, "first", 0, "cached")]
+
+    first = ctx.durable("first", lambda: "fresh")
+    second = ctx.durable("second", lambda: "executed")
+    assert first == "cached"      # replayed
+    assert second == "executed"   # past the journal -> executed
