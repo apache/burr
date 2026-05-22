@@ -588,3 +588,31 @@ def test_durable_raises_determinism_error_on_key_mismatch():
     with pytest.raises(DeterminismError):
         # The first durable call on resume used a different key than recorded.
         ctx.durable("translate", lambda: "y")
+
+
+def test_journal_sink_flushed_into_state_on_completion_with_fallback():
+    from burr.core import ApplicationBuilder, State, action
+    from burr.core.durable import read_journal_from_state
+    from burr.core.persistence import SQLitePersister
+
+    @action(reads=[], writes=["v"])
+    def compute(state, __context):
+        value = __context.durable("calc", lambda: 99)
+        return state.update(v=value)
+
+    persister = SQLitePersister.from_values(":memory:")
+    persister.initialize()
+    app = (
+        ApplicationBuilder()
+        .with_actions(compute=compute)
+        .with_entrypoint("compute")
+        .with_state(State({}))
+        .with_identifiers(app_id="j1", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    app.run(halt_after=["compute"])
+    loaded = persister.load("pk", "j1")
+    journal = read_journal_from_state(loaded["state"])
+    assert len(journal) == 1
+    assert journal[0].result == 99

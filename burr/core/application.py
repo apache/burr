@@ -1017,6 +1017,16 @@ class Application(Generic[ApplicationStateType]):
                     new_state = _run_reducer(next_action, self._state, result, next_action.name)
 
                 new_state = self._update_internal_state_value(new_state, next_action)
+                if self._journal_sink and self._state_persister is not None:
+                    from burr.core.durable import (
+                        read_journal_from_state,
+                        supports_durable_storage,
+                        write_journal_into_state,
+                    )
+
+                    if not supports_durable_storage(self._state_persister):
+                        merged = read_journal_from_state(self._state) + self._journal_sink
+                        new_state = write_journal_into_state(new_state, merged)
                 self._set_state(new_state)
             except _Suspended as suspended:
                 suspended_signal = suspended
@@ -1254,6 +1264,16 @@ class Application(Generic[ApplicationStateType]):
                     )
                     new_state = _run_reducer(next_action, self._state, result, next_action.name)
                 new_state = self._update_internal_state_value(new_state, next_action)
+                if self._journal_sink and self._state_persister is not None:
+                    from burr.core.durable import (
+                        read_journal_from_state,
+                        supports_durable_storage,
+                        write_journal_into_state,
+                    )
+
+                    if not supports_durable_storage(self._state_persister):
+                        merged = read_journal_from_state(self._state) + self._journal_sink
+                        new_state = write_journal_into_state(new_state, merged)
                 self._set_state(new_state)
             except _Suspended as suspended:
                 suspended_signal = suspended
