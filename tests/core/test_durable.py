@@ -504,3 +504,32 @@ async def test_arun_stops_and_records_suspension():
     assert record.channel == "approval"
     assert record.resolved is False
     assert record.state.get("seen") is True
+
+
+# --- ApplicationContext.durable() tests (Task 3.1) ----------------------------
+
+
+def test_durable_executes_fn_and_journals_on_first_run():
+    calls = []
+
+    def side_effect(x):
+        calls.append(x)
+        return x * 2
+
+    ctx = _make_context()
+    result = ctx.durable("double", side_effect, 21)
+    assert result == 42
+    assert calls == [21]
+    # The entry was appended to the journal sink for persistence.
+    assert len(ctx._journal_sink) == 1
+    assert ctx._journal_sink[0].step_key == "double"
+    assert ctx._journal_sink[0].call_index == 0
+    assert ctx._journal_sink[0].result == 42
+
+
+def test_durable_assigns_increasing_call_index():
+    ctx = _make_context()
+    ctx.durable("a", lambda: 1)
+    ctx.durable("b", lambda: 2)
+    assert [e.call_index for e in ctx._journal_sink] == [0, 1]
+    assert [e.step_key for e in ctx._journal_sink] == ["a", "b"]

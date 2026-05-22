@@ -622,6 +622,48 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
 
         raise _Suspended(channel, schema_json, metadata)
 
+    def durable(self, key: str, fn: Callable, *args, **kwargs) -> Any:
+        """Memoize a sub-step. First run: execute ``fn`` and journal its result.
+        On resume: replay the journaled result without executing ``fn`` again.
+
+        ``key`` must be stable and called in the same order across re-runs of
+        the same action invocation (see the determinism contract). Do not call
+        ``suspend()`` from inside ``fn``.
+        """
+        from burr.core.durable import DeterminismError, JournalEntry
+
+        idx = self._journal_call_index
+        self._journal_call_index += 1
+
+        if idx < len(self._loaded_journal):
+            recorded = self._loaded_journal[idx]
+            if recorded.step_key != key:
+                raise DeterminismError(
+                    f"Durable sub-step #{idx} replayed as key {key!r} but the "
+                    f"journal recorded key {recorded.step_key!r}. The action's "
+                    f"durable() calls must occur in the same order with the same "
+                    f"keys on every re-run."
+                )
+            return recorded.result
+
+        result = fn(*args, **kwargs)
+        entry = JournalEntry(
+            partition_key=self.partition_key,
+            app_id=self.app_id,
+            sequence_id=self.sequence_id,
+            step_key=key,
+            call_index=idx,
+            result=result,
+        )
+        self._journal_sink.append(entry)
+        if self.state_persister is not None:
+            from burr.core.durable import supports_durable_storage
+
+            if supports_durable_storage(self.state_persister):
+                # First-party storage: persist immediately for crash resilience.
+                self.state_persister.save_journal_entry(entry)
+        return result
+
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
         """Provides the context-local application context.
