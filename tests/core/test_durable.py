@@ -17,8 +17,6 @@
 
 import dataclasses
 
-import pytest
-
 from burr.core.durable import (
     DeterminismError,
     JournalEntry,

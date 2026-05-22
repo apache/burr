@@ -145,8 +145,8 @@ class BaseStateSaver(abc.ABC):
         :param sequence_id: Sequence ID of the last executed step
         :param position: The action name that was implemented
         :param state: The current state of the application
-        :param status: The status of this state, either "completed" or "failed". If "failed" the state is what it was
-            before the action was applied.
+        :param status: The status of this state: "completed", "failed", or "suspended". If "failed" the state is what
+            it was before the action was applied.
         """
         pass
 
@@ -190,8 +190,8 @@ class AsyncBaseStateSaver(abc.ABC):
         :param sequence_id: Sequence ID of the last executed step
         :param position: The action name that was implemented
         :param state: The current state of the application
-        :param status: The status of this state, either "completed" or "failed". If "failed" the state is what it was
-            before the action was applied.
+        :param status: The status of this state: "completed", "failed", or "suspended". If "failed" the state is what
+            it was before the action was applied.
         """
         pass
 
@@ -554,8 +554,8 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         :param sequence_id: The state corresponding to a specific point in time.
         :param position: The position in the sequence of states.
         :param state: The state to be saved, an instance of the State class.
-        :param status: The status of this state, either "completed" or "failed". If "failed" the state is what it was
-            before the action was applied.
+        :param status: The status of this state: "completed", "failed", or "suspended". If "failed" the state is what
+            it was before the action was applied.
         :return: None
         """
         logger.debug(
