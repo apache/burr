@@ -1044,18 +1044,15 @@ class Application(Generic[ApplicationStateType]):
             for entry in self._journal_sink:
                 persister.save_journal_entry(entry)
         elif persister is not None:
-            # In-state fallback: embed the record + journal in State, then save.
+            # In-state fallback: embed the record + journal into State only.
+            # We deliberately do NOT call persister.save here. The post_run_step
+            # lifecycle hook fires for this suspended step and PersisterHook.save
+            # persists the embedded State once. Saving here too would write the
+            # same (partition_key, app_id, sequence_id, position) row twice and
+            # break persisters with a UNIQUE constraint (e.g. SQLitePersister).
             state = write_suspension_into_state(self._state, record)
             state = write_journal_into_state(state, self._journal_sink)
             self._set_state(state)
-            persister.save(
-                self._partition_key,
-                self._uid,
-                self.sequence_id,
-                action.name,
-                self._state,
-                "suspended",
-            )
         # NOTE: post_action_suspend is registered in Milestone 5. Guard it so it is a
         # safe no-op until the hook is added to REGISTERED_SYNC_HOOKS.
         try:
