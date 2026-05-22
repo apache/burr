@@ -130,7 +130,7 @@ class BaseStateSaver(abc.ABC):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         """Saves the state for a given app_id, sequence_id, position
@@ -175,7 +175,7 @@ class AsyncBaseStateSaver(abc.ABC):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         """Saves the state for a given app_id, sequence_id, position
@@ -279,7 +279,7 @@ class DevNullPersister(BaseStatePersister):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         return
@@ -303,7 +303,7 @@ class AsyncDevNullPersister(AsyncBaseStatePersister):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         return
@@ -538,7 +538,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         """
@@ -644,7 +644,7 @@ class InMemoryPersister(BaseStatePersister):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         # Create a PersistedStateData entry
@@ -697,7 +697,7 @@ class AsyncInMemoryPersister(AsyncBaseStatePersister):
         sequence_id: int,
         position: str,
         state: State,
-        status: Literal["completed", "failed"],
+        status: Literal["completed", "failed", "suspended"],
         **kwargs,
     ):
         # Create a PersistedStateData entry

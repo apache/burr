@@ -75,3 +75,13 @@ def test_journal_entry_fields():
     assert dataclasses.is_dataclass(entry)
     assert entry.call_index == 0
     assert entry.result == "cached value"
+
+
+def test_save_status_literal_includes_suspended():
+    import typing
+
+    from burr.core.persistence import BaseStateSaver
+
+    hints = typing.get_type_hints(BaseStateSaver.save)
+    status_arg = hints["status"]
+    assert "suspended" in typing.get_args(status_arg)
