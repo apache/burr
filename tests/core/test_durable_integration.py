@@ -169,3 +169,43 @@ def test_resume_through_in_state_fallback_with_sqlite():
         payload={"approved": True},
     )
     assert final_state["done"] is True
+
+
+def test_resume_in_state_fallback_second_call_raises():
+    """A second resume() call on an in-state fallback persister raises ValueError.
+
+    After the first resume() completes, the resumed run's new state row no longer
+    carries '__burr_durable__', so the suspension record is gone. A second resume()
+    must raise ValueError with a message that names the in-state fallback as the
+    reason, distinguishing it from a never-suspended app_id.
+    """
+    persister = SQLitePersister(":memory:")
+    persister.initialize()
+
+    graph = _graph()
+
+    # Suspend.
+    app = _build(persister, graph)
+    app.run(halt_after=["gate"])
+    assert app.suspended is not None
+
+    # First resume succeeds.
+    resume(
+        persister=persister,
+        graph=graph,
+        app_id="run1",
+        partition_key="pk1",
+        channel="approval",
+        payload={"approved": True},
+    )
+
+    # Second resume on in-state fallback must raise ValueError naming the cause.
+    with pytest.raises(ValueError, match="already resolved on a persister without durable storage"):
+        resume(
+            persister=persister,
+            graph=graph,
+            app_id="run1",
+            partition_key="pk1",
+            channel="approval",
+            payload={"approved": True},
+        )

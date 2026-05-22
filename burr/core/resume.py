@@ -17,6 +17,7 @@
 
 """Top-level resume helpers for durable execution."""
 
+import warnings
 from typing import Any, Optional
 
 from burr.core.durable import (
@@ -43,12 +44,22 @@ def _load_journal(persister, partition_key, app_id, sequence_id, state):
 
 
 def _validate_payload(schema_json, payload):
+    """Validate *payload* against *schema_json* using jsonschema.
+
+    Schema validation requires the optional ``jsonschema`` package. When it is
+    absent, validation is skipped and a warning is emitted.
+    """
     if schema_json is None:
         return
     try:
         import jsonschema
     except ImportError:
-        return  # validation is best-effort without jsonschema installed
+        warnings.warn(
+            "jsonschema is not installed; skipping resume payload schema validation. "
+            "Install jsonschema to enable validation.",
+            stacklevel=2,
+        )
+        return
     jsonschema.validate(instance=payload, schema=schema_json)
 
 
@@ -83,14 +94,18 @@ def resume(
     journal, ``suspend(channel)`` returns ``payload``), and runs to the next halt,
     suspend, or completion.
 
-    Idempotent: resuming an already-resolved suspension is a no-op that returns
-    the current state.
+    Idempotency: resuming an already-resolved suspension is an idempotent no-op for
+    persisters with durable storage (those implementing ``save_suspension`` /
+    ``load_suspension`` / ``mark_suspension_resolved``). For persisters without
+    durable storage, the suspension lives in ``state['__burr_durable__']`` and is
+    overwritten as the resumed run progresses; a second ``resume()`` call after the
+    first completes raises ``ValueError``.
     """
     record = _load_suspension(persister, partition_key, app_id, channel)
     if record is None:
         raise ValueError(
-            f"No suspension found for app_id={app_id!r}, "
-            f"partition_key={partition_key!r}, channel={channel!r}."
+            f"No suspension found for app_id={app_id!r} "
+            f"(never suspended, or already resolved on a persister without durable storage)."
         )
     if record.resolved:
         loaded = persister.load(partition_key, app_id)
@@ -110,7 +125,8 @@ def resume(
     if supports_durable_storage(persister):
         persister.mark_suspension_resolved(record.suspension_id)
     else:
-        record.resolved = True  # in-state fallback: best-effort
+        # In-state fallback does not durably mark suspensions resolved; a second resume will raise (see docstring).
+        pass
 
     return app.state
 
@@ -124,7 +140,15 @@ async def aresume(
     channel: str,
     payload: Any,
 ):
-    """Async mirror of resume(). Use with async actions and async persisters."""
+    """Async mirror of :func:`resume`. Use with async actions and async persisters.
+
+    Idempotency: resuming an already-resolved suspension is an idempotent no-op for
+    persisters with durable storage (those implementing ``save_suspension`` /
+    ``load_suspension`` / ``mark_suspension_resolved``). For persisters without
+    durable storage, the suspension lives in ``state['__burr_durable__']`` and is
+    overwritten as the resumed run progresses; a second ``aresume()`` call after the
+    first completes raises ``ValueError``.
+    """
     is_async = persister.is_async()
     if is_async:
         record = await persister.load_suspension(partition_key, app_id, channel)
@@ -132,8 +156,8 @@ async def aresume(
         record = _load_suspension(persister, partition_key, app_id, channel)
     if record is None:
         raise ValueError(
-            f"No suspension found for app_id={app_id!r}, "
-            f"partition_key={partition_key!r}, channel={channel!r}."
+            f"No suspension found for app_id={app_id!r} "
+            f"(never suspended, or already resolved on a persister without durable storage)."
         )
     if record.resolved:
         if is_async:
@@ -164,6 +188,7 @@ async def aresume(
         else:
             persister.mark_suspension_resolved(record.suspension_id)
     else:
-        record.resolved = True
+        # In-state fallback does not durably mark suspensions resolved; a second resume will raise (see docstring).
+        pass
 
     return app.state

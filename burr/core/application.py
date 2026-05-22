@@ -1050,6 +1050,7 @@ class Application(Generic[ApplicationStateType]):
             # persists the embedded State once. Saving here too would write the
             # same (partition_key, app_id, sequence_id, position) row twice and
             # break persisters with a UNIQUE constraint (e.g. SQLitePersister).
+            # M5: suspended runs are persisted with status "completed"; a dedicated status + post_action_suspend hook lands in M5.
             state = write_suspension_into_state(self._state, record)
             state = write_journal_into_state(state, self._journal_sink)
             self._set_state(state)
