@@ -275,9 +275,13 @@ class AsyncBaseStatePersister(AsyncBaseStateLoader, AsyncBaseStateSaver, metacla
         """Load journal entries for a suspended action, ordered by call_index."""
         raise NotImplementedError
 
-    async def mark_suspension_resolved(self, suspension_id: str) -> None:
-        """Mark a suspension consumed. First-party SQL persisters do this with a
-        conditional UPDATE for resume-once; the default raises."""
+    async def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Marks the suspension as resolved.
+
+        Returns True if a previously-unresolved row was flipped, False otherwise
+        (already resolved, or unknown id). Callers use this for resume-once idempotency.
+        First-party SQL persisters do this with a conditional UPDATE.
+        """
         raise NotImplementedError
 
 
