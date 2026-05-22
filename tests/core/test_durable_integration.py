@@ -232,3 +232,53 @@ async def test_aresume_async_persister_raises():
             channel="approval",
             payload={},
         )
+
+
+# --- Task 3.6: durable side effect runs exactly once across suspend/resume ----
+
+# Module-level counter: survives the Application instance, not the process.
+_side_effect_calls = []
+
+
+@action(reads=[], writes=["summary", "approved"])
+def summarize_then_gate(state, __context):
+    summary = __context.durable("summarize", _expensive_summarize, "draft text")
+    decision = __context.suspend("approval", metadata={"summary": summary})
+    return state.update(summary=summary, approved=decision["approved"])
+
+
+def _expensive_summarize(text):
+    _side_effect_calls.append(text)
+    return f"summary of {text}"
+
+
+def test_durable_side_effect_runs_once_across_suspend_resume():
+    _side_effect_calls.clear()
+    graph = (
+        GraphBuilder()
+        .with_actions(summarize_then_gate=summarize_then_gate)
+        .with_transitions()
+        .build()
+    )
+    persister = InMemoryPersister()
+    app = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("summarize_then_gate")
+        .with_state(State({}))
+        .with_identifiers(app_id="once1", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    app.run(halt_after=["summarize_then_gate"])
+    assert app.suspended is not None
+    assert len(_side_effect_calls) == 1  # ran once before suspending
+
+    final_state = resume(
+        persister=persister, graph=graph, app_id="once1", partition_key="pk",
+        channel="approval", payload={"approved": True},
+    )
+    # The action re-ran top-to-bottom on resume, but summarize was replayed.
+    assert len(_side_effect_calls) == 1
+    assert final_state["approved"] is True
+    assert final_state["summary"] == "summary of draft text"
