@@ -17,10 +17,12 @@
 
 import json
 import logging
+from datetime import datetime
 from typing import Any, ClassVar, Literal, Optional
 
 from burr.common.types import BaseCopyable
-from burr.core import persistence, state
+from burr.core import persistence, serde, state
+from burr.core.durable import JournalEntry, SuspensionRecord
 from burr.integrations import base
 
 try:
@@ -244,9 +246,48 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         finally:
             await self._release_connection(conn, acquired)
 
+    async def create_durable_tables_if_not_exist(self):
+        """Creates the durable-execution tables (suspensions + journal) if they don't exist."""
+        conn, acquired = await self._get_connection()
+        try:
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS burr_suspensions (
+                        suspension_id TEXT PRIMARY KEY,
+                        partition_key TEXT,
+                        app_id TEXT NOT NULL,
+                        sequence_id INTEGER NOT NULL,
+                        position TEXT NOT NULL,
+                        channel TEXT NOT NULL,
+                        schema_json JSONB,
+                        metadata_json JSONB,
+                        inputs_json JSONB,
+                        state_json JSONB NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        resolved BOOLEAN NOT NULL DEFAULT false
+                    )"""
+                )
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS burr_journal (
+                        partition_key TEXT,
+                        app_id TEXT NOT NULL,
+                        sequence_id INTEGER NOT NULL,
+                        step_key TEXT NOT NULL,
+                        call_index INTEGER NOT NULL,
+                        result_json JSONB NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (partition_key, app_id, sequence_id, step_key)
+                    )"""
+                )
+        finally:
+            await self._release_connection(conn, acquired)
+
     async def initialize(self):
         """Creates the table"""
         await self.create_table(self.table_name)
+        await self.create_durable_tables_if_not_exist()
         self._initialized = True
 
     async def is_initialized(self) -> bool:
@@ -396,6 +437,169 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
             await conn.execute(
                 query, partition_key, app_id, sequence_id, position, json_state, status
             )
+        finally:
+            await self._release_connection(conn, acquired)
+
+    async def save_suspension(self, record: SuspensionRecord) -> None:
+        """Persist a suspension record into the burr_suspensions table."""
+        conn, acquired = await self._get_connection()
+        try:
+            # asyncpg requires datetime objects for TIMESTAMP columns;
+            # SuspensionRecord.created_at is typed as str so we parse it when needed.
+            created_at = record.created_at
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at)
+            await conn.execute(
+                """INSERT INTO burr_suspensions
+                   (suspension_id, partition_key, app_id, sequence_id, position,
+                    channel, schema_json, metadata_json, inputs_json, state_json,
+                    created_at, resolved)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                   ON CONFLICT (suspension_id) DO UPDATE SET
+                       partition_key = EXCLUDED.partition_key,
+                       app_id = EXCLUDED.app_id,
+                       sequence_id = EXCLUDED.sequence_id,
+                       position = EXCLUDED.position,
+                       channel = EXCLUDED.channel,
+                       schema_json = EXCLUDED.schema_json,
+                       metadata_json = EXCLUDED.metadata_json,
+                       inputs_json = EXCLUDED.inputs_json,
+                       state_json = EXCLUDED.state_json,
+                       created_at = EXCLUDED.created_at,
+                       resolved = EXCLUDED.resolved""",
+                record.suspension_id,
+                record.partition_key,
+                record.app_id,
+                record.sequence_id,
+                record.position,
+                record.channel,
+                json.dumps(record.schema_json),
+                json.dumps(serde.serialize(record.metadata, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.inputs, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.state, **self.serde_kwargs)),
+                created_at,
+                record.resolved,
+            )
+        finally:
+            await self._release_connection(conn, acquired)
+
+    async def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        """Load the most recent suspension record for (partition_key, app_id, channel).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists for this combination.
+        """
+        conn, acquired = await self._get_connection()
+        try:
+            row = await conn.fetchrow(
+                """SELECT suspension_id, partition_key, app_id, sequence_id, position,
+                          channel, schema_json, metadata_json, inputs_json, state_json,
+                          created_at, resolved
+                   FROM burr_suspensions
+                   WHERE partition_key IS NOT DISTINCT FROM $1 AND app_id = $2 AND channel = $3
+                   ORDER BY created_at DESC LIMIT 1""",
+                partition_key,
+                app_id,
+                channel,
+            )
+            if row is None:
+                return None
+            # asyncpg returns JSONB columns as strings — must json.loads() explicitly
+            # (unlike psycopg2 which auto-parses JSONB to Python objects).
+            schema = json.loads(row[6]) if row[6] is not None else None
+            metadata_raw = json.loads(row[7]) if row[7] is not None else None
+            inputs_raw = json.loads(row[8])  # asyncpg: JSONB is a string, must deserialize
+            state_raw = json.loads(row[9])  # asyncpg: JSONB is a string, must deserialize
+            return SuspensionRecord(
+                suspension_id=row[0],
+                partition_key=row[1],
+                app_id=row[2],
+                sequence_id=row[3],
+                position=row[4],
+                channel=row[5],
+                schema_json=schema,
+                metadata=serde.deserialize(metadata_raw, **self.serde_kwargs)
+                if metadata_raw is not None
+                else None,
+                inputs=serde.deserialize(inputs_raw, **self.serde_kwargs),
+                state=serde.deserialize(state_raw, **self.serde_kwargs),
+                # asyncpg returns TIMESTAMP as datetime; SuspensionRecord.created_at is str.
+                created_at=row[10].isoformat() if isinstance(row[10], datetime) else row[10],
+                resolved=bool(row[11]),
+            )
+        finally:
+            await self._release_connection(conn, acquired)
+
+    async def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Conditional UPDATE for resume-once idempotency.
+
+        :return: True if a row was updated (first call), False if already resolved (no-op).
+        """
+        conn, acquired = await self._get_connection()
+        try:
+            status = await conn.execute(
+                "UPDATE burr_suspensions SET resolved = true "
+                "WHERE suspension_id = $1 AND resolved = false",
+                suspension_id,
+            )
+            # asyncpg returns status string like 'UPDATE 1' or 'UPDATE 0'
+            return int(status.split()[-1]) > 0
+        finally:
+            await self._release_connection(conn, acquired)
+
+    async def save_journal_entry(self, entry: JournalEntry) -> None:
+        """Persist one memoized sub-step into the burr_journal table."""
+        conn, acquired = await self._get_connection()
+        try:
+            await conn.execute(
+                """INSERT INTO burr_journal
+                   (partition_key, app_id, sequence_id, step_key, call_index, result_json)
+                   VALUES ($1, $2, $3, $4, $5, $6)
+                   ON CONFLICT (partition_key, app_id, sequence_id, step_key) DO UPDATE SET
+                       call_index = EXCLUDED.call_index,
+                       result_json = EXCLUDED.result_json""",
+                entry.partition_key,
+                entry.app_id,
+                entry.sequence_id,
+                entry.step_key,
+                entry.call_index,
+                json.dumps(serde.serialize(entry.result, **self.serde_kwargs)),
+            )
+        finally:
+            await self._release_connection(conn, acquired)
+
+    async def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        conn, acquired = await self._get_connection()
+        try:
+            rows = await conn.fetch(
+                """SELECT partition_key, app_id, sequence_id, step_key, call_index,
+                          result_json
+                   FROM burr_journal
+                   WHERE partition_key IS NOT DISTINCT FROM $1 AND app_id = $2 AND sequence_id = $3
+                   ORDER BY call_index ASC""",
+                partition_key,
+                app_id,
+                sequence_id,
+            )
+            # asyncpg returns JSONB columns as strings — must json.loads() explicitly
+            # (unlike psycopg2 which auto-parses JSONB to Python objects).
+            return [
+                JournalEntry(
+                    partition_key=row[0],
+                    app_id=row[1],
+                    sequence_id=row[2],
+                    step_key=row[3],
+                    call_index=row[4],
+                    result=serde.deserialize(json.loads(row[5]), **self.serde_kwargs),
+                )
+                for row in rows
+            ]
         finally:
             await self._release_connection(conn, acquired)
 

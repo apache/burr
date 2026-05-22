@@ -168,6 +168,92 @@ def test_postgres_journal_round_trip(pg_persister):
     assert [e.result for e in journal] == ["result-a", "result-b"]
 
 
+# ---------------------------------------------------------------------------
+# asyncpg durable storage tests — skipped unless BURR_CI_INTEGRATION_TESTS=true
+# ---------------------------------------------------------------------------
+
+import pytest_asyncio
+
+
+@pytest_asyncio.fixture
+async def asyncpg_persister():
+    from burr.integrations.persisters.b_asyncpg import AsyncPostgreSQLPersister
+
+    persister = await AsyncPostgreSQLPersister.from_values(
+        db_name=os.environ.get("POSTGRES_DB", "postgres"),
+        user=os.environ.get("POSTGRES_USER", "postgres"),
+        password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
+        host=os.environ.get("POSTGRES_HOST", "localhost"),
+        port=int(os.environ.get("POSTGRES_PORT", "5432")),
+        table_name="burr_state_asyncpg_durable_test",
+    )
+    await persister.initialize()
+    yield persister
+    conn, acquired = await persister._get_connection()
+    try:
+        await conn.execute("DROP TABLE IF EXISTS burr_suspensions")
+        await conn.execute("DROP TABLE IF EXISTS burr_journal")
+        await conn.execute("DROP TABLE IF EXISTS burr_state_asyncpg_durable_test")
+    finally:
+        await persister._release_connection(conn, acquired)
+    await persister.cleanup()
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_asyncpg_supports_durable_storage(asyncpg_persister):
+    assert supports_durable_storage(asyncpg_persister) is True
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_asyncpg_suspension_round_trip(asyncpg_persister):
+    await asyncpg_persister.save_suspension(_record())
+    loaded = await asyncpg_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_asyncpg_load_suspension_returns_resolved_record(asyncpg_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    await asyncpg_persister.save_suspension(_record())
+    await asyncpg_persister.mark_suspension_resolved("sus-1")
+    loaded = await asyncpg_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_asyncpg_mark_resolved_is_conditional(asyncpg_persister):
+    await asyncpg_persister.save_suspension(_record())
+    first = await asyncpg_persister.mark_suspension_resolved("sus-1")
+    second = await asyncpg_persister.mark_suspension_resolved("sus-1")
+    # First call resolves a row; second call resolves nothing (resume-once).
+    assert first is True
+    assert second is False
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_asyncpg_journal_round_trip(asyncpg_persister):
+    await asyncpg_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    await asyncpg_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = await asyncpg_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
 def test_deprecated_postgresql_shim_inherits_durable_storage():
     """The deprecated ``burr.integrations.persisters.postgresql.PostgreSQLPersister``
     is a subclass of the canonical psycopg2 persister, so it must inherit the
