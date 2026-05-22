@@ -122,11 +122,10 @@ def resume(
 
     app.run(halt_after=[])  # run to completion or the next suspend
 
+    # In-state fallback does not durably mark suspensions resolved; a second
+    # resume will raise (see docstring).
     if supports_durable_storage(persister):
         persister.mark_suspension_resolved(record.suspension_id)
-    else:
-        # In-state fallback does not durably mark suspensions resolved; a second resume will raise (see docstring).
-        pass
 
     return app.state
 
@@ -192,10 +191,9 @@ async def aresume(
 
     await app.arun(halt_after=[])
 
+    # In-state fallback does not durably mark suspensions resolved; a second
+    # resume will raise (see docstring).
     if supports_durable_storage(persister):
         persister.mark_suspension_resolved(record.suspension_id)
-    else:
-        # In-state fallback does not durably mark suspensions resolved; a second resume will raise (see docstring).
-        pass
 
     return app.state
