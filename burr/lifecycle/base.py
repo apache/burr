@@ -25,6 +25,7 @@ import burr.common.types as burr_types
 if TYPE_CHECKING:
     # type-checking-only for a circular import
     from burr.core import State, Action, ApplicationGraph
+    from burr.core.durable import SuspensionRecord
     from burr.visibility import ActionSpan
 
 from burr.lifecycle.internal import lifecycle
@@ -139,6 +140,96 @@ class PostRunStepHookAsync(abc.ABC):
         :param exception: Exception that was raised
         :param future_kwargs: Future keyword arguments
         """
+        pass
+
+
+@lifecycle.base_hook("post_action_suspend")
+class PostActionSuspendHook(abc.ABC):
+    """Hook that runs after an action suspends the run and the suspension is persisted."""
+
+    @abc.abstractmethod
+    def post_action_suspend(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        action: "Action",
+        sequence_id: int,
+        suspension: "SuspensionRecord",
+        **future_kwargs: Any,
+    ):
+        """Run after a step suspends.
+
+        :param app_id: Application ID
+        :param partition_key: Partition key of the run (may be None)
+        :param action: Action that suspended
+        :param sequence_id: Sequence ID of the suspended step
+        :param suspension: SuspensionRecord that was persisted
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("post_action_suspend")
+class PostActionSuspendHookAsync(abc.ABC):
+    """Async hook that runs after an action suspends the run and the suspension is persisted."""
+
+    @abc.abstractmethod
+    async def post_action_suspend(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        action: "Action",
+        sequence_id: int,
+        suspension: "SuspensionRecord",
+        **future_kwargs: Any,
+    ):
+        pass
+
+
+@lifecycle.base_hook("pre_action_resume")
+class PreActionResumeHook(abc.ABC):
+    """Hook that runs just before a suspended action is re-executed on resume."""
+
+    @abc.abstractmethod
+    def pre_action_resume(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        action: "Action",
+        sequence_id: int,
+        channel: str,
+        **future_kwargs: Any,
+    ):
+        """Run just before a suspended action re-executes.
+
+        :param app_id: Application ID
+        :param partition_key: Partition key (may be None)
+        :param action: Action being re-entered
+        :param sequence_id: Sequence ID of the suspended step
+        :param channel: Suspension channel being resumed
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("pre_action_resume")
+class PreActionResumeHookAsync(abc.ABC):
+    """Async hook that runs just before a suspended action is re-executed on resume."""
+
+    @abc.abstractmethod
+    async def pre_action_resume(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        action: "Action",
+        sequence_id: int,
+        channel: str,
+        **future_kwargs: Any,
+    ):
         pass
 
 
@@ -500,6 +591,10 @@ LifecycleAdapter = Union[
     PreRunStepHookAsync,
     PostRunStepHook,
     PostRunStepHookAsync,
+    PostActionSuspendHook,
+    PostActionSuspendHookAsync,
+    PreActionResumeHook,
+    PreActionResumeHookAsync,
     PreApplicationExecuteCallHook,
     PreApplicationExecuteCallHookAsync,
     PostApplicationExecuteCallHook,
