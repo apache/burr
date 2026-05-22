@@ -100,11 +100,11 @@ def pg_persister():
     from burr.integrations.persisters.b_psycopg2 import PostgreSQLPersister
 
     persister = PostgreSQLPersister.from_values(
-        db_name="postgres",
-        user="postgres",
-        password="postgres",
-        host="localhost",
-        port=5432,
+        db_name=os.environ.get("POSTGRES_DB", "postgres"),
+        user=os.environ.get("POSTGRES_USER", "postgres"),
+        password=os.environ.get("POSTGRES_PASSWORD", "postgres"),
+        host=os.environ.get("POSTGRES_HOST", "localhost"),
+        port=int(os.environ.get("POSTGRES_PORT", "5432")),
         table_name="burr_state_durable_test",
     )
     persister.initialize()
@@ -165,3 +165,19 @@ def test_postgres_journal_round_trip(pg_persister):
     journal = pg_persister.load_journal("pk", "app", 4)
     assert [e.call_index for e in journal] == [0, 1]
     assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
+def test_deprecated_postgresql_shim_inherits_durable_storage():
+    """The deprecated ``burr.integrations.persisters.postgresql.PostgreSQLPersister``
+    is a subclass of the canonical psycopg2 persister, so it must inherit the
+    durable-storage overrides without re-declaring them. We don't connect to a
+    real database here, only confirm ``supports_durable_storage`` is True on a
+    no-arg instance constructed with a dummy connection."""
+    from unittest.mock import MagicMock
+
+    from burr.integrations.persisters.postgresql import (
+        PostgreSQLPersister as DeprecatedShim,
+    )
+
+    instance = DeprecatedShim(connection=MagicMock(), table_name="burr_state_shim_test")
+    assert supports_durable_storage(instance) is True
