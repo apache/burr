@@ -57,7 +57,7 @@ def _validate_payload(schema_json, payload):
         warnings.warn(
             "jsonschema is not installed; skipping resume payload schema validation. "
             "Install jsonschema to enable validation.",
-            stacklevel=2,
+            stacklevel=3,
         )
         return
     jsonschema.validate(instance=payload, schema=schema_json)
@@ -150,7 +150,14 @@ async def aresume(
     first completes raises ``ValueError``.
     """
     is_async = persister.is_async()
-    if is_async:
+    # Require durable support before awaiting load_suspension; without it the
+    # persister has not overridden that method and would raise NotImplementedError.
+    # When is_async but NOT supports_durable_storage we fall through to
+    # _load_suspension, which calls persister.load() synchronously. That works
+    # for sync persisters but raises TypeError for async non-durable persisters
+    # (the sync call returns an un-awaited coroutine). A full fix requires an
+    # async-aware _aload_suspension helper; deferred to M3/M4 (M2 limitation).
+    if is_async and supports_durable_storage(persister):
         record = await persister.load_suspension(partition_key, app_id, channel)
     else:
         record = _load_suspension(persister, partition_key, app_id, channel)
