@@ -499,3 +499,8 @@ async def test_arun_stops_and_records_suspension():
 
     assert app.suspended is not None
     assert app.suspended.position == "agate"
+    record = persister.load_suspension("pk2", "app2", "approval")
+    assert record is not None
+    assert record.channel == "approval"
+    assert record.resolved is False
+    assert record.state.get("seen") is True

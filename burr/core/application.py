@@ -976,7 +976,13 @@ class Application(Generic[ApplicationStateType]):
                 self._set_state(new_state)
             except _Suspended as suspended:
                 suspended_signal = suspended
-                self._handle_suspension(next_action, action_inputs, suspended)
+                try:
+                    self._handle_suspension(next_action, action_inputs, suspended)
+                except Exception as handler_exc:
+                    exc = handler_exc
+                    suspended_signal = None
+                    logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
+                    raise
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
@@ -1209,7 +1215,13 @@ class Application(Generic[ApplicationStateType]):
                 self._set_state(new_state)
             except _Suspended as suspended:
                 suspended_signal = suspended
-                self._handle_suspension(next_action, action_inputs, suspended)
+                try:
+                    self._handle_suspension(next_action, action_inputs, suspended)
+                except Exception as handler_exc:
+                    exc = handler_exc
+                    suspended_signal = None
+                    logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
+                    raise
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
@@ -1231,7 +1243,7 @@ class Application(Generic[ApplicationStateType]):
                         await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                             "post_run_step",
                             action=next_action,
-                            state=new_state,
+                            state=self._state,
                             result=result,
                             sequence_id=self.sequence_id,
                             exception=exc,
