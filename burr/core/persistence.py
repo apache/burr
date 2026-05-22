@@ -921,7 +921,7 @@ class InMemoryPersister(BaseStatePersister):
 
 
 class AsyncInMemoryPersister(AsyncBaseStatePersister):
-    """Sync in-memory persister for testing purposes. This is not recommended for production use."""
+    """Async in-memory persister for testing purposes. This is not recommended for production use."""
 
     def __init__(self):
         self._storage = defaultdict(lambda: defaultdict(list))
