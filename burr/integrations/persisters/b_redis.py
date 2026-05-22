@@ -29,7 +29,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from burr.core import persistence, state
+from burr.core import persistence, serde, state
+from burr.core.durable import JournalEntry, SuspensionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,171 @@ class RedisBasePersister(persistence.BaseStatePersister):
         )
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         self.connection.zadd(namespaced_partition_key, {app_id: sequence_id})
+
+    # ------------------------------------------------------------------
+    # Durable-execution helpers
+    # ------------------------------------------------------------------
+
+    def _partition_key_safe(self, partition_key: Optional[str]) -> str:
+        """Return a Redis-key-safe representation of partition_key."""
+        return "__none__" if partition_key is None else partition_key
+
+    def _suspension_hash_key(self, partition_key: Optional[str], app_id: str, channel: str) -> str:
+        pk = self._partition_key_safe(partition_key)
+        return f"burr:suspension:{pk}:{app_id}:{channel}"
+
+    def _journal_list_key(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> str:
+        pk = self._partition_key_safe(partition_key)
+        return f"burr:journal:{pk}:{app_id}:{sequence_id}"
+
+    # ------------------------------------------------------------------
+    # Durable-execution methods
+    # ------------------------------------------------------------------
+
+    def save_suspension(self, record: SuspensionRecord) -> None:
+        """Persist a SuspensionRecord to a Redis HASH.
+
+        Also writes a secondary index key so ``mark_suspension_resolved``
+        can locate the hash by ``suspension_id`` alone.
+
+        The hash ``resolved`` field stores a literal string and is updated
+        by ``mark_suspension_resolved``; callers must use ``load_suspension``
+        to get the authoritative ``resolved`` state (backed by the SETNX key).
+        """
+        hash_key = self._suspension_hash_key(
+            record.partition_key, record.app_id, record.channel
+        )
+        self.connection.hset(
+            hash_key,
+            mapping={
+                "suspension_id": record.suspension_id,
+                "partition_key": json.dumps(record.partition_key),
+                "app_id": record.app_id,
+                "sequence_id": str(record.sequence_id),
+                "position": record.position,
+                "channel": record.channel,
+                "schema_json": json.dumps(record.schema_json),
+                "metadata_json": json.dumps(
+                    serde.serialize(record.metadata, **self.serde_kwargs)
+                ),
+                "inputs_json": json.dumps(
+                    serde.serialize(record.inputs, **self.serde_kwargs)
+                ),
+                "state_json": json.dumps(
+                    serde.serialize(record.state, **self.serde_kwargs)
+                ),
+                "created_at": record.created_at,
+                "resolved": "true" if record.resolved else "false",
+            },
+        )
+        # Secondary index: suspension_id -> hash key, for mark_suspension_resolved
+        self.connection.set(f"burr:suspension_id_idx:{record.suspension_id}", hash_key)
+
+    def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        """Load the suspension record for (partition_key, app_id, channel).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists.
+
+        The ``resolved`` flag is determined by the existence of the SETNX
+        key ``burr:resolved:{suspension_id}`` rather than the hash field.
+        """
+        hash_key = self._suspension_hash_key(partition_key, app_id, channel)
+        data = self.connection.hgetall(hash_key)
+        if not data:
+            return None
+        suspension_id = data[b"suspension_id"].decode()
+        resolved = bool(self.connection.exists(f"burr:resolved:{suspension_id}"))
+        return SuspensionRecord(
+            suspension_id=suspension_id,
+            partition_key=json.loads(data[b"partition_key"].decode()),
+            app_id=data[b"app_id"].decode(),
+            sequence_id=int(data[b"sequence_id"].decode()),
+            position=data[b"position"].decode(),
+            channel=data[b"channel"].decode(),
+            schema_json=json.loads(data[b"schema_json"].decode()),
+            metadata=serde.deserialize(
+                json.loads(data[b"metadata_json"].decode()), **self.serde_kwargs
+            ),
+            inputs=serde.deserialize(
+                json.loads(data[b"inputs_json"].decode()), **self.serde_kwargs
+            ),
+            state=serde.deserialize(
+                json.loads(data[b"state_json"].decode()), **self.serde_kwargs
+            ),
+            created_at=data[b"created_at"].decode(),
+            resolved=resolved,
+        )
+
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Atomic SETNX for resume-once idempotency.
+
+        :return: True if this call performed the first flip, False if already
+            resolved or the suspension_id is unknown.
+        """
+        if self.connection.setnx(f"burr:resolved:{suspension_id}", 1):
+            # Update the hash field so load_suspension reflects the resolved state
+            # without requiring an EXISTS check for callers who read the hash directly.
+            hash_key_bytes = self.connection.get(f"burr:suspension_id_idx:{suspension_id}")
+            if hash_key_bytes is not None:
+                self.connection.hset(hash_key_bytes.decode(), "resolved", "true")
+            return True
+        return False
+
+    def save_journal_entry(self, entry: JournalEntry) -> None:
+        """Persist one memoized sub-step to a Redis LIST.
+
+        Upserts by step_key: scans for an existing entry with the same
+        step_key and replaces it via LSET if found; otherwise appends with
+        RPUSH.  Journals are short so the linear scan is acceptable.
+        """
+        list_key = self._journal_list_key(entry.partition_key, entry.app_id, entry.sequence_id)
+        serialized = json.dumps(
+            {
+                "partition_key": json.dumps(entry.partition_key),
+                "app_id": entry.app_id,
+                "sequence_id": entry.sequence_id,
+                "step_key": entry.step_key,
+                "call_index": entry.call_index,
+                "result_json": json.dumps(serde.serialize(entry.result, **self.serde_kwargs)),
+            }
+        )
+        existing = self.connection.lrange(list_key, 0, -1)
+        for idx, raw in enumerate(existing):
+            item = json.loads(raw.decode())
+            if item.get("step_key") == entry.step_key:
+                self.connection.lset(list_key, idx, serialized)
+                return
+        self.connection.rpush(list_key, serialized)
+
+    def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        """Load journal entries for a suspended action, sorted by call_index."""
+        list_key = self._journal_list_key(partition_key, app_id, sequence_id)
+        raw_entries = self.connection.lrange(list_key, 0, -1)
+        entries = []
+        for raw in raw_entries:
+            item = json.loads(raw.decode())
+            entries.append(
+                JournalEntry(
+                    partition_key=json.loads(item["partition_key"]),
+                    app_id=item["app_id"],
+                    sequence_id=item["sequence_id"],
+                    step_key=item["step_key"],
+                    call_index=item["call_index"],
+                    result=serde.deserialize(
+                        json.loads(item["result_json"]), **self.serde_kwargs
+                    ),
+                )
+            )
+        entries.sort(key=lambda e: e.call_index)
+        return entries
 
     def cleanup(self):
         """Closes the connection to the database."""
@@ -371,6 +537,163 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         )
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         await self.connection.zadd(namespaced_partition_key, {app_id: sequence_id})
+
+    # ------------------------------------------------------------------
+    # Durable-execution helpers (async)
+    # ------------------------------------------------------------------
+
+    def _partition_key_safe(self, partition_key: Optional[str]) -> str:
+        """Return a Redis-key-safe representation of partition_key."""
+        return "__none__" if partition_key is None else partition_key
+
+    def _suspension_hash_key(self, partition_key: Optional[str], app_id: str, channel: str) -> str:
+        pk = self._partition_key_safe(partition_key)
+        return f"burr:suspension:{pk}:{app_id}:{channel}"
+
+    def _journal_list_key(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> str:
+        pk = self._partition_key_safe(partition_key)
+        return f"burr:journal:{pk}:{app_id}:{sequence_id}"
+
+    # ------------------------------------------------------------------
+    # Durable-execution methods (async)
+    # ------------------------------------------------------------------
+
+    async def save_suspension(self, record: SuspensionRecord) -> None:
+        """Persist a SuspensionRecord to a Redis HASH (async).
+
+        Also writes a secondary index key so ``mark_suspension_resolved``
+        can locate the hash by ``suspension_id`` alone.
+        """
+        hash_key = self._suspension_hash_key(
+            record.partition_key, record.app_id, record.channel
+        )
+        await self.connection.hset(
+            hash_key,
+            mapping={
+                "suspension_id": record.suspension_id,
+                "partition_key": json.dumps(record.partition_key),
+                "app_id": record.app_id,
+                "sequence_id": str(record.sequence_id),
+                "position": record.position,
+                "channel": record.channel,
+                "schema_json": json.dumps(record.schema_json),
+                "metadata_json": json.dumps(
+                    serde.serialize(record.metadata, **self.serde_kwargs)
+                ),
+                "inputs_json": json.dumps(
+                    serde.serialize(record.inputs, **self.serde_kwargs)
+                ),
+                "state_json": json.dumps(
+                    serde.serialize(record.state, **self.serde_kwargs)
+                ),
+                "created_at": record.created_at,
+                "resolved": "true" if record.resolved else "false",
+            },
+        )
+        await self.connection.set(
+            f"burr:suspension_id_idx:{record.suspension_id}", hash_key
+        )
+
+    async def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        """Load the suspension record for (partition_key, app_id, channel) (async).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists.
+        """
+        hash_key = self._suspension_hash_key(partition_key, app_id, channel)
+        data = await self.connection.hgetall(hash_key)
+        if not data:
+            return None
+        suspension_id = data[b"suspension_id"].decode()
+        resolved = bool(await self.connection.exists(f"burr:resolved:{suspension_id}"))
+        return SuspensionRecord(
+            suspension_id=suspension_id,
+            partition_key=json.loads(data[b"partition_key"].decode()),
+            app_id=data[b"app_id"].decode(),
+            sequence_id=int(data[b"sequence_id"].decode()),
+            position=data[b"position"].decode(),
+            channel=data[b"channel"].decode(),
+            schema_json=json.loads(data[b"schema_json"].decode()),
+            metadata=serde.deserialize(
+                json.loads(data[b"metadata_json"].decode()), **self.serde_kwargs
+            ),
+            inputs=serde.deserialize(
+                json.loads(data[b"inputs_json"].decode()), **self.serde_kwargs
+            ),
+            state=serde.deserialize(
+                json.loads(data[b"state_json"].decode()), **self.serde_kwargs
+            ),
+            created_at=data[b"created_at"].decode(),
+            resolved=resolved,
+        )
+
+    async def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Atomic SETNX for resume-once idempotency (async).
+
+        :return: True if this call performed the first flip, False if already resolved.
+        """
+        if await self.connection.setnx(f"burr:resolved:{suspension_id}", 1):
+            hash_key_bytes = await self.connection.get(
+                f"burr:suspension_id_idx:{suspension_id}"
+            )
+            if hash_key_bytes is not None:
+                await self.connection.hset(hash_key_bytes.decode(), "resolved", "true")
+            return True
+        return False
+
+    async def save_journal_entry(self, entry: JournalEntry) -> None:
+        """Persist one memoized sub-step to a Redis LIST (async).
+
+        Upserts by step_key: scans for an existing entry with the same
+        step_key and replaces it via LSET if found; otherwise appends.
+        """
+        list_key = self._journal_list_key(entry.partition_key, entry.app_id, entry.sequence_id)
+        serialized = json.dumps(
+            {
+                "partition_key": json.dumps(entry.partition_key),
+                "app_id": entry.app_id,
+                "sequence_id": entry.sequence_id,
+                "step_key": entry.step_key,
+                "call_index": entry.call_index,
+                "result_json": json.dumps(serde.serialize(entry.result, **self.serde_kwargs)),
+            }
+        )
+        existing = await self.connection.lrange(list_key, 0, -1)
+        for idx, raw in enumerate(existing):
+            item = json.loads(raw.decode())
+            if item.get("step_key") == entry.step_key:
+                await self.connection.lset(list_key, idx, serialized)
+                return
+        await self.connection.rpush(list_key, serialized)
+
+    async def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        """Load journal entries for a suspended action, sorted by call_index (async)."""
+        list_key = self._journal_list_key(partition_key, app_id, sequence_id)
+        raw_entries = await self.connection.lrange(list_key, 0, -1)
+        entries = []
+        for raw in raw_entries:
+            item = json.loads(raw.decode())
+            entries.append(
+                JournalEntry(
+                    partition_key=json.loads(item["partition_key"]),
+                    app_id=item["app_id"],
+                    sequence_id=item["sequence_id"],
+                    step_key=item["step_key"],
+                    call_index=item["call_index"],
+                    result=serde.deserialize(
+                        json.loads(item["result_json"]), **self.serde_kwargs
+                    ),
+                )
+            )
+        entries.sort(key=lambda e: e.call_index)
+        return entries
 
     async def cleanup(self):
         """Closes the connection to the database."""

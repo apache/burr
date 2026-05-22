@@ -321,6 +321,151 @@ async def test_aiosqlite_journal_round_trip(aiosqlite_persister):
     assert [e.result for e in journal] == ["result-a", "result-b"]
 
 
+# ---------------------------------------------------------------------------
+# Redis durable storage tests — skipped unless BURR_CI_INTEGRATION_TESTS=true
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def redis_persister():
+    from burr.integrations.persisters.b_redis import RedisBasePersister
+
+    persister = RedisBasePersister.from_values(
+        host=os.environ.get("REDIS_HOST", "localhost"),
+        port=int(os.environ.get("REDIS_PORT", "6379")),
+        db=int(os.environ.get("REDIS_DB", "15")),
+    )
+    persister.connection.flushdb()
+    yield persister
+    persister.connection.flushdb()
+    persister.connection.close()
+
+
+@_pg_integration
+def test_redis_supports_durable_storage(redis_persister):
+    assert supports_durable_storage(redis_persister) is True
+
+
+@_pg_integration
+def test_redis_suspension_round_trip(redis_persister):
+    redis_persister.save_suspension(_record())
+    loaded = redis_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@_pg_integration
+def test_redis_load_suspension_returns_resolved_record(redis_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    redis_persister.save_suspension(_record())
+    redis_persister.mark_suspension_resolved("sus-1")
+    loaded = redis_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@_pg_integration
+def test_redis_mark_resolved_is_conditional(redis_persister):
+    redis_persister.save_suspension(_record())
+    first = redis_persister.mark_suspension_resolved("sus-1")
+    second = redis_persister.mark_suspension_resolved("sus-1")
+    # First call resolves; second call is a no-op (resume-once).
+    assert first is True
+    assert second is False
+
+
+@_pg_integration
+def test_redis_journal_round_trip(redis_persister):
+    redis_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    redis_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = redis_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
+# ---------------------------------------------------------------------------
+# Async Redis durable storage tests — skipped unless BURR_CI_INTEGRATION_TESTS=true
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def async_redis_persister():
+    from burr.integrations.persisters.b_redis import AsyncRedisBasePersister
+
+    persister = AsyncRedisBasePersister.from_values(
+        host=os.environ.get("REDIS_HOST", "localhost"),
+        port=int(os.environ.get("REDIS_PORT", "6379")),
+        db=int(os.environ.get("REDIS_DB", "15")),
+    )
+    await persister.connection.flushdb()
+    yield persister
+    await persister.connection.flushdb()
+    await persister.connection.aclose()
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_async_redis_supports_durable_storage(async_redis_persister):
+    assert supports_durable_storage(async_redis_persister) is True
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_async_redis_suspension_round_trip(async_redis_persister):
+    await async_redis_persister.save_suspension(_record())
+    loaded = await async_redis_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_async_redis_load_suspension_returns_resolved_record(async_redis_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    await async_redis_persister.save_suspension(_record())
+    await async_redis_persister.mark_suspension_resolved("sus-1")
+    loaded = await async_redis_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_async_redis_mark_resolved_is_conditional(async_redis_persister):
+    await async_redis_persister.save_suspension(_record())
+    first = await async_redis_persister.mark_suspension_resolved("sus-1")
+    second = await async_redis_persister.mark_suspension_resolved("sus-1")
+    # First call resolves; second call is a no-op (resume-once).
+    assert first is True
+    assert second is False
+
+
+@_pg_integration
+@pytest.mark.asyncio
+async def test_async_redis_journal_round_trip(async_redis_persister):
+    await async_redis_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    await async_redis_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = await async_redis_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
 def test_deprecated_postgresql_shim_inherits_durable_storage():
     """The deprecated ``burr.integrations.persisters.postgresql.PostgreSQLPersister``
     is a subclass of the canonical psycopg2 persister, so it must inherit the
