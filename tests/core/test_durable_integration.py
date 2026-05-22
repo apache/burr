@@ -104,3 +104,41 @@ def test_resume_unknown_channel_raises():
             persister=persister, graph=graph, app_id="run1", partition_key="pk1",
             channel="nonexistent", payload={},
         )
+
+
+async def test_async_suspend_then_aresume_completes():
+    from burr.core import aresume
+
+    @action(reads=[], writes=["seen"])
+    async def astart(state):
+        return state.update(seen=True)
+
+    @action(reads=["seen"], writes=["done"])
+    async def agate(state, __context):
+        decision = __context.suspend("approval")
+        return state.update(done=decision["approved"])
+
+    graph = (
+        GraphBuilder()
+        .with_actions(astart=astart, agate=agate)
+        .with_transitions(("astart", "agate"))
+        .build()
+    )
+    persister = InMemoryPersister()
+    app = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("astart")
+        .with_state(State({}))
+        .with_identifiers(app_id="arun1", partition_key="pk1")
+        .with_state_persister(persister)
+        .build()
+    )
+    await app.arun(halt_after=["agate"])
+    assert app.suspended is not None
+
+    final_state = await aresume(
+        persister=persister, graph=graph, app_id="arun1", partition_key="pk1",
+        channel="approval", payload={"approved": True},
+    )
+    assert final_state["done"] is True
