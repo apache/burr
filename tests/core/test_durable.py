@@ -190,3 +190,116 @@ def test_in_memory_persister_journal_round_trip():
     journal = persister.load_journal("p", "a", 2)
     assert len(journal) == 1
     assert journal[0].result == "cached"
+
+
+# --- In-state fallback codec tests -------------------------------------------
+
+
+def test_suspension_codec_round_trip():
+    from burr.core.durable import (
+        SuspensionRecord,
+        read_suspension_from_state,
+        write_suspension_into_state,
+    )
+    from burr.core.state import State
+
+    record = SuspensionRecord(
+        suspension_id="s42",
+        partition_key="p",
+        app_id="a",
+        sequence_id=5,
+        position="review",
+        channel="approval",
+        schema_json=None,
+        metadata={"note": "hi"},
+        inputs={"x": 1},
+        state={"draft": "text"},
+        created_at="2026-05-22T00:00:00",
+        resolved=False,
+    )
+    state = State()
+    new_state = write_suspension_into_state(state, record)
+    result = read_suspension_from_state(new_state, "approval")
+
+    assert result is not None
+    assert result.suspension_id == record.suspension_id
+    assert result.channel == record.channel
+    assert result.state == record.state
+    assert result.resolved == record.resolved
+
+
+def test_read_suspension_from_state_channel_mismatch():
+    from burr.core.durable import (
+        SuspensionRecord,
+        read_suspension_from_state,
+        write_suspension_into_state,
+    )
+    from burr.core.state import State
+
+    record = SuspensionRecord(
+        suspension_id="s1",
+        partition_key="p",
+        app_id="a",
+        sequence_id=1,
+        position="act",
+        channel="approval",
+        schema_json=None,
+        metadata=None,
+        inputs={},
+        state={},
+        created_at="2026-05-22T00:00:00",
+        resolved=False,
+    )
+    state = write_suspension_into_state(State(), record)
+
+    assert read_suspension_from_state(state, "other_channel") is None
+    assert read_suspension_from_state(State(), "approval") is None
+
+
+def test_journal_codec_round_trip():
+    from burr.core.durable import (
+        JournalEntry,
+        read_journal_from_state,
+        write_journal_into_state,
+    )
+    from burr.core.state import State
+
+    entries = [
+        JournalEntry(
+            partition_key="p", app_id="a", sequence_id=3,
+            step_key="step_a", call_index=0, result="first",
+        ),
+        JournalEntry(
+            partition_key="p", app_id="a", sequence_id=3,
+            step_key="step_b", call_index=1, result="second",
+        ),
+    ]
+    state = write_journal_into_state(State(), entries)
+    loaded = read_journal_from_state(state)
+
+    assert len(loaded) == 2
+    call_indices = {e.call_index for e in loaded}
+    assert call_indices == {0, 1}
+    results = {e.call_index: e.result for e in loaded}
+    assert results[0] == "first"
+    assert results[1] == "second"
+
+
+def test_journal_codec_preserves_json_friendly_result():
+    from burr.core.durable import (
+        JournalEntry,
+        read_journal_from_state,
+        write_journal_into_state,
+    )
+    from burr.core.state import State
+
+    original_result = {"k": [1, 2]}
+    entry = JournalEntry(
+        partition_key="p", app_id="a", sequence_id=7,
+        step_key="fetch", call_index=0, result=original_result,
+    )
+    state = write_journal_into_state(State(), [entry])
+    loaded = read_journal_from_state(state)
+
+    assert len(loaded) == 1
+    assert loaded[0].result == original_result
