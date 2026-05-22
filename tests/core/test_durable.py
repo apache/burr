@@ -616,3 +616,38 @@ def test_journal_sink_flushed_into_state_on_completion_with_fallback():
     journal = read_journal_from_state(loaded["state"])
     assert len(journal) == 1
     assert journal[0].result == 99
+
+
+def test_journal_accumulates_across_multiple_actions():
+    from burr.core import ApplicationBuilder, State, action
+    from burr.core.durable import read_journal_from_state
+    from burr.core.persistence import SQLitePersister
+
+    @action(reads=[], writes=["a"])
+    def step_a(state, __context):
+        v = __context.durable("a_calc", lambda: 1)
+        return state.update(a=v)
+
+    @action(reads=["a"], writes=["b"])
+    def step_b(state, __context):
+        v = __context.durable("b_calc", lambda: 2)
+        return state.update(b=v)
+
+    persister = SQLitePersister.from_values(":memory:")
+    persister.initialize()
+    app = (
+        ApplicationBuilder()
+        .with_actions(step_a=step_a, step_b=step_b)
+        .with_transitions(("step_a", "step_b"))
+        .with_entrypoint("step_a")
+        .with_state(State({}))
+        .with_identifiers(app_id="j2", partition_key="pk")
+        .with_state_persister(persister)
+        .build()
+    )
+    app.run(halt_after=["step_b"])
+    loaded = persister.load("pk", "j2")
+    journal = read_journal_from_state(loaded["state"])
+    assert len(journal) == 2
+    keys = {e.step_key for e in journal}
+    assert keys == {"a_calc", "b_calc"}

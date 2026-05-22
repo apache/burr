@@ -1741,6 +1741,7 @@ class Application(Generic[ApplicationStateType]):
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
+                self._journal_sink = []
                 action, result, state = self._step(inputs=inputs, _run_hooks=False)
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "post_run_step",
@@ -1993,6 +1994,7 @@ class Application(Generic[ApplicationStateType]):
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
+                self._journal_sink = []
                 action, result, state = await self._astep(inputs=inputs, _run_hooks=False)
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",
