@@ -15,10 +15,69 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import datetime
+from collections import defaultdict
+from typing import Literal, Optional
+
 import pytest
 
 from burr.core import ApplicationBuilder, GraphBuilder, State, action, resume
-from burr.core.persistence import AsyncInMemoryPersister, InMemoryPersister, SQLitePersister
+from burr.core.persistence import AsyncInMemoryPersister, BaseStatePersister, InMemoryPersister
+from burr.core.state import State as _State
+
+
+class NonDurablePersister(BaseStatePersister):
+    """Dict-backed persister that does NOT override any durable-storage methods.
+
+    ``supports_durable_storage(NonDurablePersister())`` returns False because
+    ``save_suspension`` is inherited unchanged from ``BaseStatePersister``.
+    The Application therefore stores suspensions and journal entries inside
+    the State blob (in-state fallback path).
+    """
+
+    def __init__(self):
+        self._storage = defaultdict(lambda: defaultdict(list))
+
+    def save(
+        self,
+        partition_key: Optional[str],
+        app_id: str,
+        sequence_id: int,
+        position: str,
+        state: "_State",
+        status: Literal["completed", "failed", "suspended"],
+        **kwargs,
+    ):
+        record = {
+            "partition_key": partition_key or "",
+            "app_id": app_id,
+            "sequence_id": sequence_id,
+            "position": position,
+            "state": state,
+            "created_at": datetime.datetime.now().isoformat(),
+            "status": status,
+        }
+        self._storage[partition_key][app_id].append(record)
+
+    def load(
+        self,
+        partition_key: str,
+        app_id: Optional[str],
+        sequence_id: Optional[int] = None,
+        **kwargs,
+    ):
+        if app_id is None:
+            return None
+        states = self._storage[partition_key][app_id]
+        if not states:
+            return None
+        if sequence_id is None:
+            return states[-1]
+        matching = [s for s in states if s["sequence_id"] == sequence_id]
+        return matching[-1] if matching else None
+
+    def list_app_ids(self, partition_key: str, **kwargs):
+        return list(self._storage[partition_key].keys())
 
 
 @action(reads=[], writes=["seen"])
@@ -144,13 +203,12 @@ async def test_async_suspend_then_aresume_completes():
     assert final_state["done"] is True
 
 
-def test_resume_through_in_state_fallback_with_sqlite():
+def test_resume_through_in_state_fallback():
     """Resume uses the in-state fallback path when the persister does not support
-    dedicated durable storage (supports_durable_storage() is False). SQLitePersister
-    is a first-party persister that does NOT override save_suspension, so it triggers
-    the fallback path where suspension data rides inside the State blob."""
-    persister = SQLitePersister(":memory:")
-    persister.initialize()
+    dedicated durable storage (supports_durable_storage() is False). NonDurablePersister
+    does not override save_suspension, so it triggers the fallback path where
+    suspension data rides inside the State blob."""
+    persister = NonDurablePersister()
 
     graph = _graph()
 
@@ -179,8 +237,7 @@ def test_resume_in_state_fallback_second_call_raises():
     must raise ValueError with a message that names the in-state fallback as the
     reason, distinguishing it from a never-suspended app_id.
     """
-    persister = SQLitePersister(":memory:")
-    persister.initialize()
+    persister = NonDurablePersister()
 
     graph = _graph()
 

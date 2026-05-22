@@ -16,6 +16,9 @@
 # under the License.
 
 import dataclasses
+import datetime
+from collections import defaultdict
+from typing import Literal, Optional
 
 import pytest
 
@@ -25,6 +28,62 @@ from burr.core.durable import (
     SuspensionRecord,
     _Suspended,
 )
+from burr.core.persistence import BaseStatePersister
+from burr.core.state import State
+
+
+class NonDurablePersister(BaseStatePersister):
+    """Dict-backed persister that does NOT override any durable-storage methods.
+
+    ``supports_durable_storage(NonDurablePersister())`` returns False because
+    ``save_suspension`` is inherited unchanged from ``BaseStatePersister``.
+    The Application therefore stores suspensions and journal entries inside
+    the State blob (in-state fallback path).
+    """
+
+    def __init__(self):
+        self._storage = defaultdict(lambda: defaultdict(list))
+
+    def save(
+        self,
+        partition_key: Optional[str],
+        app_id: str,
+        sequence_id: int,
+        position: str,
+        state: "State",
+        status: Literal["completed", "failed", "suspended"],
+        **kwargs,
+    ):
+        record = {
+            "partition_key": partition_key or "",
+            "app_id": app_id,
+            "sequence_id": sequence_id,
+            "position": position,
+            "state": state,
+            "created_at": datetime.datetime.now().isoformat(),
+            "status": status,
+        }
+        self._storage[partition_key][app_id].append(record)
+
+    def load(
+        self,
+        partition_key: str,
+        app_id: Optional[str],
+        sequence_id: Optional[int] = None,
+        **kwargs,
+    ):
+        if app_id is None:
+            return None
+        states = self._storage[partition_key][app_id]
+        if not states:
+            return None
+        if sequence_id is None:
+            return states[-1]
+        matching = [s for s in states if s["sequence_id"] == sequence_id]
+        return matching[-1] if matching else None
+
+    def list_app_ids(self, partition_key: str, **kwargs):
+        return list(self._storage[partition_key].keys())
 
 
 def test_suspended_is_base_exception_not_exception():
@@ -143,12 +202,10 @@ def test_base_persister_durable_methods_raise_not_implemented():
         p.mark_suspension_resolved("s1")
 
 
-def test_supports_durable_storage_false_for_base_sqlite():
+def test_supports_durable_storage_false_for_non_durable_persister():
     from burr.core.durable import supports_durable_storage
-    from burr.core.persistence import SQLitePersister
 
-    persister = SQLitePersister.from_values(":memory:")
-    # No SQLite override ships in this task; that lands in M4.
+    persister = NonDurablePersister()
     assert supports_durable_storage(persister) is False
 
 
@@ -593,15 +650,13 @@ def test_durable_raises_determinism_error_on_key_mismatch():
 def test_journal_sink_flushed_into_state_on_completion_with_fallback():
     from burr.core import ApplicationBuilder, State, action
     from burr.core.durable import read_journal_from_state
-    from burr.core.persistence import SQLitePersister
 
     @action(reads=[], writes=["v"])
     def compute(state, __context):
         value = __context.durable("calc", lambda: 99)
         return state.update(v=value)
 
-    persister = SQLitePersister.from_values(":memory:")
-    persister.initialize()
+    persister = NonDurablePersister()
     app = (
         ApplicationBuilder()
         .with_actions(compute=compute)
@@ -621,7 +676,6 @@ def test_journal_sink_flushed_into_state_on_completion_with_fallback():
 def test_journal_accumulates_across_multiple_actions():
     from burr.core import ApplicationBuilder, State, action
     from burr.core.durable import read_journal_from_state
-    from burr.core.persistence import SQLitePersister
 
     @action(reads=[], writes=["a"])
     def step_a(state, __context):
@@ -633,8 +687,7 @@ def test_journal_accumulates_across_multiple_actions():
         v = __context.durable("b_calc", lambda: 2)
         return state.update(b=v)
 
-    persister = SQLitePersister.from_values(":memory:")
-    persister.initialize()
+    persister = NonDurablePersister()
     app = (
         ApplicationBuilder()
         .with_actions(step_a=step_a, step_b=step_b)
@@ -662,7 +715,6 @@ def test_journal_no_double_count_via_stream_result():
     this test to observe 3 journal entries instead of 2."""
     from burr.core import ApplicationBuilder, State, action
     from burr.core.durable import read_journal_from_state
-    from burr.core.persistence import SQLitePersister
 
     @action(reads=[], writes=["a"])
     def step_a(state, __context):
@@ -674,8 +726,7 @@ def test_journal_no_double_count_via_stream_result():
         v = __context.durable("b_calc", lambda: 2)
         return state.update(b=v)
 
-    persister = SQLitePersister.from_values(":memory:")
-    persister.initialize()
+    persister = NonDurablePersister()
     app = (
         ApplicationBuilder()
         .with_actions(step_a=step_a, step_b=step_b)
