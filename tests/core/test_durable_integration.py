@@ -305,28 +305,31 @@ def test_nondeterministic_branch_raises_determinism_error():
     from burr.core.durable import DeterminismError
 
     _branch_toggle["value"] = True
-    graph = (
-        GraphBuilder()
-        .with_actions(nondeterministic=nondeterministic)
-        .with_transitions()
-        .build()
-    )
-    persister = InMemoryPersister()
-    app = (
-        ApplicationBuilder()
-        .with_graph(graph)
-        .with_entrypoint("nondeterministic")
-        .with_state(State({}))
-        .with_identifiers(app_id="det1", partition_key="pk")
-        .with_state_persister(persister)
-        .build()
-    )
-    app.run(halt_after=["nondeterministic"])
-
-    # Flip the branch before resume: the re-run takes branch_b.
-    _branch_toggle["value"] = False
-    with pytest.raises(DeterminismError):
-        resume(
-            persister=persister, graph=graph, app_id="det1", partition_key="pk",
-            channel="approval", payload={"ok": True},
+    try:
+        graph = (
+            GraphBuilder()
+            .with_actions(nondeterministic=nondeterministic)
+            .with_transitions()
+            .build()
         )
+        persister = InMemoryPersister()
+        app = (
+            ApplicationBuilder()
+            .with_graph(graph)
+            .with_entrypoint("nondeterministic")
+            .with_state(State({}))
+            .with_identifiers(app_id="det1", partition_key="pk")
+            .with_state_persister(persister)
+            .build()
+        )
+        app.run(halt_after=["nondeterministic"])
+
+        # Flip the branch before resume: the re-run takes branch_b.
+        _branch_toggle["value"] = False
+        with pytest.raises(DeterminismError):
+            resume(
+                persister=persister, graph=graph, app_id="det1", partition_key="pk",
+                channel="approval", payload={"ok": True},
+            )
+    finally:
+        _branch_toggle["value"] = True

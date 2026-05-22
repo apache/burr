@@ -369,13 +369,13 @@ def test_in_memory_persister_journal_ordered_by_call_index():
 # --- ApplicationContext.suspend() tests ---------------------------------------
 
 
-def _make_context(resume_signals=None):
+def _make_context(resume_signals=None, state_persister=None):
     from burr.core.application import ApplicationContext
 
     return ApplicationContext(
         app_id="a", partition_key="p", sequence_id=1, tracker=None,
         parallel_executor_factory=lambda: None, state_initializer=None,
-        state_persister=None, action_name="review",
+        state_persister=state_persister, action_name="review",
         _resume_signals=resume_signals or {},
         _loaded_journal=[], _journal_sink=[],
     )
@@ -737,3 +737,21 @@ async def test_adurable_replays_without_executing():
     result = await ctx.adurable("inc", async_side_effect, 41)
     assert result == 42
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_adurable_journals_into_durable_persister():
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+
+    async def async_side_effect():
+        return "value"
+
+    ctx = _make_context(state_persister=persister)
+    await ctx.adurable("step", async_side_effect)
+
+    journal = persister.load_journal("p", "a", 1)
+    assert len(journal) == 1
+    assert journal[0].step_key == "step"
+    assert journal[0].result == "value"
