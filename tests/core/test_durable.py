@@ -407,3 +407,15 @@ def test_suspend_validates_payload_against_live_schema():
     result = ctx.suspend("approval", schema=Approval)
     assert isinstance(result, Approval)
     assert result.approved is True
+
+
+def test_suspend_first_call_schema_json_populated():
+    pydantic = pytest.importorskip("pydantic")
+
+    class Approval(pydantic.BaseModel):
+        approved: bool
+
+    ctx = _make_context()
+    with pytest.raises(_Suspended) as excinfo:
+        ctx.suspend("approval", schema=Approval)
+    assert excinfo.value.schema_json == Approval.model_json_schema()

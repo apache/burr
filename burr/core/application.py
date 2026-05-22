@@ -601,7 +601,9 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
 
         First execution: raises the internal suspend signal; the run loop
         persists a suspension record and stops. On resume: returns the payload
-        delivered to that channel, validated against ``schema`` if given.
+        delivered to that channel. When ``schema`` is supplied and the payload
+        is a dict, the payload is coerced into the schema type via
+        ``schema(**payload)``; a non-dict payload is returned unchanged.
 
         Pure control flow, no IO. Do not call from inside a ``durable()`` fn.
         """
@@ -924,8 +926,9 @@ class Application(Generic[ApplicationStateType]):
             state_initializer=self._state_initializer,
             state_persister=self._state_persister,
             action_name=action.name if action else None,  # Pass just the action name
-            _resume_signals=getattr(self, "_resume_signals", {}),
-            _loaded_journal=getattr(self, "_loaded_journal", []),
+            # _journal_call_index is intentionally not forwarded; it starts at 0 per action context.
+            _resume_signals=self._resume_signals,
+            _loaded_journal=self._loaded_journal,
             _journal_sink=self._journal_sink,
         )
 
