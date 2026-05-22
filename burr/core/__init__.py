@@ -22,6 +22,7 @@ from burr.core.application import (
     ApplicationContext,
     ApplicationGraph,
 )
+from burr.core.durable import DeterminismError, JournalEntry, SuspensionRecord
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.state import State
 
@@ -34,9 +35,12 @@ __all__ = [
     "ApplicationContext",
     "Condition",
     "default",
+    "DeterminismError",
     "expr",
+    "JournalEntry",
     "Result",
     "State",
+    "SuspensionRecord",
     "when",
     "Graph",
     "GraphBuilder",

@@ -85,3 +85,10 @@ def test_save_status_literal_includes_suspended():
     hints = typing.get_type_hints(BaseStateSaver.save)
     status_arg = hints["status"]
     assert "suspended" in typing.get_args(status_arg)
+
+
+def test_durable_symbols_exported_from_burr_core():
+    import burr.core as core
+
+    assert hasattr(core, "DeterminismError")
+    assert hasattr(core, "SuspensionRecord")
