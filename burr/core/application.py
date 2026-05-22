@@ -584,6 +584,41 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
     state_persister: Optional[BaseStateSaver]
     action_name: Optional[str]  # Store just the action name
 
+    # --- Durable execution runtime state (populated per-step) ---
+    _resume_signals: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    _loaded_journal: list = dataclasses.field(default_factory=list)
+    _journal_sink: list = dataclasses.field(default_factory=list)
+    _journal_call_index: int = 0
+
+    def suspend(
+        self,
+        channel: str,
+        *,
+        schema: Optional[type] = None,
+        metadata: Optional[dict] = None,
+    ) -> Any:
+        """Pause this run until an external event arrives on ``channel``.
+
+        First execution: raises the internal suspend signal; the run loop
+        persists a suspension record and stops. On resume: returns the payload
+        delivered to that channel, validated against ``schema`` if given.
+
+        Pure control flow, no IO. Do not call from inside a ``durable()`` fn.
+        """
+        if channel in self._resume_signals:
+            payload = self._resume_signals[channel]
+            if schema is not None and isinstance(payload, dict):
+                return schema(**payload)
+            return payload
+        schema_json = (
+            schema.model_json_schema()
+            if schema is not None and hasattr(schema, "model_json_schema")
+            else None
+        )
+        from burr.core.durable import _Suspended
+
+        raise _Suspended(channel, schema_json, metadata)
+
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
         """Provides the context-local application context.
@@ -841,6 +876,10 @@ class Application(Generic[ApplicationStateType]):
         self._spawning_parent_pointer = spawning_parent_pointer
         self._state_initializer = state_initializer
         self._state_persister = state_persister
+        self._resume_signals: Dict[str, Any] = {}
+        self._loaded_journal: list = []
+        self._journal_sink: list = []
+        self._suspended = None
         self._adapter_set.call_all_lifecycle_hooks_sync(
             "post_application_create",
             state=self._state,
@@ -885,6 +924,9 @@ class Application(Generic[ApplicationStateType]):
             state_initializer=self._state_initializer,
             state_persister=self._state_persister,
             action_name=action.name if action else None,  # Pass just the action name
+            _resume_signals=getattr(self, "_resume_signals", {}),
+            _loaded_journal=getattr(self, "_loaded_journal", []),
+            _journal_sink=self._journal_sink,
         )
 
     def _step(

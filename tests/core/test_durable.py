@@ -364,3 +364,46 @@ def test_in_memory_persister_journal_ordered_by_call_index():
         )
     journal = persister.load_journal("p", "a", 5)
     assert [e.call_index for e in journal] == [0, 1, 2]
+
+
+# --- ApplicationContext.suspend() tests ---------------------------------------
+
+
+def _make_context(resume_signals=None):
+    from burr.core.application import ApplicationContext
+
+    return ApplicationContext(
+        app_id="a", partition_key="p", sequence_id=1, tracker=None,
+        parallel_executor_factory=lambda: None, state_initializer=None,
+        state_persister=None, action_name="review",
+        _resume_signals=resume_signals or {},
+        _loaded_journal=[], _journal_sink=[],
+    )
+
+
+def test_suspend_raises_on_first_call():
+    from burr.core.durable import _Suspended
+
+    ctx = _make_context()
+    with pytest.raises(_Suspended) as excinfo:
+        ctx.suspend("approval", metadata={"summary": "hi"})
+    assert excinfo.value.channel == "approval"
+    assert excinfo.value.metadata == {"summary": "hi"}
+
+
+def test_suspend_returns_payload_when_signal_present():
+    ctx = _make_context(resume_signals={"approval": {"approved": True}})
+    result = ctx.suspend("approval")
+    assert result == {"approved": True}
+
+
+def test_suspend_validates_payload_against_live_schema():
+    pydantic = pytest.importorskip("pydantic")
+
+    class Approval(pydantic.BaseModel):
+        approved: bool
+
+    ctx = _make_context(resume_signals={"approval": {"approved": True}})
+    result = ctx.suspend("approval", schema=Approval)
+    assert isinstance(result, Approval)
+    assert result.approved is True
