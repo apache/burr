@@ -478,6 +478,10 @@ def mongo_persister():
 
     client = MongoClient(os.environ.get("MONGO_URI", "mongodb://localhost:27017"))
     db_name = os.environ.get("MONGO_DB", "burr_durable_test")
+    # Drop on setup too: absorbs leftover state from a prior run that
+    # terminated before teardown (OOM, Ctrl-C). Otherwise a stale
+    # resolved=True row poisons mark_resolved_is_conditional.
+    client.drop_database(db_name)
     persister = MongoDBBasePersister(
         client=client, db_name=db_name, collection_name="burr_state_durable_test"
     )
