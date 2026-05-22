@@ -701,3 +701,39 @@ def test_journal_no_double_count_via_stream_result():
         f"{[e.step_key for e in journal]}"
     )
     assert {e.step_key for e in journal} == {"a_calc", "b_calc"}
+
+
+# --- ApplicationContext.adurable() tests (Task 3.5) ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_adurable_executes_coroutine_and_journals():
+    calls = []
+
+    async def async_side_effect(x):
+        calls.append(x)
+        return x + 1
+
+    ctx = _make_context()
+    result = await ctx.adurable("inc", async_side_effect, 41)
+    assert result == 42
+    assert calls == [41]
+    assert ctx._journal_sink[0].step_key == "inc"
+
+
+@pytest.mark.asyncio
+async def test_adurable_replays_without_executing():
+    from burr.core.durable import JournalEntry
+
+    ctx = _make_context()
+    ctx._loaded_journal = [JournalEntry("p", "a", 1, "inc", 0, 42)]
+
+    calls = []
+
+    async def async_side_effect(x):
+        calls.append(x)
+        return x + 1
+
+    result = await ctx.adurable("inc", async_side_effect, 41)
+    assert result == 42
+    assert calls == []

@@ -666,6 +666,44 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
             self.state_persister.save_journal_entry(entry)
         return result
 
+    async def adurable(self, key: str, fn: Callable, *args, **kwargs) -> Any:
+        """Async variant of durable(): ``fn`` is a coroutine function."""
+        from burr.core.durable import (
+            DeterminismError,
+            JournalEntry,
+            supports_durable_storage,
+        )
+
+        idx = self._journal_call_index
+        self._journal_call_index += 1
+
+        if idx < len(self._loaded_journal):
+            recorded = self._loaded_journal[idx]
+            if recorded.step_key != key:
+                raise DeterminismError(
+                    f"Durable sub-step #{idx} replayed as key {key!r} but the "
+                    f"journal recorded key {recorded.step_key!r}."
+                )
+            return recorded.result
+
+        result = await fn(*args, **kwargs)
+        entry = JournalEntry(
+            partition_key=self.partition_key,
+            app_id=self.app_id,
+            sequence_id=self.sequence_id,
+            step_key=key,
+            call_index=idx,
+            result=result,
+        )
+        self._journal_sink.append(entry)
+        if self.state_persister is not None and supports_durable_storage(
+            self.state_persister
+        ):
+            saver = self.state_persister.save_journal_entry(entry)
+            if self.state_persister.is_async():
+                await saver
+        return result
+
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
         """Provides the context-local application context.
