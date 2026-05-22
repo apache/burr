@@ -925,6 +925,8 @@ class AsyncInMemoryPersister(AsyncBaseStatePersister):
 
     def __init__(self):
         self._storage = defaultdict(lambda: defaultdict(list))
+        self._suspensions = {}
+        self._journal = {}
 
     async def load(
         self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
@@ -971,6 +973,35 @@ class AsyncInMemoryPersister(AsyncBaseStatePersister):
 
         # Store the state
         self._storage[partition_key][app_id].append(persisted_state)
+
+    async def save_suspension(self, record: SuspensionRecord) -> None:
+        self._suspensions[(record.partition_key, record.app_id, record.channel)] = record
+
+    async def load_suspension(
+        self, partition_key: Optional[str], app_id: str, channel: str
+    ) -> Optional[SuspensionRecord]:
+        return self._suspensions.get((partition_key, app_id, channel))
+
+    async def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        for key, record in self._suspensions.items():
+            if record.suspension_id == suspension_id:
+                if record.resolved:
+                    return False
+                record.resolved = True
+                return True
+        return False
+
+    async def save_journal_entry(self, entry: JournalEntry) -> None:
+        bucket = self._journal.setdefault(
+            (entry.partition_key, entry.app_id, entry.sequence_id), []
+        )
+        bucket.append(entry)
+
+    async def load_journal(
+        self, partition_key: Optional[str], app_id: str, sequence_id: int
+    ) -> list[JournalEntry]:
+        bucket = self._journal.get((partition_key, app_id, sequence_id), [])
+        return sorted(bucket, key=lambda e: e.call_index)
 
 
 SQLLitePersister = SQLitePersister

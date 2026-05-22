@@ -842,3 +842,44 @@ async def test_adurable_journals_into_durable_persister():
     assert len(journal) == 1
     assert journal[0].step_key == "step"
     assert journal[0].result == "value"
+
+
+@pytest.mark.asyncio
+async def test_ahandle_suspension_persists_via_async_durable_persister():
+    from burr.core import ApplicationBuilder, GraphBuilder, State, action
+    from burr.core.persistence import AsyncInMemoryPersister
+
+    @action(reads=[], writes=["seen"])
+    async def astart(state):
+        return state.update(seen=True)
+
+    @action(reads=["seen"], writes=["done"])
+    async def agate(state, __context):
+        decision = __context.suspend("approval")
+        return state.update(done=decision["approved"])
+
+    persister = AsyncInMemoryPersister()
+    graph = (
+        GraphBuilder()
+        .with_actions(astart=astart, agate=agate)
+        .with_transitions(("astart", "agate"))
+        .build()
+    )
+    app = await (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("astart")
+        .with_state(State({}))
+        .with_identifiers(app_id="arun1", partition_key="pk1")
+        .with_state_persister(persister)
+        .abuild()
+    )
+    await app.arun(halt_after=["agate"])
+    assert app.suspended is not None
+
+    # The async durable path persists via await persister.save_suspension(...),
+    # so the record lives in persister._suspensions, NOT inside the State blob.
+    record = await persister.load_suspension("pk1", "arun1", "approval")
+    assert record is not None
+    assert record.channel == "approval"
+    assert record.resolved is False

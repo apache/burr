@@ -1161,6 +1161,64 @@ class Application(Generic[ApplicationStateType]):
             pass
         self._suspended = record
 
+    async def _ahandle_suspension(self, action, action_inputs, suspended):
+        """Async sibling of _handle_suspension. Called from _astep when the action suspends."""
+        from burr.core.durable import (
+            SuspensionRecord,
+            supports_durable_storage,
+            write_journal_into_state,
+            write_suspension_into_state,
+        )
+
+        record = SuspensionRecord(
+            suspension_id=str(uuid.uuid4()),
+            partition_key=self._partition_key,
+            app_id=self._uid,
+            sequence_id=self.sequence_id,
+            position=action.name,
+            channel=suspended.channel,
+            schema_json=suspended.schema_json,
+            metadata=suspended.metadata,
+            inputs=action_inputs,
+            state=dict(self._state.get_all()),
+            created_at=system.now().isoformat(),
+            resolved=False,
+        )
+        persister = self._state_persister
+        if persister is not None and supports_durable_storage(persister):
+            if persister.is_async():
+                await persister.save_suspension(record)
+                for entry in self._journal_sink:
+                    await persister.save_journal_entry(entry)
+            else:
+                persister.save_suspension(record)
+                for entry in self._journal_sink:
+                    persister.save_journal_entry(entry)
+        elif persister is not None:
+            # In-state fallback: embed the record + journal into State only.
+            # We deliberately do NOT call persister.save here. The post_run_step
+            # lifecycle hook fires for this suspended step and PersisterHook.save
+            # persists the embedded State once. Saving here too would write the
+            # same (partition_key, app_id, sequence_id, position) row twice and
+            # break persisters with a UNIQUE constraint (e.g. SQLitePersister).
+            state = write_suspension_into_state(self._state, record)
+            state = write_journal_into_state(state, self._journal_sink)
+            self._set_state(state)
+        # NOTE: post_action_suspend is registered in Milestone 5. Guard it so it is a
+        # safe no-op until the hook is added to REGISTERED_SYNC_HOOKS.
+        try:
+            await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                "post_action_suspend",
+                app_id=self._uid,
+                partition_key=self._partition_key,
+                action=action,
+                sequence_id=self.sequence_id,
+                suspension=record,
+            )
+        except ValueError:
+            pass
+        self._suspended = record
+
     @property
     def suspended(self):
         """The SuspensionRecord if the last run() suspended, else None."""
@@ -1316,7 +1374,7 @@ class Application(Generic[ApplicationStateType]):
             except _Suspended as suspended:
                 suspended_signal = suspended
                 try:
-                    self._handle_suspension(next_action, action_inputs, suspended)
+                    await self._ahandle_suspension(next_action, action_inputs, suspended)
                 except Exception as handler_exc:
                     exc = handler_exc
                     suspended_signal = None
