@@ -390,3 +390,42 @@ def test_nondeterministic_branch_raises_determinism_error():
             )
     finally:
         _branch_toggle["value"] = True
+
+
+# --- Task 4.2: SQLite end-to-end through dedicated tables --------------------
+
+
+def test_suspend_resume_with_sqlite_dedicated_storage(tmp_path):
+    """End-to-end: suspend on a file-backed SQLite persister, close the connection
+    (simulating process death), reopen with a fresh persister against the same file,
+    resume. Exercises the dedicated ``burr_suspensions`` + ``burr_journal`` tables
+    across a true process boundary."""
+    from burr.core.persistence import SQLitePersister
+
+    db = str(tmp_path / "durable.db")
+
+    graph = _graph()
+    p1 = SQLitePersister.from_values(db)
+    p1.initialize()
+    app = (
+        ApplicationBuilder()
+        .with_graph(graph)
+        .with_entrypoint("start")
+        .with_state(State({}))
+        .with_identifiers(app_id="sql1", partition_key="pk")
+        .with_state_persister(p1)
+        .build()
+    )
+    app.run(halt_after=["gate"])
+    assert app.suspended is not None
+    p1.connection.close()  # simulate the process dying
+
+    # New process: brand-new persister against the same DB file.
+    p2 = SQLitePersister.from_values(db)
+    p2.initialize()
+    final_state = resume(
+        persister=p2, graph=graph, app_id="sql1", partition_key="pk",
+        channel="approval", payload={"approved": True},
+    )
+    assert final_state["done"] is True
+    p2.connection.close()
