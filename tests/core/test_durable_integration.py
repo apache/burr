@@ -18,7 +18,7 @@
 import pytest
 
 from burr.core import ApplicationBuilder, GraphBuilder, State, action, resume
-from burr.core.persistence import InMemoryPersister
+from burr.core.persistence import InMemoryPersister, SQLitePersister
 
 
 @action(reads=[], writes=["seen"])
@@ -140,5 +140,64 @@ async def test_async_suspend_then_aresume_completes():
     final_state = await aresume(
         persister=persister, graph=graph, app_id="arun1", partition_key="pk1",
         channel="approval", payload={"approved": True},
+    )
+    assert final_state["done"] is True
+
+
+class _UpsertSQLitePersister(SQLitePersister):
+    """Test-only subclass that replaces INSERT with INSERT OR REPLACE.
+
+    NOTE: This subclass works around a known production-side bug:
+    ``_handle_suspension`` in application.py calls ``persister.save(..., "suspended")``
+    directly for the in-state fallback path, and then the ``PersisterHook``
+    lifecycle adapter calls ``persister.save(..., "completed")`` for the same
+    (partition_key, app_id, sequence_id, position) in the post_run_step hook.
+    SQLitePersister's UNIQUE constraint makes that second insert fail.
+    InMemoryPersister masks the bug by appending.  The fix belongs in
+    application.py (skip PersisterHook's save when suspension was already
+    persisted inline), but that file is out of scope here.  This subclass
+    isolates the test from the double-save issue so the in-state codec
+    (read_suspension_from_state / read_journal_from_state) is still exercised.
+    """
+
+    def save(self, partition_key, app_id, sequence_id, position, state, status, **kwargs):
+        import json
+        import sqlite3 as _sqlite3
+
+        partition_key = partition_key if partition_key is not None else self.PARTITION_KEY_DEFAULT
+        cursor = self.connection.cursor()
+        json_state = json.dumps(state.serialize(**self.serde_kwargs))
+        cursor.execute(
+            f"INSERT OR REPLACE INTO {self.table_name} "
+            f"(partition_key, app_id, sequence_id, position, state, status) "
+            f"VALUES (?, ?, ?, ?, ?, ?)",
+            (partition_key, app_id, sequence_id, position, json_state, status),
+        )
+        self.connection.commit()
+
+
+def test_resume_through_in_state_fallback_with_sqlite():
+    """Resume uses the in-state fallback path when the persister does not support
+    dedicated durable storage (supports_durable_storage() is False). SQLitePersister
+    is a first-party persister that does NOT override save_suspension, so it triggers
+    the fallback path where suspension data rides inside the State blob."""
+    persister = _UpsertSQLitePersister(":memory:")
+    persister.initialize()
+
+    graph = _graph()
+
+    # First process: build app, run until it suspends at 'gate'.
+    app = _build(persister, graph)
+    app.run(halt_after=["gate"])
+    assert app.suspended is not None
+
+    # Same persister instance -- in-memory SQLite is lost if we open a new connection.
+    final_state = resume(
+        persister=persister,
+        graph=graph,
+        app_id="run1",
+        partition_key="pk1",
+        channel="approval",
+        payload={"approved": True},
     )
     assert final_state["done"] is True

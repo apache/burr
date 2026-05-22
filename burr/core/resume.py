@@ -24,6 +24,7 @@ from burr.core.durable import (
     read_suspension_from_state,
     supports_durable_storage,
 )
+from burr.core.state import State
 
 
 def _load_suspension(persister, partition_key, app_id, channel):
@@ -53,7 +54,6 @@ def _validate_payload(schema_json, payload):
 
 def _rebuild(persister, graph, app_id, partition_key, record):
     from burr.core.application import ApplicationBuilder
-    from burr.core.state import State
 
     app = (
         ApplicationBuilder()
@@ -94,7 +94,7 @@ def resume(
         )
     if record.resolved:
         loaded = persister.load(partition_key, app_id)
-        return loaded["state"] if loaded else record.state
+        return State(loaded["state"]) if loaded else State(record.state)
 
     _validate_payload(record.schema_json, payload)
 
@@ -140,7 +140,7 @@ async def aresume(
             loaded = await persister.load(partition_key, app_id)
         else:
             loaded = persister.load(partition_key, app_id)
-        return loaded["state"] if loaded else record.state
+        return State(loaded["state"]) if loaded else State(record.state)
 
     _validate_payload(record.schema_json, payload)
 
