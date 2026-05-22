@@ -568,3 +568,17 @@ def test_durable_replay_then_execute_for_calls_past_the_journal():
     second = ctx.durable("second", lambda: "executed")
     assert first == "cached"      # replayed
     assert second == "executed"   # past the journal -> executed
+
+
+# --- ApplicationContext.durable() determinism error (Task 3.3) ----------------
+
+
+def test_durable_raises_determinism_error_on_key_mismatch():
+    from burr.core.durable import DeterminismError, JournalEntry
+
+    ctx = _make_context()
+    ctx._loaded_journal = [JournalEntry("p", "a", 1, "summarize", 0, "x")]
+
+    with pytest.raises(DeterminismError):
+        # The first durable call on resume used a different key than recorded.
+        ctx.durable("translate", lambda: "y")
