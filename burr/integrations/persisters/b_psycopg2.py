@@ -130,9 +130,45 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         )
         self.connection.commit()
 
+    def create_durable_tables_if_not_exist(self):
+        """Creates the durable-execution tables (suspensions + journal) if they don't exist."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS burr_suspensions (
+                suspension_id TEXT PRIMARY KEY,
+                partition_key TEXT,
+                app_id TEXT NOT NULL,
+                sequence_id INTEGER NOT NULL,
+                position TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                schema_json JSONB,
+                metadata_json JSONB,
+                inputs_json JSONB,
+                state_json JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved BOOLEAN NOT NULL DEFAULT false
+            )"""
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS burr_journal (
+                partition_key TEXT,
+                app_id TEXT NOT NULL,
+                sequence_id INTEGER NOT NULL,
+                step_key TEXT NOT NULL,
+                call_index INTEGER NOT NULL,
+                result_json JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (partition_key, app_id, sequence_id, step_key)
+            )"""
+        )
+        self.connection.commit()
+
     def initialize(self):
         """Creates the table"""
         self.create_table(self.table_name)
+        self.create_durable_tables_if_not_exist()
         self._initialized = True
 
     def is_initialized(self) -> bool:
@@ -258,6 +294,154 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
             (partition_key, app_id, sequence_id, position, json_state, status),
         )
         self.connection.commit()
+
+    def save_suspension(self, record) -> None:
+        """Persist a suspension record into the burr_suspensions table."""
+        import json
+
+        from burr.core import serde
+        from burr.core.durable import SuspensionRecord  # noqa: F401 — type reference only
+
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """INSERT INTO burr_suspensions
+               (suspension_id, partition_key, app_id, sequence_id, position,
+                channel, schema_json, metadata_json, inputs_json, state_json,
+                created_at, resolved)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (suspension_id) DO UPDATE SET
+                   partition_key = EXCLUDED.partition_key,
+                   app_id = EXCLUDED.app_id,
+                   sequence_id = EXCLUDED.sequence_id,
+                   position = EXCLUDED.position,
+                   channel = EXCLUDED.channel,
+                   schema_json = EXCLUDED.schema_json,
+                   metadata_json = EXCLUDED.metadata_json,
+                   inputs_json = EXCLUDED.inputs_json,
+                   state_json = EXCLUDED.state_json,
+                   created_at = EXCLUDED.created_at,
+                   resolved = EXCLUDED.resolved""",
+            (
+                record.suspension_id,
+                record.partition_key,
+                record.app_id,
+                record.sequence_id,
+                record.position,
+                record.channel,
+                json.dumps(record.schema_json),
+                json.dumps(serde.serialize(record.metadata, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.inputs, **self.serde_kwargs)),
+                json.dumps(serde.serialize(record.state, **self.serde_kwargs)),
+                record.created_at,
+                record.resolved,
+            ),
+        )
+        self.connection.commit()
+
+    def load_suspension(self, partition_key, app_id: str, channel: str):
+        """Load the most recent suspension record for (partition_key, app_id, channel).
+
+        Returns the record whether or not it is resolved; callers check
+        ``record.resolved`` for resume-once idempotency. Returns ``None``
+        when no record exists for this combination.
+        """
+        from burr.core import serde
+        from burr.core.durable import SuspensionRecord
+
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """SELECT suspension_id, partition_key, app_id, sequence_id, position,
+                      channel, schema_json, metadata_json, inputs_json, state_json,
+                      created_at, resolved
+               FROM burr_suspensions
+               WHERE partition_key IS NOT DISTINCT FROM %s AND app_id = %s AND channel = %s
+               ORDER BY created_at DESC LIMIT 1""",
+            (partition_key, app_id, channel),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        # psycopg2 auto-parses JSONB columns to Python objects — no json.loads needed.
+        return SuspensionRecord(
+            suspension_id=row[0],
+            partition_key=row[1],
+            app_id=row[2],
+            sequence_id=row[3],
+            position=row[4],
+            channel=row[5],
+            schema_json=row[6] if row[6] is not None else None,
+            metadata=serde.deserialize(row[7], **self.serde_kwargs) if row[7] is not None else None,
+            inputs=serde.deserialize(row[8], **self.serde_kwargs),
+            state=serde.deserialize(row[9], **self.serde_kwargs),
+            created_at=row[10],
+            resolved=bool(row[11]),
+        )
+
+    def mark_suspension_resolved(self, suspension_id: str) -> bool:
+        """Mark a suspension consumed. Conditional UPDATE for resume-once idempotency.
+
+        :return: True if a row was updated (first call), False if already resolved (no-op).
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "UPDATE burr_suspensions SET resolved = true "
+            "WHERE suspension_id = %s AND resolved = false",
+            (suspension_id,),
+        )
+        self.connection.commit()
+        return cursor.rowcount > 0
+
+    def save_journal_entry(self, entry) -> None:
+        """Persist one memoized sub-step into the burr_journal table."""
+        import json
+
+        from burr.core import serde
+
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """INSERT INTO burr_journal
+               (partition_key, app_id, sequence_id, step_key, call_index, result_json)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (partition_key, app_id, sequence_id, step_key) DO UPDATE SET
+                   call_index = EXCLUDED.call_index,
+                   result_json = EXCLUDED.result_json""",
+            (
+                entry.partition_key,
+                entry.app_id,
+                entry.sequence_id,
+                entry.step_key,
+                entry.call_index,
+                json.dumps(serde.serialize(entry.result, **self.serde_kwargs)),
+            ),
+        )
+        self.connection.commit()
+
+    def load_journal(self, partition_key, app_id: str, sequence_id: int) -> list:
+        """Load journal entries for a suspended action, ordered by call_index."""
+        from burr.core import serde
+        from burr.core.durable import JournalEntry
+
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """SELECT partition_key, app_id, sequence_id, step_key, call_index,
+                      result_json
+               FROM burr_journal
+               WHERE partition_key IS NOT DISTINCT FROM %s AND app_id = %s AND sequence_id = %s
+               ORDER BY call_index ASC""",
+            (partition_key, app_id, sequence_id),
+        )
+        # psycopg2 auto-parses JSONB columns to Python objects — no json.loads needed.
+        return [
+            JournalEntry(
+                partition_key=row[0],
+                app_id=row[1],
+                sequence_id=row[2],
+                step_key=row[3],
+                call_index=row[4],
+                result=serde.deserialize(row[5], **self.serde_kwargs),
+            )
+            for row in cursor.fetchall()
+        ]
 
     def cleanup(self):
         """Closes the connection to the database."""

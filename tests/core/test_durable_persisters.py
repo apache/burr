@@ -15,10 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import os
+
 import pytest
 
 from burr.core.durable import JournalEntry, SuspensionRecord, supports_durable_storage
 from burr.core.persistence import SQLitePersister
+
+_pg_integration = pytest.mark.skipif(
+    os.environ.get("BURR_CI_INTEGRATION_TESTS") != "true",
+    reason="Skipping integration tests",
+)
 
 
 @pytest.fixture
@@ -79,5 +86,82 @@ def test_sqlite_journal_round_trip(sqlite_persister):
         JournalEntry("pk", "app", 4, "translate", 1, "result-b")
     )
     journal = sqlite_persister.load_journal("pk", "app", 4)
+    assert [e.call_index for e in journal] == [0, 1]
+    assert [e.result for e in journal] == ["result-a", "result-b"]
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL durable storage tests — skipped unless BURR_CI_INTEGRATION_TESTS=true
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def pg_persister():
+    from burr.integrations.persisters.b_psycopg2 import PostgreSQLPersister
+
+    persister = PostgreSQLPersister.from_values(
+        db_name="postgres",
+        user="postgres",
+        password="postgres",
+        host="localhost",
+        port=5432,
+        table_name="burr_state_durable_test",
+    )
+    persister.initialize()
+    yield persister
+    # Teardown: drop durable tables so the next run starts clean.
+    cursor = persister.connection.cursor()
+    cursor.execute("DROP TABLE IF EXISTS burr_suspensions")
+    cursor.execute("DROP TABLE IF EXISTS burr_journal")
+    persister.connection.commit()
+    persister.cleanup()
+
+
+@_pg_integration
+def test_postgres_supports_durable_storage(pg_persister):
+    assert supports_durable_storage(pg_persister) is True
+
+
+@_pg_integration
+def test_postgres_suspension_round_trip(pg_persister):
+    pg_persister.save_suspension(_record())
+    loaded = pg_persister.load_suspension("pk", "app", "approval")
+    assert loaded.suspension_id == "sus-1"
+    assert loaded.state == {"draft": "d"}
+    assert loaded.inputs == {"x": 1}
+    assert loaded.schema_json == {"type": "object"}
+    assert loaded.resolved is False
+
+
+@_pg_integration
+def test_postgres_load_suspension_returns_resolved_record(pg_persister):
+    # Contract: load_suspension returns the record whether or not it is
+    # resolved; the caller checks record.resolved for resume-once idempotency.
+    pg_persister.save_suspension(_record())
+    pg_persister.mark_suspension_resolved("sus-1")
+    loaded = pg_persister.load_suspension("pk", "app", "approval")
+    assert loaded is not None
+    assert loaded.resolved is True
+
+
+@_pg_integration
+def test_postgres_mark_resolved_is_conditional(pg_persister):
+    pg_persister.save_suspension(_record())
+    first = pg_persister.mark_suspension_resolved("sus-1")
+    second = pg_persister.mark_suspension_resolved("sus-1")
+    # First call resolves a row; second call resolves nothing (resume-once).
+    assert first is True
+    assert second is False
+
+
+@_pg_integration
+def test_postgres_journal_round_trip(pg_persister):
+    pg_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "summarize", 0, "result-a")
+    )
+    pg_persister.save_journal_entry(
+        JournalEntry("pk", "app", 4, "translate", 1, "result-b")
+    )
+    journal = pg_persister.load_journal("pk", "app", 4)
     assert [e.call_index for e in journal] == [0, 1]
     assert [e.result for e in journal] == ["result-a", "result-b"]
