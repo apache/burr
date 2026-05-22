@@ -1179,6 +1179,7 @@ class Application(Generic[ApplicationStateType]):
             exc = None
             result = None
             new_state = self._state
+            suspended_signal = None
             try:
                 if not next_action.is_async():
                     # we can just delegate to the synchronous version, it will block the event loop,
@@ -1206,23 +1207,39 @@ class Application(Generic[ApplicationStateType]):
                     new_state = _run_reducer(next_action, self._state, result, next_action.name)
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
+            except _Suspended as suspended:
+                suspended_signal = suspended
+                self._handle_suspension(next_action, action_inputs, suspended)
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
                 raise e
             finally:
                 if _run_hooks:
-                    await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                        "post_run_step",
-                        action=next_action,
-                        state=new_state,
-                        result=result,
-                        sequence_id=self.sequence_id,
-                        exception=exc,
-                        app_id=self._uid,
-                        partition_key=self._partition_key,
-                    )
-
+                    if suspended_signal is not None:
+                        await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                            "post_run_step",
+                            action=next_action,
+                            state=self._state,
+                            result=None,
+                            sequence_id=self.sequence_id,
+                            exception=None,
+                            app_id=self._uid,
+                            partition_key=self._partition_key,
+                        )
+                    else:
+                        await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                            "post_run_step",
+                            action=next_action,
+                            state=new_state,
+                            result=result,
+                            sequence_id=self.sequence_id,
+                            exception=exc,
+                            app_id=self._uid,
+                            partition_key=self._partition_key,
+                        )
+            if suspended_signal is not None:
+                return next_action, None, self._state
             return next_action, result, new_state
 
     def _parse_action_list(self, action_list: list[str]) -> Tuple[List[str], List[str]]:

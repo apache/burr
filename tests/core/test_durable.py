@@ -464,3 +464,38 @@ def test_run_stops_and_records_suspension():
     assert record is not None
     assert record.resolved is False
     assert record.state.get("seen") is True
+
+
+# ---------------------------------------------------------------------------
+# Integration: suspend signal caught by the async run loop (Task 2.4)
+# ---------------------------------------------------------------------------
+
+
+async def test_arun_stops_and_records_suspension():
+    from burr.core import ApplicationBuilder, State, action
+    from burr.core.persistence import InMemoryPersister
+
+    @action(reads=[], writes=["seen"])
+    async def astart(state):
+        return state.update(seen=True)
+
+    @action(reads=["seen"], writes=["done"])
+    async def agate(state, __context):
+        decision = __context.suspend("approval")
+        return state.update(done=decision)
+
+    persister = InMemoryPersister()
+    app = (
+        ApplicationBuilder()
+        .with_actions(astart=astart, agate=agate)
+        .with_transitions(("astart", "agate"))
+        .with_entrypoint("astart")
+        .with_state(State({}))
+        .with_identifiers(app_id="app2", partition_key="pk2")
+        .with_state_persister(persister)
+        .build()
+    )
+    await app.arun(halt_after=["agate"])
+
+    assert app.suspended is not None
+    assert app.suspended.position == "agate"
