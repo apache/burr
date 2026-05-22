@@ -419,3 +419,48 @@ def test_suspend_first_call_schema_json_populated():
     with pytest.raises(_Suspended) as excinfo:
         ctx.suspend("approval", schema=Approval)
     assert excinfo.value.schema_json == Approval.model_json_schema()
+
+
+# ---------------------------------------------------------------------------
+# Integration: suspend signal caught by the sync run loop (Task 2.3)
+# ---------------------------------------------------------------------------
+
+
+def _suspending_app(persister):
+    from burr.core import ApplicationBuilder, State, action
+
+    @action(reads=[], writes=["seen"])
+    def start(state):
+        return state.update(seen=True)
+
+    @action(reads=["seen"], writes=["done"])
+    def gate(state, __context):
+        decision = __context.suspend("approval")
+        return state.update(done=decision)
+
+    return (
+        ApplicationBuilder()
+        .with_actions(start=start, gate=gate)
+        .with_transitions(("start", "gate"))
+        .with_entrypoint("start")
+        .with_state(State({}))
+        .with_identifiers(app_id="app1", partition_key="pk1")
+        .with_state_persister(persister)
+        .build()
+    )
+
+
+def test_run_stops_and_records_suspension():
+    from burr.core.persistence import InMemoryPersister
+
+    persister = InMemoryPersister()
+    app = _suspending_app(persister)
+    app.run(halt_after=["gate"])
+
+    assert app.suspended is not None
+    assert app.suspended.channel == "approval"
+    assert app.suspended.position == "gate"
+    record = persister.load_suspension("pk1", "app1", "approval")
+    assert record is not None
+    assert record.resolved is False
+    assert record.state.get("seen") is True

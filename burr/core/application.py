@@ -60,6 +60,7 @@ from burr.core.action import (
     StreamingAction,
     StreamingResultContainer,
 )
+from burr.core.durable import _Suspended
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.persistence import (
     AsyncBaseStateLoader,
@@ -911,6 +912,8 @@ class Application(Generic[ApplicationStateType]):
         # we need to increment the sequence before we start computing
         # that way if we're replaying from state, we don't get stuck
         self.validate_correct_async_use()
+        self._journal_sink = []
+        self._suspended = None
         self._increment_sequence_id()
         out = self._step(inputs=inputs, _run_hooks=True)
         return out
@@ -957,6 +960,7 @@ class Application(Generic[ApplicationStateType]):
             exc = None
             result = None
             new_state = self._state
+            suspended_signal = None
             try:
                 if next_action.single_step:
                     result, new_state = _run_single_step_action(
@@ -970,23 +974,101 @@ class Application(Generic[ApplicationStateType]):
 
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
+            except _Suspended as suspended:
+                suspended_signal = suspended
+                self._handle_suspension(next_action, action_inputs, suspended)
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
                 raise e
             finally:
                 if _run_hooks:
-                    self._adapter_set.call_all_lifecycle_hooks_sync(
-                        "post_run_step",
-                        app_id=self._uid,
-                        partition_key=self._partition_key,
-                        action=next_action,
-                        state=new_state,
-                        result=result,
-                        sequence_id=self.sequence_id,
-                        exception=exc,
-                    )
+                    if suspended_signal is not None:
+                        self._adapter_set.call_all_lifecycle_hooks_sync(
+                            "post_run_step",
+                            app_id=self._uid,
+                            partition_key=self._partition_key,
+                            action=next_action,
+                            state=self._state,
+                            result=None,
+                            sequence_id=self.sequence_id,
+                            exception=None,
+                        )
+                    else:
+                        self._adapter_set.call_all_lifecycle_hooks_sync(
+                            "post_run_step",
+                            app_id=self._uid,
+                            partition_key=self._partition_key,
+                            action=next_action,
+                            state=new_state,
+                            result=result,
+                            sequence_id=self.sequence_id,
+                            exception=exc,
+                        )
+            if suspended_signal is not None:
+                return next_action, None, self._state
             return next_action, result, new_state
+
+    def _handle_suspension(self, action, action_inputs, suspended):
+        """Build and persist a SuspensionRecord, then set self._suspended."""
+        from burr.core.durable import (
+            SuspensionRecord,
+            supports_durable_storage,
+            write_journal_into_state,
+            write_suspension_into_state,
+        )
+
+        record = SuspensionRecord(
+            suspension_id=str(uuid.uuid4()),
+            partition_key=self._partition_key,
+            app_id=self._uid,
+            sequence_id=self.sequence_id,
+            position=action.name,
+            channel=suspended.channel,
+            schema_json=suspended.schema_json,
+            metadata=suspended.metadata,
+            inputs=action_inputs,
+            state=dict(self._state.get_all()),
+            created_at=system.now().isoformat(),
+            resolved=False,
+        )
+        persister = self._state_persister
+        if persister is not None and supports_durable_storage(persister):
+            persister.save_suspension(record)
+            for entry in self._journal_sink:
+                persister.save_journal_entry(entry)
+        elif persister is not None:
+            # In-state fallback: embed the record + journal in State, then save.
+            state = write_suspension_into_state(self._state, record)
+            state = write_journal_into_state(state, self._journal_sink)
+            self._set_state(state)
+            persister.save(
+                self._partition_key,
+                self._uid,
+                self.sequence_id,
+                action.name,
+                self._state,
+                "suspended",
+            )
+        # NOTE: post_action_suspend is registered in Milestone 5. Guard it so it is a
+        # safe no-op until the hook is added to REGISTERED_SYNC_HOOKS.
+        try:
+            self._adapter_set.call_all_lifecycle_hooks_sync(
+                "post_action_suspend",
+                app_id=self._uid,
+                partition_key=self._partition_key,
+                action=action,
+                sequence_id=self.sequence_id,
+                suspension=record,
+            )
+        except ValueError:
+            pass
+        self._suspended = record
+
+    @property
+    def suspended(self):
+        """The SuspensionRecord if the last run() suspended, else None."""
+        return self._suspended
 
     def reset_to_entrypoint(self) -> None:
         """Resets the state machine to the entrypoint action -- you probably want to consider having a loop
@@ -1070,6 +1152,8 @@ class Application(Generic[ApplicationStateType]):
 
         :return: Tuple[Function, dict, State] -- the action that was just ran, the result of running it, and the new state
         """
+        self._journal_sink = []
+        self._suspended = None
         self._increment_sequence_id()
         out = await self._astep(inputs=inputs, _run_hooks=True)
         return out
@@ -1282,7 +1366,7 @@ class Application(Generic[ApplicationStateType]):
 
         result = None
         prior_action: Optional[Action] = None
-        while self.has_next_action():
+        while self.has_next_action() and self._suspended is None:
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
             prior_action, result, state = self.step(inputs=inputs)
             yield prior_action, result, state
@@ -1315,7 +1399,7 @@ class Application(Generic[ApplicationStateType]):
             halt_before, halt_after, inputs
         )
         self._validate_halt_conditions(halt_before, halt_after)
-        while self.has_next_action():
+        while self.has_next_action() and self._suspended is None:
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
             prior_action, result, state = await self.astep(inputs=inputs)
             yield prior_action, result, state
