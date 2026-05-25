@@ -32,9 +32,9 @@ Install the optional extra (pulls ``boto3``):
 
    pip install "burr[bedrock]"
 
-----------------
+-----------------
 Available Actions
-----------------
+-----------------
 
 ``BedrockAction`` is a single-step action for standard request/response flows.
 ``BedrockStreamingAction`` is a streaming action that emits chunks during execution

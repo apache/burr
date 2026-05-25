@@ -18,9 +18,9 @@
 
 .. _s3-tracking-aws:
 
-============================
+=============================
 S3 Tracking on AWS (Concepts)
-============================
+=============================
 
 This guide explains how Burr tracking works with S3-backed storage, and how to
 choose between local, hybrid, and production deployment modes.
@@ -61,9 +61,9 @@ Use ``S3TrackingClient`` for all application writes and a dedicated S3-backed
 tracking server for indexing and visualization. For near-real-time updates, pair
 S3 object events with SQS event-driven mode.
 
----------------
+----------------
 SQS Event-Driven
----------------
+----------------
 
 S3 tracking server supports two modes:
 
@@ -77,9 +77,9 @@ To use event-driven mode, configure these environment variables on the tracking 
 * ``BURR_SQS_REGION=<aws-region>``
 * ``BURR_SQS_WAIT_TIME_SECONDS=20`` (default long-poll value)
 
---------------
+----------------
 Stream Buffering
---------------
+----------------
 
 S3 reads are buffered to improve reliability and large-object handling in the
 tracking server. Tune buffering memory with:
@@ -105,9 +105,9 @@ Common S3 server environment variables:
 * ``BURR_SQS_QUEUE_URL`` / ``BURR_SQS_REGION`` / ``BURR_SQS_WAIT_TIME_SECONDS``
 * ``BURR_S3_BUFFER_SIZE_MB``
 
--------------
+---------------
 Terraform Setup
--------------
+---------------
 
 Use the included AWS Terraform example to provision S3-only or S3+SQS tracking
 infrastructure:
