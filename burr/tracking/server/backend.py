@@ -521,7 +521,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
                 status_code=404,
                 detail=f"Graph file for app: {app_id} from project: {project_id} not found",
             )
-        async with aiofiles.open(graph_file) as f:
+        async with aiofiles.open(graph_file, encoding="utf-8") as f:
             str_graph = await f.read()
         collections.defaultdict(list)
         if os.path.exists(log_file):
