@@ -41,12 +41,6 @@ from burr.tracking.common.models import (
     EndSpanModel,
     PointerModel,
 )
-from burr.tracking.server.backend import LocalBackend
-from burr.tracking.server.schema import (
-    AnnotationCreate,
-    AnnotationDataPointer,
-    AnnotationObservation,
-)
 from burr.visibility import TracerFactory
 
 
@@ -319,12 +313,22 @@ def test_fork_children_have_correct_partition_key(tmpdir):
 
 
 def test_local_backend_reads_utf8_annotations_graph_and_children(tmpdir, monkeypatch):
+    # Server backend imports require the tracking-server extra (aiofiles); skip
+    # cleanly where it is not installed so this module still collects with only
+    # tracking-client present.
+    pytest.importorskip("aiofiles")
     # Guard against missed call sites in a host-independent way: a round-trip
     # assertion alone would pass on a UTF-8 default host even if a text open
     # dropped encoding="utf-8". So wrap the backend's aiofiles.open and assert
     # every text-mode (non-binary) open is explicitly UTF-8. Binary opens
     # (log/metadata, mode "rb") are intentionally exempt.
     import burr.tracking.server.backend as backend_module
+    from burr.tracking.server.backend import LocalBackend
+    from burr.tracking.server.schema import (
+        AnnotationCreate,
+        AnnotationDataPointer,
+        AnnotationObservation,
+    )
 
     real_aiofiles_open = backend_module.aiofiles.open
 
