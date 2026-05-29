@@ -9,7 +9,7 @@
     "@testing-library/react": "^13.4.0",
     "@tisoap/react-flow-smart-edge": "^3.0.0",
     "@types/fuse": "^2.6.0",
-    "@types/node": "^16.18.82",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
     "@types/react-select": "^5.0.1",
