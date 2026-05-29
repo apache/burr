@@ -318,15 +318,33 @@ def test_fork_children_have_correct_partition_key(tmpdir):
     assert child.event_type == "fork"
 
 
-def test_local_backend_reads_utf8_annotations_graph_and_children(tmpdir):
+def test_local_backend_reads_utf8_annotations_graph_and_children(tmpdir, monkeypatch):
+    # Guard against missed call sites in a host-independent way: a round-trip
+    # assertion alone would pass on a UTF-8 default host even if a text open
+    # dropped encoding="utf-8". So wrap the backend's aiofiles.open and assert
+    # every text-mode (non-binary) open is explicitly UTF-8. Binary opens
+    # (log/metadata, mode "rb") are intentionally exempt.
+    import burr.tracking.server.backend as backend_module
+
+    real_aiofiles_open = backend_module.aiofiles.open
+
+    def _utf8_guarded_open(file, mode="r", *args, **kwargs):
+        if "b" not in mode:
+            assert (
+                kwargs.get("encoding") == "utf-8"
+            ), f"text-mode open of {file} (mode={mode!r}) must pass encoding='utf-8'"
+        return real_aiofiles_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(backend_module.aiofiles, "open", _utf8_guarded_open)
+
     project_name = "test_local_backend_utf8"
     app_id = "app-unicode"
     partition_key = "partici\u00f3n-ni\u00f1a"
-    step_name = "an\u00e1lisis caf\u00e9"
+    step_name = "an\u00e1lisis caf\u00e9 \u65e5\u672c\u8a9e"
     tag = "ni\u00f1o"
-    note = "acci\u00f3n termin\u00f3 con \u00e9xito"
-    entrypoint = "inicio-caf\u00e9"
-    child_app_id = "hijo-ni\u00f1o"
+    note = "acci\u00f3n termin\u00f3 con \u00e9xito \u4f60\u597d"
+    entrypoint = "inicio-caf\u00e9-\u4e16\u754c"
+    child_app_id = "hijo-ni\u00f1o-\u6f22\u5b57"
     child_partition_key = "clave-ni\u00f1a"
     log_dir = os.path.join(tmpdir, "tracking")
     project_dir = os.path.join(log_dir, project_name)
@@ -373,7 +391,9 @@ def test_local_backend_reads_utf8_annotations_graph_and_children(tmpdir):
         sequence_id=1,
     )
 
-    with open(os.path.join(app_dir, LocalTrackingClient.GRAPH_FILENAME), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(app_dir, LocalTrackingClient.GRAPH_FILENAME), "w", encoding="utf-8"
+    ) as f:
         f.write(application.model_dump_json())
     with open(os.path.join(app_dir, LocalTrackingClient.LOG_FILENAME), "w", encoding="utf-8"):
         pass
