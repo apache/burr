@@ -17,4 +17,4 @@
 
 build/*
 tailwind.config.js
-.eslitrc.js
+.eslintrc.js
