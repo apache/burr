@@ -102,6 +102,37 @@ def test_twine_upload_command_includes_only_sdist_and_wheel():
     )
 
 
+def test_release_checkout_entries_preserves_keys(tmp_path):
+    (tmp_path / ".svn").mkdir()
+    (tmp_path / "KEYS").write_text("keys", encoding="utf-8")
+    (tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz").write_text("artifact", encoding="utf-8")
+
+    entries = release._release_checkout_entries(str(tmp_path))
+
+    assert entries == [str(tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz")]
+
+
+def test_remove_existing_release_entries_keeps_keys(monkeypatch, tmp_path):
+    (tmp_path / ".svn").mkdir()
+    (tmp_path / "KEYS").write_text("keys", encoding="utf-8")
+    artifact = tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz"
+    artifact.write_text("artifact", encoding="utf-8")
+
+    commands = []
+
+    def fake_run_command(*args, **kwargs):
+        commands.append(args[0])
+        return None
+
+    monkeypatch.setattr(release, "_run_command", fake_run_command)
+
+    removed = release._remove_existing_release_entries(str(tmp_path))
+
+    assert removed == ["apache-burr-0.41.0-incubating-src.tar.gz"]
+    assert commands == [["svn", "rm", "--force", str(artifact)]]
+    assert (tmp_path / "KEYS").exists()
+
+
 def test_cmd_promote_dry_run_plans_without_committing(monkeypatch, tmp_path):
     calls = {"checkout": [], "remove": None, "copy": None, "commit": None}
 

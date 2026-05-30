@@ -892,17 +892,17 @@ def _svn_checkout(url: str, checkout_dir: str) -> None:
 
 
 def _release_checkout_entries(release_checkout_dir: str) -> list[str]:
-    """List entries in the release checkout, excluding SVN metadata."""
+    """List release artifact entries, excluding metadata that must be preserved."""
     entries = []
     for name in sorted(os.listdir(release_checkout_dir)):
-        if name == ".svn":
+        if name in {".svn", "KEYS"}:
             continue
         entries.append(os.path.join(release_checkout_dir, name))
     return entries
 
 
 def _remove_existing_release_entries(release_checkout_dir: str, dry_run: bool = False) -> list[str]:
-    """Remove the current dist/release contents from the SVN working copy."""
+    """Remove current release artifacts from the SVN working copy, preserving KEYS."""
     removed_entries = []
     for entry in _release_checkout_entries(release_checkout_dir):
         removed_entries.append(os.path.basename(entry))

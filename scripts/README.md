@@ -118,7 +118,7 @@ What it does:
 - checks out the RC directory from `dist/dev`
 - checks out the release directory from `dist/release`
 - validates the expected source archive, sdist, wheel, and matching `.asc` / `.sha512` files
-- removes the current release contents
+- removes the current release artifacts while preserving `KEYS`
 - copies the voted RC artifacts into the release checkout
 - commits the release checkout to SVN
 - prints the final PyPI upload command for the sdist and wheel
