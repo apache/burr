@@ -68,8 +68,8 @@ Then, you can run the following commands:
     $ npm run start
 
 This will start the UI on port 3000. You can then navigate to ``http://localhost:3000`` to see the UI.
-It currently assumes that the tracking server is running on port 7241. The proxy is set up in the
-``package.json`` file.
+It currently assumes that the tracking server is running on port 7241. The proxy is configured in
+``vite.config.ts``.
 
 Note that if you want to just develop off the server you'll first have to build the UI and symlink the
 ``tracking/server/build`` directory to the ``telemetry/ui/build`` directory. We have this structure to
