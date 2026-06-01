@@ -82,7 +82,9 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
                 "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
                 "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
                 "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
-                "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text("LICENSE-wheel"),
+                "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text(
+                    "LICENSE-wheel"
+                ),
             },
         )
 
@@ -144,12 +146,19 @@ def test_verify_reproducible_build_compares_rebuilt_outputs(monkeypatch):
             return True, "ok"
 
         monkeypatch.setattr(verify, "_build_reproducible_artifacts", _fake_build)
+        # The rebuild itself is stubbed above, so flit need not be installed in
+        # the test environment; stub the presence check so the guard passes.
+        monkeypatch.setattr(verify.shutil, "which", lambda name: "/usr/bin/flit")
 
         summary = verify.VerificationSummary()
         assert verify.verify_reproducible_build(str(artifacts_dir), summary) is True
-        assert any(result.name == "Rebuilt sdist checksum" and result.status == verify.PASS for result in summary.results)
         assert any(
-            result.name == f"Rebuilt wheel checksum: {release_wheel.name}" and result.status == verify.PASS
+            result.name == "Rebuilt sdist checksum" and result.status == verify.PASS
+            for result in summary.results
+        )
+        assert any(
+            result.name == f"Rebuilt wheel checksum: {release_wheel.name}"
+            and result.status == verify.PASS
             for result in summary.results
         )
 
@@ -193,9 +202,9 @@ def test_load_rat_xml_root_ignores_trailing_summary_lines():
     with tempfile.TemporaryDirectory() as temp_dir:
         report_path = Path(temp_dir) / "rat.xml"
         report_path.write_text(
-            'INFO: Apache Creadur RAT 0.18 (Apache Software Foundation)\n'
+            "INFO: Apache Creadur RAT 0.18 (Apache Software Foundation)\n"
             '<rat-report timestamp="2026-04-18T15:27:12-07:00">\n'
-            '  <statistics>\n'
+            "  <statistics>\n"
             '    <statistic approval="true" count="0" name="Approved"/>\n'
             "  </statistics>\n"
             "</rat-report>\n"

@@ -146,8 +146,7 @@ def _artifact_files(artifacts_dir: str) -> list[str]:
     return sorted(
         name
         for name in all_files
-        if not name.endswith((".asc", ".sha512"))
-        and not name.startswith("rat-report-")
+        if not name.endswith((".asc", ".sha512")) and not name.startswith("rat-report-")
     )
 
 
@@ -166,7 +165,9 @@ def _normalize_archive_member_names(names: list[str]) -> dict[str, str]:
     normalized = {}
     for name in names:
         pure_name = PurePosixPath(name)
-        relative_parts = pure_name.parts[1:] if prefix and pure_name.parts[:1] == (prefix,) else pure_name.parts
+        relative_parts = (
+            pure_name.parts[1:] if prefix and pure_name.parts[:1] == (prefix,) else pure_name.parts
+        )
         normalized_name = str(PurePosixPath(*relative_parts)) if relative_parts else ""
         normalized[normalized_name] = name
     return normalized
@@ -179,9 +180,7 @@ def _tar_file_bytes(artifact_path: str) -> dict[str, bytes]:
         contents: dict[str, bytes] = {}
         for member in file_members:
             normalized_name = next(
-                normalized
-                for normalized, original in mapping.items()
-                if original == member.name
+                normalized for normalized, original in mapping.items() if original == member.name
             )
             extracted = tar.extractfile(member)
             if extracted is None:
@@ -203,7 +202,9 @@ def _find_files_by_basename(file_bytes: dict[str, bytes], basename: str) -> list
     return sorted(matches)
 
 
-def _verify_artifact_exists(artifact_path: str, summary: VerificationSummary, min_size: int = 1000) -> bool:
+def _verify_artifact_exists(
+    artifact_path: str, summary: VerificationSummary, min_size: int = 1000
+) -> bool:
     name = f"Artifact exists: {os.path.basename(artifact_path)}"
     if not os.path.exists(artifact_path):
         print(f"  ✗ Artifact not found: {os.path.basename(artifact_path)}")
@@ -223,7 +224,9 @@ def _verify_artifact_exists(artifact_path: str, summary: VerificationSummary, mi
     return True
 
 
-def _verify_artifact_signature(artifact_path: str, signature_path: str, summary: VerificationSummary) -> bool:
+def _verify_artifact_signature(
+    artifact_path: str, signature_path: str, summary: VerificationSummary
+) -> bool:
     check_name = f"GPG signature: {os.path.basename(artifact_path)}"
     print(f"  Verifying GPG signature: {os.path.basename(signature_path)}")
 
@@ -368,7 +371,9 @@ def _verify_required_text_files(
     return all_valid
 
 
-def verify_artifact_contents(artifacts_dir: str, summary: VerificationSummary | None = None) -> bool:
+def verify_artifact_contents(
+    artifacts_dir: str, summary: VerificationSummary | None = None
+) -> bool:
     _print_section("Verifying Artifact Metadata Files")
 
     if summary is None:
@@ -750,7 +755,9 @@ def _load_apache_release_module(project_root: Path):
     return module
 
 
-def _build_reproducible_wheel(project_root: Path, version: str, output_dir: str, source_epoch: int) -> tuple[bool, str]:
+def _build_reproducible_wheel(
+    project_root: Path, version: str, output_dir: str, source_epoch: int
+) -> tuple[bool, str]:
     command = [
         sys.executable,
         "-c",
@@ -812,7 +819,9 @@ def _build_reproducible_artifacts(source_artifact: str, output_dir: str) -> tupl
         if sdist_result.returncode != 0:
             return False, sdist_result.stderr or sdist_result.stdout
 
-        wheel_ok, wheel_output = _build_reproducible_wheel(project_root, version, output_dir, source_epoch)
+        wheel_ok, wheel_output = _build_reproducible_wheel(
+            project_root, version, output_dir, source_epoch
+        )
         if not wheel_ok:
             return False, wheel_output
 
@@ -866,14 +875,18 @@ def _compare_rebuilt_artifacts(
                 rebuilt for rebuilt in rebuilt_wheels if os.path.basename(rebuilt) == release_name
             ]
             if not matching_wheels:
-                summary.fail(f"Rebuilt wheel checksum: {release_name}", "matching rebuilt wheel not found")
+                summary.fail(
+                    f"Rebuilt wheel checksum: {release_name}", "matching rebuilt wheel not found"
+                )
                 all_valid = False
                 continue
             rebuilt_wheel = matching_wheels[0]
             if _sha512_for_file(release_wheel) == _sha512_for_file(rebuilt_wheel):
                 summary.pass_(f"Rebuilt wheel checksum: {release_name}")
             else:
-                summary.fail(f"Rebuilt wheel checksum: {release_name}", "rebuilt wheel differs from release")
+                summary.fail(
+                    f"Rebuilt wheel checksum: {release_name}", "rebuilt wheel differs from release"
+                )
                 all_valid = False
     else:
         summary.skip("Rebuilt wheel checksum", "no release wheel found")
@@ -935,7 +948,9 @@ def render_vote_email(artifacts_dir: str, summary: VerificationSummary) -> str:
 
     result_lines = []
     for result in summary.results:
-        result_lines.append(f"- [{result.status}] {result.name}" + (f": {result.details}" if result.details else ""))
+        result_lines.append(
+            f"- [{result.status}] {result.name}" + (f": {result.details}" if result.details else "")
+        )
 
     return textwrap.dedent(
         f"""\
@@ -1168,11 +1183,17 @@ Examples:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    list_parser = subparsers.add_parser("list-contents", help="List contents of a specific artifact")
+    list_parser = subparsers.add_parser(
+        "list-contents", help="List contents of a specific artifact"
+    )
     list_parser.add_argument("artifact", help="Path to artifact file (.tar.gz or .whl)")
 
-    sig_parser = subparsers.add_parser("signatures", help="Verify GPG signatures and SHA512 checksums")
-    sig_parser.add_argument("--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)")
+    sig_parser = subparsers.add_parser(
+        "signatures", help="Verify GPG signatures and SHA512 checksums"
+    )
+    sig_parser.add_argument(
+        "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
+    )
 
     artifacts_parser = subparsers.add_parser(
         "artifacts",
@@ -1183,9 +1204,13 @@ Examples:
     )
 
     lic_parser = subparsers.add_parser("licenses", help="Verify licenses with Apache RAT")
-    lic_parser.add_argument("--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)")
+    lic_parser.add_argument(
+        "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
+    )
     lic_parser.add_argument("--rat-jar", required=True, help="Path to Apache RAT JAR file")
-    lic_parser.add_argument("--report-only", action="store_true", help="Generate report but don't fail on issues")
+    lic_parser.add_argument(
+        "--report-only", action="store_true", help="Generate report but don't fail on issues"
+    )
 
     reproducible_parser = subparsers.add_parser(
         "reproducible",
@@ -1200,13 +1225,19 @@ Examples:
         "all",
         help="Verify signatures, metadata files, reproducibility, and optionally Apache RAT results",
     )
-    all_parser.add_argument("--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)")
+    all_parser.add_argument(
+        "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
+    )
     all_parser.add_argument("--rat-jar", help="Path to Apache RAT JAR file (optional)")
-    all_parser.add_argument("--report-only", action="store_true", help="Generate report but don't fail on RAT issues")
+    all_parser.add_argument(
+        "--report-only", action="store_true", help="Generate report but don't fail on RAT issues"
+    )
     _add_vote_email_args(all_parser)
 
     twine_parser = subparsers.add_parser("twine-check", help="Verify wheel metadata with twine")
-    twine_parser.add_argument("--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)")
+    twine_parser.add_argument(
+        "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
+    )
 
     args = parser.parse_args()
 
