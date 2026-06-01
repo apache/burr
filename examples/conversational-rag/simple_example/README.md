@@ -34,7 +34,7 @@ of the conversation and asking for user inputs.
 To run this example, install Burr and the necessary dependencies:
 
 ```bash
-pip install "burr[start]" -r requirements.txt
+pip install "apache-burr[start]" -r requirements.txt
 ```
 
 Then run the server in the background:
@@ -56,7 +56,7 @@ You'll then have a text terminal where you can interact. Type exit to stop.
 ![Application Image](statemachine.png)
 
 # Video Walkthrough via Notebook
-Open the notebook <a target="_blank" href="https://colab.research.google.com/github/dagworks-inc/burr/blob/main/examples/conversational-rag/simple_example/notebook.ipynb">
+Open the notebook <a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/conversational-rag/simple_example/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 

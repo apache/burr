@@ -243,16 +243,12 @@ class Function(abc.ABC):
         missing_inputs = required_inputs - given_inputs
         additional_inputs = given_inputs - required_inputs - optional_inputs
         if missing_inputs or additional_inputs:
-            raise ValueError(
-                f"Inputs to function {self} are invalid. "
-                + f"Missing the following inputs: {', '.join(missing_inputs)}."
-                if missing_inputs
-                else (
-                    "" f"Additional inputs: {','.join(additional_inputs)}."
-                    if additional_inputs
-                    else ""
-                )
-            )
+            parts = [f"Inputs to function {self} are invalid."]
+            if missing_inputs:
+                parts.append(f"Missing the following inputs: {', '.join(missing_inputs)}.")
+            if additional_inputs:
+                parts.append(f"Additional inputs: {', '.join(additional_inputs)}.")
+            raise ValueError(" ".join(parts))
 
     def is_async(self) -> bool:
         """Convenience method to check if the function is async or not.
@@ -1466,7 +1462,7 @@ class action:
             from burr.integrations.pydantic import pydantic_action
         except ImportError:
             raise ImportError(
-                "Please install pydantic to use the pydantic decorator. pip install burr[pydantic]"
+                "Please install pydantic to use the pydantic decorator. pip install apache-burr[pydantic]"
             )
 
         return pydantic_action(
@@ -1529,7 +1525,7 @@ class streaming_action:
             from burr.integrations.pydantic import pydantic_streaming_action
         except ImportError:
             raise ImportError(
-                "Please install pydantic to use the pydantic decorator. pip install 'burr[pydantic]'"
+                "Please install pydantic to use the pydantic decorator. pip install 'apache-burr[pydantic]'"
             )
 
         return pydantic_streaming_action(
@@ -1549,8 +1545,8 @@ class streaming_action:
         See the following example for how to use this decorator -- this reads ``prompt`` from the state and writes
         ``response`` back out, yielding all intermediate chunks.
 
-        Note that this *must* return a value. If it does not, we will not know how to update the state, and
-        we will error out.
+        Note that this *must* return a final value with a state update. If it does not, we will not know how to update the state, and
+        we will error out. Intermediate yields can be plain dicts (without a state update).
 
         .. code-block:: python
 
@@ -1569,7 +1565,7 @@ class streaming_action:
                     delta = chunk.choices[0].delta.content
                     buffer.append(delta)
                     # yield partial results
-                    yield {'response': delta}, None
+                    yield {'response': delta}
                 full_response = ''.join(buffer)
                 # return the final result
                 return {'response': full_response}, state.update(response=full_response)

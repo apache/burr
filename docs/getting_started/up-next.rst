@@ -38,7 +38,7 @@ If you haven't already:
 
 .. code-block:: bash
 
-    pip install burr[start]
+    pip install apache-burr[start]
 
 Then:
 

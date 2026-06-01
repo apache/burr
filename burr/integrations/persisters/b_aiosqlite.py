@@ -26,7 +26,7 @@ from burr.common.types import BaseCopyable
 from burr.core import State
 from burr.core.persistence import AsyncBaseStatePersister, PersistedStateData
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 try:
     from typing import Self

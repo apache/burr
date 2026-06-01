@@ -129,9 +129,9 @@ gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VE
 gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
 
 # 3. Verify all SHA512 checksums
-echo "$(cat apache-burr-${VERSION}-incubating-src.tar.gz.sha512)  apache-burr-${VERSION}-incubating-src.tar.gz" | sha512sum -c -
-echo "$(cat apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512)  apache-burr-${VERSION}-incubating-sdist.tar.gz" | sha512sum -c -
-echo "$(cat apache_burr-${VERSION}-py3-none-any.whl.sha512)  apache_burr-${VERSION}-py3-none-any.whl" | sha512sum -c -
+sha512sum -c apache-burr-${VERSION}-incubating-src.tar.gz.sha512
+sha512sum -c apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512
+sha512sum -c apache_burr-${VERSION}-py3-none-any.whl.sha512
 
 # 4. Extract the source archive
 tar -xzf apache-burr-${VERSION}-incubating-src.tar.gz

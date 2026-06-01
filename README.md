@@ -45,7 +45,7 @@ Longer [video intro & walkthrough](https://www.youtube.com/watch?v=rEZ4oDN0GdU).
 Install from `pypi`:
 
 ```bash
-pip install "burr[start]"
+pip install "apache-burr[start]"
 ```
 
 (see [the docs](https://burr.apache.org/getting_started/install/) if you're using poetry)

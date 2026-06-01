@@ -26,7 +26,7 @@ We have three files:
 - [application.py](application.py) -- This contains a mainline to run the counter as well as a function to export the counter (for later use)
 - [requirements.txt](requirements.txt) -- Just the requirements. All this needs is Burr/Streamlit
 - [streamlit_app.py](streamlit_app.py) -- This contains a simple Streamlit app to interact with the counter.
-- [notebook.ipynb](notebook.ipynb) -- A notebook that shows the counter app too. Open the notebook <a target="_blank" href="https://colab.research.google.com/github/dagworks-inc/burr/blob/main/examples/hello-world-counter/notebook.ipynb">
+- [notebook.ipynb](notebook.ipynb) -- A notebook that shows the counter app too. Open the notebook <a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/hello-world-counter/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
