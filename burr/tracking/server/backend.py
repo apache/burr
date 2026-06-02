@@ -327,7 +327,7 @@ def _safe_join(base: str, *parts: str) -> str:
     if target != base_real and not target.startswith(base_real + os.sep):
         raise fastapi.HTTPException(
             status_code=400,
-            detail=f"Path traversal detected: attempted to escape the base directory.",
+            detail="Path traversal detected: attempted to escape the base directory.",
         )
     return target
 
