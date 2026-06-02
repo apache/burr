@@ -79,13 +79,12 @@ def test_validate_promotion_artifacts_fails_when_companion_missing(tmp_path):
         release._validate_promotion_artifacts(str(tmp_path), "0.42.0")
 
 
-def test_promoted_artifact_name_removes_rc_suffix():
+def test_promotion_target_url_appends_version_subdir():
     assert (
-        release._promoted_artifact_name("apache-burr-0.42.0-RC1.txt", "1")
-        == "apache-burr-0.42.0.txt"
-    )
-    assert release._promoted_artifact_name("apache_burr-0.42.0-py3-none-any.whl", "1") == (
-        "apache_burr-0.42.0-py3-none-any.whl"
+        release._promotion_target_url(
+            "0.42.0", "https://dist.apache.org/repos/dist/release/incubator/burr"
+        )
+        == "https://dist.apache.org/repos/dist/release/incubator/burr/0.42.0"
     )
 
 
@@ -105,39 +104,24 @@ def test_twine_upload_command_includes_only_sdist_and_wheel():
     )
 
 
-def test_release_checkout_entries_preserves_keys(tmp_path):
-    (tmp_path / ".svn").mkdir()
-    (tmp_path / "KEYS").write_text("keys", encoding="utf-8")
-    (tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz").write_text("artifact", encoding="utf-8")
+def test_cmd_promote_rejects_already_promoted_release(monkeypatch):
+    monkeypatch.setattr(release, "_verify_project_root", lambda: None)
+    monkeypatch.setattr(release, "_svn_target_exists", lambda url: True)
 
-    entries = release._release_checkout_entries(str(tmp_path))
+    args = Namespace(
+        rc_label="0.42.0-RC1",
+        apache_id="hari",
+        dry_run=False,
+        dev_svn_root="https://dist.apache.org/repos/dist/dev/incubator/burr",
+        release_svn_root="https://dist.apache.org/repos/dist/release/incubator/burr",
+    )
 
-    assert entries == [str(tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz")]
-
-
-def test_remove_existing_release_entries_keeps_keys(monkeypatch, tmp_path):
-    (tmp_path / ".svn").mkdir()
-    (tmp_path / "KEYS").write_text("keys", encoding="utf-8")
-    artifact = tmp_path / "apache-burr-0.41.0-incubating-src.tar.gz"
-    artifact.write_text("artifact", encoding="utf-8")
-
-    commands = []
-
-    def fake_run_command(*args, **kwargs):
-        commands.append(args[0])
-        return None
-
-    monkeypatch.setattr(release, "_run_command", fake_run_command)
-
-    removed = release._remove_existing_release_entries(str(tmp_path))
-
-    assert removed == ["apache-burr-0.41.0-incubating-src.tar.gz"]
-    assert commands == [["svn", "rm", "--force", str(artifact)]]
-    assert (tmp_path / "KEYS").exists()
+    with pytest.raises(SystemExit):
+        release.cmd_promote(args)
 
 
-def test_cmd_promote_dry_run_plans_without_committing(monkeypatch, tmp_path):
-    calls = {"checkout": [], "remove": None, "copy": None, "commit": None}
+def test_cmd_promote_dry_run_uses_server_copy_without_committing(monkeypatch, tmp_path):
+    calls = {"checkout": [], "promote": None}
 
     class _TempDir:
         def __enter__(self):
@@ -153,47 +137,20 @@ def test_cmd_promote_dry_run_plans_without_committing(monkeypatch, tmp_path):
     def fake_validate(rc_checkout_dir: str, version: str):
         assert version == "0.42.0"
         return [
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-src.tar.gz",
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-src.tar.gz.asc",
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-src.tar.gz.sha512",
             f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-sdist.tar.gz",
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-sdist.tar.gz.asc",
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-sdist.tar.gz.sha512",
             f"{rc_checkout_dir}/apache_burr-0.42.0-py3-none-any.whl",
-            f"{rc_checkout_dir}/apache_burr-0.42.0-py3-none-any.whl.asc",
-            f"{rc_checkout_dir}/apache_burr-0.42.0-py3-none-any.whl.sha512",
         ]
 
-    def fake_remove(release_checkout_dir: str, dry_run: bool = False):
-        calls["remove"] = (release_checkout_dir, dry_run)
-        return ["old-release"]
-
-    def fake_copy(
-        rc_checkout_dir: str,
-        release_checkout_dir: str,
-        artifacts: list[str],
-        rc_num: str,
-        dry_run: bool = False,
-    ):
-        calls["copy"] = (rc_checkout_dir, release_checkout_dir, list(artifacts), rc_num, dry_run)
-        return [Path(artifact).name for artifact in artifacts]
-
-    def fake_commit(
-        release_checkout_dir: str,
-        version: str,
-        rc_num: str,
-        apache_id: str,
-        dry_run: bool = False,
-    ):
-        calls["commit"] = (release_checkout_dir, version, rc_num, apache_id, dry_run)
+    def fake_promote(source_url, target_url, message, apache_id, dry_run=False):
+        calls["promote"] = (source_url, target_url, message, apache_id, dry_run)
         return True
 
+    monkeypatch.setattr(release, "_verify_project_root", lambda: None)
     monkeypatch.setattr(release.tempfile, "TemporaryDirectory", lambda prefix=None: _TempDir())
+    monkeypatch.setattr(release, "_svn_target_exists", lambda url: False)
     monkeypatch.setattr(release, "_svn_checkout", fake_checkout)
     monkeypatch.setattr(release, "_validate_promotion_artifacts", fake_validate)
-    monkeypatch.setattr(release, "_remove_existing_release_entries", fake_remove)
-    monkeypatch.setattr(release, "_copy_promoted_artifacts", fake_copy)
-    monkeypatch.setattr(release, "_commit_promoted_release", fake_commit)
+    monkeypatch.setattr(release, "_promote_with_server_copy", fake_promote)
 
     args = Namespace(
         rc_label="0.42.0-RC1",
@@ -204,9 +161,11 @@ def test_cmd_promote_dry_run_plans_without_committing(monkeypatch, tmp_path):
     )
 
     assert release.cmd_promote(args) is True
+    # only the RC is checked out; the release tree is never downloaded
+    assert len(calls["checkout"]) == 1
     assert calls["checkout"][0][0].endswith("/0.42.0-incubating-RC1")
-    assert calls["checkout"][1][0] == "https://dist.apache.org/repos/dist/release/incubator/burr"
-    assert calls["remove"][1] is True
-    assert calls["copy"][3] == "1"
-    assert calls["copy"][4] is True
-    assert calls["commit"] == (str(tmp_path / "release"), "0.42.0", "1", "hari", True)
+    source_url, target_url, message, apache_id, dry_run = calls["promote"]
+    assert source_url.endswith("/0.42.0-incubating-RC1")
+    assert target_url == "https://dist.apache.org/repos/dist/release/incubator/burr/0.42.0"
+    assert apache_id == "hari"
+    assert dry_run is True

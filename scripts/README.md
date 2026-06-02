@@ -115,12 +115,12 @@ python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id
 ```
 
 What it does:
-- checks out the RC directory from `dist/dev`
-- checks out the release directory from `dist/release`
-- validates the expected source archive, sdist, wheel, and matching `.asc` / `.sha512` files
-- removes the current release artifacts while preserving `KEYS`
-- copies the voted RC artifacts into the release checkout
-- commits the release checkout to SVN
+- checks out the RC directory from `dist/dev` to validate the expected source archive,
+  sdist, wheel, and matching `.asc` / `.sha512` files
+- refuses to continue if the target release directory already exists
+- copies the voted RC directory server-side into a new per-version release directory
+  (e.g. `dist/release/incubator/burr/0.41.0`) with a single atomic `svn cp` commit
+- leaves any existing release directories and the shared `KEYS` file untouched (additive)
 - prints the final PyPI upload command for the sdist and wheel
 
 Use `--dry-run` to preview the actions without committing:

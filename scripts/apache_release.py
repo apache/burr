@@ -813,9 +813,14 @@ def _promotion_source_url(version: str, rc_num: str, dev_svn_root: str) -> str:
     return f"{dev_svn_root}/{version}-incubating-RC{rc_num}"
 
 
-def _promotion_release_url(release_svn_root: str) -> str:
-    """Return the SVN URL for the final release location."""
-    return release_svn_root
+def _promotion_target_url(version: str, release_svn_root: str) -> str:
+    """Return the SVN URL for the final per-version release directory.
+
+    Releases are published under a per-version subdirectory
+    (e.g. dist/release/incubator/burr/0.42.0), alongside any existing
+    releases and the shared KEYS file at the project root.
+    """
+    return f"{release_svn_root}/{version}"
 
 
 def _promotion_commit_message(version: str, rc_num: str) -> str:
@@ -830,11 +835,6 @@ def _expected_promotion_artifact_patterns(version: str) -> dict[str, str]:
         "sdist": f"apache-burr-{version}-incubating-sdist.tar.gz",
         "wheel": f"apache_burr-{version}-*.whl",
     }
-
-
-def _promoted_artifact_name(filename: str, rc_num: str) -> str:
-    """Remove any RC suffix from a promoted artifact name if present."""
-    return filename.replace(f"-RC{rc_num}", "")
 
 
 def _find_single_glob_match(directory: str, pattern: str, description: str) -> str:
@@ -890,79 +890,51 @@ def _svn_checkout(url: str, checkout_dir: str) -> None:
     )
 
 
-def _release_checkout_entries(release_checkout_dir: str) -> list[str]:
-    """List release artifact entries, excluding metadata that must be preserved."""
-    entries = []
-    for name in sorted(os.listdir(release_checkout_dir)):
-        if name in {".svn", "KEYS"}:
-            continue
-        entries.append(os.path.join(release_checkout_dir, name))
-    return entries
+def _svn_target_exists(url: str) -> bool:
+    """Return True if an SVN URL already exists in the repository."""
+    result = subprocess.run(
+        ["svn", "info", url],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
 
 
-def _remove_existing_release_entries(release_checkout_dir: str, dry_run: bool = False) -> list[str]:
-    """Remove current release artifacts from the SVN working copy, preserving KEYS."""
-    removed_entries = []
-    for entry in _release_checkout_entries(release_checkout_dir):
-        removed_entries.append(os.path.basename(entry))
-        if dry_run:
-            print(f"  [DRY RUN] Would remove release entry: {os.path.basename(entry)}")
-            continue
-        _run_command(
-            ["svn", "rm", "--force", entry],
-            description=f"Removing old release entry: {os.path.basename(entry)}",
-            error_message=f"Failed to remove existing release entry: {entry}",
-            success_message="Removed",
-        )
-    return removed_entries
-
-
-def _copy_promoted_artifacts(
-    rc_checkout_dir: str,
-    release_checkout_dir: str,
-    artifacts: list[str],
-    rc_num: str,
-    dry_run: bool = False,
-) -> list[str]:
-    """Copy validated RC artifacts into the release checkout with final names."""
-    copied_artifacts = []
-    for artifact in artifacts:
-        destination_name = _promoted_artifact_name(os.path.basename(artifact), rc_num)
-        copied_artifacts.append(destination_name)
-        if dry_run:
-            print(f"  [DRY RUN] Would copy {os.path.basename(artifact)} -> {destination_name}")
-            continue
-
-        source_path = artifact
-        destination_path = os.path.join(release_checkout_dir, destination_name)
-        shutil.copy2(source_path, destination_path)
-        _run_command(
-            ["svn", "add", "--force", destination_path],
-            description=f"Adding promoted artifact: {destination_name}",
-            error_message=f"Failed to add promoted artifact: {destination_name}",
-            success_message="Added",
-        )
-    return copied_artifacts
-
-
-def _commit_promoted_release(
-    release_checkout_dir: str,
-    version: str,
-    rc_num: str,
+def _promote_with_server_copy(
+    source_url: str,
+    target_url: str,
+    message: str,
     apache_id: str,
     dry_run: bool = False,
 ) -> bool:
-    """Commit the promoted release checkout to SVN."""
-    message = _promotion_commit_message(version, rc_num)
+    """Promote a voted RC by copying it server-side into the release tree.
+
+    A single ``svn cp <rc_url> <release>/<version>`` is atomic: it copies the
+    voted RC directory (artifacts plus their .asc / .sha512 companions) into a
+    new per-version release directory in one commit, without downloading the
+    artifacts. Existing release directories and the shared KEYS file are left
+    untouched, matching the additive layout used in dist/release.
+    """
+    command = [
+        "svn",
+        "cp",
+        source_url,
+        target_url,
+        "-m",
+        message,
+        "--username",
+        apache_id,
+    ]
     if dry_run:
-        print(f"  [DRY RUN] Would commit release checkout with message: {message}")
+        print(f"  [DRY RUN] Would run: {' '.join(command)}")
         return True
 
     _run_command(
-        ["svn", "commit", release_checkout_dir, "-m", message, "--username", apache_id],
-        description="Committing promoted release to SVN...",
-        error_message="SVN commit failed for promoted release",
-        success_message="SVN commit completed",
+        command,
+        description="Promoting RC to release via server-side copy...",
+        error_message="SVN server-side copy failed for promotion",
+        success_message="Release promoted",
         capture_output=False,
     )
     return True
@@ -1066,53 +1038,44 @@ def cmd_promote(args) -> bool:
 
     version, rc_num = _parse_rc_label(args.rc_label)
     source_url = _promotion_source_url(version, rc_num, args.dev_svn_root)
-    release_url = _promotion_release_url(args.release_svn_root)
+    target_url = _promotion_target_url(version, args.release_svn_root)
 
     print(f"Source RC URL: {source_url}")
-    print(f"Release URL:   {release_url}")
+    print(f"Release URL:   {target_url}")
     if args.dry_run:
         print("\n*** DRY RUN MODE ***")
 
+    if _svn_target_exists(target_url):
+        _fail(
+            f"Release path already exists: {target_url}\n"
+            "Refusing to overwrite an already-promoted release."
+        )
+
     with tempfile.TemporaryDirectory(prefix="burr-promote-") as temp_dir:
         rc_checkout_dir = os.path.join(temp_dir, "rc")
-        release_checkout_dir = os.path.join(temp_dir, "release")
-
         _svn_checkout(source_url, rc_checkout_dir)
-        _svn_checkout(release_url, release_checkout_dir)
 
         print("\nValidating expected artifacts...")
         validated_artifacts = _validate_promotion_artifacts(rc_checkout_dir, version)
         for artifact in validated_artifacts:
             print(f"  ✓ {os.path.basename(artifact)}")
 
-        print("\nCleaning current release artifacts...")
-        _remove_existing_release_entries(release_checkout_dir, dry_run=args.dry_run)
+    print("\nPromoting RC into release...")
+    _promote_with_server_copy(
+        source_url,
+        target_url,
+        _promotion_commit_message(version, rc_num),
+        args.apache_id,
+        dry_run=args.dry_run,
+    )
 
-        print("\nCopying voted RC artifacts into release checkout...")
-        promoted_artifacts = _copy_promoted_artifacts(
-            rc_checkout_dir,
-            release_checkout_dir,
-            validated_artifacts,
-            rc_num,
-            dry_run=args.dry_run,
-        )
+    print("\nPromotion summary:")
+    print(f"  Release path: {target_url}")
+    for artifact in validated_artifacts:
+        print(f"  - {os.path.basename(artifact)}")
 
-        print("\nCommitting promoted release...")
-        _commit_promoted_release(
-            release_checkout_dir,
-            version,
-            rc_num,
-            args.apache_id,
-            dry_run=args.dry_run,
-        )
-
-        print("\nPromotion summary:")
-        print(f"  Release path: {release_url}")
-        for artifact_name in promoted_artifacts:
-            print(f"  - {artifact_name}")
-
-        print("\nPyPI upload command:")
-        print(f"  {_twine_upload_command(promoted_artifacts)}")
+    print("\nPyPI upload command:")
+    print(f"  {_twine_upload_command(validated_artifacts)}")
 
     return True
 
