@@ -80,7 +80,10 @@ def test_validate_promotion_artifacts_fails_when_companion_missing(tmp_path):
 
 
 def test_promoted_artifact_name_removes_rc_suffix():
-    assert release._promoted_artifact_name("apache-burr-0.42.0-RC1.txt", "1") == "apache-burr-0.42.0.txt"
+    assert (
+        release._promoted_artifact_name("apache-burr-0.42.0-RC1.txt", "1")
+        == "apache-burr-0.42.0.txt"
+    )
     assert release._promoted_artifact_name("apache_burr-0.42.0-py3-none-any.whl", "1") == (
         "apache_burr-0.42.0-py3-none-any.whl"
     )

@@ -46,7 +46,9 @@ PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
 DEFAULT_DEV_SVN_ROOT = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}"
-DEFAULT_RELEASE_SVN_ROOT = f"https://dist.apache.org/repos/dist/release/incubator/{PROJECT_SHORT_NAME}"
+DEFAULT_RELEASE_SVN_ROOT = (
+    f"https://dist.apache.org/repos/dist/release/incubator/{PROJECT_SHORT_NAME}"
+)
 RC_LABEL_PATTERN = re.compile(
     r"^(?P<version>\d+\.\d+\.\d+)(?:-incubating)?-RC(?P<rc_num>\d+)$", re.IGNORECASE
 )
@@ -130,10 +132,7 @@ def _parse_rc_label(rc_label: str) -> tuple[str, str]:
     """Parse an RC label like 0.42.0-RC1 or 0.42.0-incubating-RC1."""
     match = RC_LABEL_PATTERN.fullmatch(rc_label.strip())
     if not match:
-        _fail(
-            "Invalid RC label. Expected format like '0.42.0-RC1' "
-            "or '0.42.0-incubating-RC1'."
-        )
+        _fail("Invalid RC label. Expected format like '0.42.0-RC1' " "or '0.42.0-incubating-RC1'.")
     return match.group("version"), match.group("rc_num")
 
 
