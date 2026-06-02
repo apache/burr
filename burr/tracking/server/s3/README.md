@@ -33,7 +33,7 @@ The server is executable by a simple python command (although in production you'
 To get everything you need, you can install as you would any python library:
 
 ```bash
-pip install "burr[tracking-server-s3, cli]"
+pip install "apache-burr[tracking-server-s3, cli]"
 ```
 
 Note that this enables you to run through the CLI -- you won't need the CLI target to run in production,

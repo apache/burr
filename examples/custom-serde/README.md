@@ -38,7 +38,7 @@ pip install jupyter
 jupyter notebook
 ``
 
-and running the notebook. Or <a target="_blank" href="https://colab.research.google.com/github/dagworks-inc/burr/blob/main/examples/custom-serde/notebook.ipynb">
+and running the notebook. Or <a target="_blank" href="https://colab.research.google.com/github/apache/burr/blob/main/examples/custom-serde/notebook.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>.
 

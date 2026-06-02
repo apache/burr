@@ -206,7 +206,7 @@ class Graph:
         except ModuleNotFoundError:
             logger.exception(
                 " graphviz is required for visualizing the application graph. Install it with:"
-                '\n\n  pip install "burr[graphviz]" or pip install graphviz \n\n'
+                '\n\n  pip install "apache-burr[graphviz]" or pip install graphviz \n\n'
             )
             return
         digraph_attr = dict(

@@ -1,45 +1,46 @@
 # Apache RAT exclude patterns.
 #
-# IMPORTANT: RAT's -E flag matches each pattern as a regex, but only
-# reliably matches against the file basename. Path-style patterns like
-# 'examples/foo/bar.py' don't work, especially through symlinked dirs
-# (burr/examples is a symlink to ../examples in the source tree).
-# Use basename patterns. Be aware that broad basenames like 'utils.py'
-# will skip license checks on every utils.py in the repo.
+# IMPORTANT: these entries use RAT 0.17+ exclude-expression syntax, read via
+# --input-exclude-file. Each line is a glob matched against the file path, so
+# 'foo/bar.py' style patterns work, but the '**/' prefix is required to match a
+# name at any depth (RAT 0.16's -E flag matched the bare basename as a regex;
+# that behaviour was removed in 0.17). Use '**/<name>' for a name anywhere or
+# '**/*.<ext>' for an extension. Be aware that broad basenames like
+# '**/utils.py' will skip license checks on every utils.py in the repo.
 
 # Python marker file
-.*py\.typed
+**/py.typed
 
 # JSON Lines data files
-.*\.jsonl
+**/*.jsonl
 
 # Git and version control config
-\.gitignore
-\.gitmodules
-\.rat-excludes
+**/.gitignore
+**/.gitmodules
+**/.rat-excludes
 
 # Jupyter notebooks (JSON format, cannot practically add headers)
-.*\.ipynb
+**/*.ipynb
 
 # Data files (CSV - not source code)
-.*\.csv
+**/*.csv
 
 # Text files (documentation/data files, not source code)
-.*\.txt
+**/*.txt
 
 # Build and tool config files
-.*\.bat
-robots\.txt
+**/*.bat
+**/robots.txt
 
 # JSON config files (cannot contain comments)
-.*\.json
+**/*.json
 
 # YAML config files in .github/ (templates with frontmatter, headers impractical)
-labeler\.yml
-config\.yml
-bug_report\.md
-feature_request\.md
-PULL_REQUEST_TEMPLATE\.md
+**/labeler.yml
+**/config.yml
+**/bug_report.md
+**/feature_request.md
+**/PULL_REQUEST_TEMPLATE.md
 
 # Third-party MIT-licensed files (attributed in LICENSE).
 # Most names are unique within the repo so basename matching is safe.
@@ -50,29 +51,29 @@ PULL_REQUEST_TEMPLATE\.md
 #     (our own ASF code with header)
 # A future regression in any of those collision targets would silently pass
 # RAT. Tracked as a follow-up to rename or restructure.
-prompts\.py
-utils\.py
-animated-beam\.tsx
-animated-shiny-text\.tsx
-blur-fade\.tsx
-border-beam\.tsx
-button\.tsx
-dot-pattern\.tsx
-icon-cloud\.tsx
-magic-card\.tsx
-marquee\.tsx
-number-ticker\.tsx
-safari\.tsx
-shimmer-button\.tsx
+**/prompts.py
+**/utils.py
+**/animated-beam.tsx
+**/animated-shiny-text.tsx
+**/blur-fade.tsx
+**/border-beam.tsx
+**/button.tsx
+**/dot-pattern.tsx
+**/icon-cloud.tsx
+**/magic-card.tsx
+**/marquee.tsx
+**/number-ticker.tsx
+**/safari.tsx
+**/shimmer-button.tsx
 
 # Tutorial markdown for the AWS terraform deployment example
-tutorial\.md
+**/tutorial.md
 
 # SVG files (third-party logos and graphics, headers impractical)
-.*\.svg
+**/*.svg
 
 # Image files (binary, cannot contain headers)
-.*\.png
-.*\.gif
-.*\.ico
-.*\.jpg
+**/*.png
+**/*.gif
+**/*.ico
+**/*.jpg

@@ -309,7 +309,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         annotations_path = self._get_annotation_path(project_id)
         annotations = []
         if os.path.exists(annotations_path):
-            async with aiofiles.open(annotations_path) as f:
+            async with aiofiles.open(annotations_path, encoding="utf-8") as f:
                 for line in await f.readlines():
                     annotations.append(AnnotationOut.parse_raw(line))
         return annotations
@@ -348,7 +348,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
             **annotation.dict(),
         )
         annotations_path = self._get_annotation_path(project_id)
-        async with aiofiles.open(annotations_path, "a") as f:
+        async with aiofiles.open(annotations_path, "a", encoding="utf-8") as f:
             await f.write(annotation_out.json() + "\n")
         return annotation_out
 
@@ -381,7 +381,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
                 detail=f"Annotation: {annotation_id} from project: {project_id} not found",
             )
         annotations_path = self._get_annotation_path(project_id)
-        async with aiofiles.open(annotations_path, "w") as f:
+        async with aiofiles.open(annotations_path, "w", encoding="utf-8") as f:
             for a in all_annotations:
                 await f.write(a.json() + "\n")
         return annotation_out
@@ -407,7 +407,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         if not os.path.exists(annotation_path):
             return []
         annotations = []
-        async with aiofiles.open(annotation_path) as f:
+        async with aiofiles.open(annotation_path, encoding="utf-8") as f:
             for line in await f.readlines():
                 parsed = AnnotationOut.parse_raw(line)
                 if (
@@ -521,7 +521,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
                 status_code=404,
                 detail=f"Graph file for app: {app_id} from project: {project_id} not found",
             )
-        async with aiofiles.open(graph_file) as f:
+        async with aiofiles.open(graph_file, encoding="utf-8") as f:
             str_graph = await f.read()
         collections.defaultdict(list)
         if os.path.exists(log_file):
@@ -530,7 +530,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
                 steps = Step.from_logs(lines)
         children = []
         if os.path.exists(children_file):
-            async with aiofiles.open(children_file) as f:
+            async with aiofiles.open(children_file, encoding="utf-8") as f:
                 str_children = await f.readlines()
                 children = [
                     ChildApplicationModel.parse_obj(json.loads(item)) for item in str_children

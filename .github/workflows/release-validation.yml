@@ -107,14 +107,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/apache-rat
-          key: apache-rat-0.16.1
+          key: apache-rat-0.18
 
       - name: Download Apache RAT if not cached
         if: steps.cache-rat.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.cache/apache-rat
-          curl -fL -o ~/.cache/apache-rat/apache-rat-0.16.1.jar \
-            https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.16.1/apache-rat-0.16.1.jar
+          curl -fL -o ~/.cache/apache-rat/apache-rat-0.18.jar \
+            https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.18/apache-rat-0.18.jar
 
       - name: Extract version
         id: version
@@ -137,7 +137,7 @@ jobs:
       - name: Run Apache RAT on source and sdist tarballs
         run: |
           python scripts/verify_apache_artifacts.py licenses \
-            --rat-jar ~/.cache/apache-rat/apache-rat-0.16.1.jar \
+            --rat-jar ~/.cache/apache-rat/apache-rat-0.18.jar \
             --artifacts-dir dist
 
       - name: Upload release artifacts
@@ -193,3 +193,33 @@ jobs:
           path: /tmp/burr-smoke-*
           retention-days: 7
           if-no-files-found: ignore
+
+  # Single stable required-check name. Always runs (if: always()) so it produces
+  # a definite SUCCESS or FAILURE — never SKIPPED. Branch protection in
+  # .asf.yaml requires this context, not the underlying jobs, so path-filtered
+  # docs/website PRs (where the upstream jobs are skipped) still go green here.
+  summary:
+    name: "Release Validation / summary"
+    needs: [check-paths, build-artifacts, install-and-smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verdict
+        env:
+          CHECK_PATHS: ${{ needs.check-paths.result }}
+          BUILD_ARTIFACTS: ${{ needs.build-artifacts.result }}
+          INSTALL_AND_SMOKE: ${{ needs.install-and-smoke.result }}
+        run: |
+          echo "check-paths:       $CHECK_PATHS"
+          echo "build-artifacts:   $BUILD_ARTIFACTS"
+          echo "install-and-smoke: $INSTALL_AND_SMOKE"
+          # Pass if every needed job is success or skipped; fail if any
+          # failed or was cancelled.
+          for r in "$CHECK_PATHS" "$BUILD_ARTIFACTS" "$INSTALL_AND_SMOKE"; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::Release Validation failed (one or more jobs not success/skipped)"; exit 1 ;;
+            esac
+          done
+          echo "Release Validation: all upstream jobs success or skipped."

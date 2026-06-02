@@ -62,10 +62,13 @@ github:
       required_status_checks:
         # strict means "Require branches to be up to date before merging".
         strict: false
-        # contexts are the names of checks that must pass
+        # The Release Validation workflow ends in a single "summary" job that
+        # runs with if: always() and translates upstream SUCCESS or SKIPPED
+        # into a definite SUCCESS, FAILURE into FAILURE. That gives us one
+        # stable required check name regardless of whether the upstream jobs
+        # ran (real code PR) or were path-filtered out (docs/website PR).
         contexts:
-          - "Release Validation / build-artifacts"
-          - "Release Validation / install-and-smoke (3.12)"
+          - "Release Validation / summary"
       required_pull_request_reviews:
         dismiss_stale_reviews: false
         require_code_owner_reviews: false

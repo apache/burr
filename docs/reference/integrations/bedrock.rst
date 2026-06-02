@@ -30,7 +30,7 @@ Install the optional extra (pulls ``boto3``):
 
 .. code-block:: bash
 
-   pip install "burr[bedrock]"
+   pip install "apache-burr[bedrock]"
 
 IAM permissions must allow ``bedrock:InvokeModel`` / streaming equivalents for your
 chosen models; see AWS documentation for your account and model IDs.

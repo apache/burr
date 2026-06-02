@@ -38,6 +38,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import NoReturn, Optional
 
 # --- Configuration ---
@@ -428,6 +429,9 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
 
     env = os.environ.copy()
     env["FLIT_USE_VCS"] = "0"
+    source_epoch = _source_date_epoch(version, output_dir)
+    if source_epoch is not None:
+        env["SOURCE_DATE_EPOCH"] = str(source_epoch)
     _run_command(
         ["flit", "build", "--format", "sdist"],
         description="Running flit build --format sdist...",
@@ -455,6 +459,14 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
 
     return apache_sdist
+
+
+def _source_date_epoch(version: str, output_dir: str = "dist") -> Optional[int]:
+    """Use the source archive timestamp when available so local rebuilds are comparable."""
+    source_archive = os.path.join(output_dir, f"apache-burr-{version}-incubating-src.tar.gz")
+    if os.path.exists(source_archive):
+        return int(os.path.getmtime(source_archive))
+    return None
 
 
 # ============================================================================
@@ -509,14 +521,15 @@ def _build_ui_artifacts() -> None:
         _fail(f"UI build directory is empty: {ui_build_dir}")
 
 
-def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
-    """Handle burr/examples symlink: replace with real files for wheel."""
+def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str], list[tuple[str, str]]]:
+    """Prepare wheel contents and temporarily remove files excluded from the sdist."""
     burr_examples_dir = "burr/examples"
     source_examples_dir = "examples"
+    removed_files: list[tuple[str, str]] = []
 
     if not os.path.exists(source_examples_dir):
         print(f"    ⚠️  {source_examples_dir} not found")
-        return (False, False, None)
+        return (False, False, None, removed_files)
 
     # Check if burr/examples is a symlink (should be in dev repo)
     was_symlink = False
@@ -553,11 +566,25 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
             shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
             print(f"    ✓ Copied {example_dir}")
 
-    return (True, was_symlink, symlink_target)
+    # Keep wheel contents aligned with the sdist so rebuild verification compares like-for-like artifacts.
+    excluded_wheel_files = [
+        "burr/tracking/server/s3/deployment/terraform/.gitignore",
+    ]
+    for path in excluded_wheel_files:
+        if os.path.exists(path):
+            backup_dir = tempfile.mkdtemp(prefix="apache-release-wheel-")
+            backup_path = os.path.join(backup_dir, os.path.basename(path))
+            os.replace(path, backup_path)
+            removed_files.append((path, backup_path))
+            print(f"    ✓ Temporarily excluded {path}")
+
+    return (True, was_symlink, symlink_target, removed_files)
 
 
-def _cleanup_wheel_contents(was_symlink: bool, symlink_target: Optional[str]) -> None:
-    """Restore burr/examples symlink after wheel build."""
+def _cleanup_wheel_contents(
+    was_symlink: bool, symlink_target: Optional[str], removed_files: list[tuple[str, str]]
+) -> None:
+    """Restore temporary wheel-build changes after the wheel build finishes."""
     burr_examples_dir = "burr/examples"
 
     if os.path.exists(burr_examples_dir):
@@ -567,6 +594,14 @@ def _cleanup_wheel_contents(was_symlink: bool, symlink_target: Optional[str]) ->
             print(f"  Restoring symlink: burr/examples -> {symlink_target}")
             os.symlink(symlink_target, burr_examples_dir)
             print("    ✓ Symlink restored")
+
+    for original_path, backup_path in removed_files:
+        if os.path.exists(backup_path):
+            os.replace(backup_path, original_path)
+            print(f"  Restored {original_path}")
+            backup_dir = os.path.dirname(backup_path)
+            if os.path.isdir(backup_dir):
+                shutil.rmtree(backup_dir)
 
 
 def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str:
@@ -581,13 +616,16 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     _build_ui_artifacts()
 
     _print_step(2, 3, "Preparing wheel contents")
-    copied, was_symlink, symlink_target = _prepare_wheel_contents()
+    copied, was_symlink, symlink_target, removed_files = _prepare_wheel_contents()
 
     _print_step(3, 3, "Building wheel with flit")
 
     try:
         env = os.environ.copy()
         env["FLIT_USE_VCS"] = "0"
+        source_epoch = _source_date_epoch(version, output_dir)
+        if source_epoch is not None:
+            env["SOURCE_DATE_EPOCH"] = str(source_epoch)
 
         _run_command(
             ["flit", "build", "--format", "wheel"],
@@ -612,7 +650,7 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     finally:
         # Always restore symlinks
         if copied:
-            _cleanup_wheel_contents(was_symlink, symlink_target)
+            _cleanup_wheel_contents(was_symlink, symlink_target, removed_files)
 
 
 def _verify_wheel(wheel_path: str) -> bool:
