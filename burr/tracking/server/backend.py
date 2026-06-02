@@ -20,6 +20,7 @@ import collections
 import importlib
 import json
 import os.path
+import re
 import sys
 from datetime import datetime
 from typing import Any, Optional, Sequence, Tuple, Type, TypeVar
@@ -292,6 +293,44 @@ def get_uri(project_id: str) -> str:
 
 DEFAULT_PATH = os.path.expanduser("~/.burr")
 
+# Regex for valid project/app identifiers — no path separators or traversal.
+_VALID_IDENTIFIER_RE = re.compile(r"^[a-zA-Z0-9_\-:]+$")
+
+
+def _validate_identifier(value: str, name: str = "identifier") -> str:
+    """Validate that a project/app identifier does not contain path traversal characters.
+
+    :param value: the identifier to validate
+    :param name: human-readable name for error messages
+    :return: the identifier if valid
+    :raises fastapi.HTTPException: 400 if the identifier contains invalid characters
+    """
+    if not _VALID_IDENTIFIER_RE.match(value):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Invalid {name}: '{value}'. Only alphanumeric, underscore, hyphen and colon are allowed.",
+        )
+    return value
+
+
+def _safe_join(base: str, *parts: str) -> str:
+    """Safely join path components and ensure the result stays within ``base``.
+
+    :param base: the allowed base directory
+    :param parts: path components to join
+    :return: the resolved path
+    :raises fastapi.HTTPException: 400 if the resolved path escapes the base directory
+    """
+    target = os.path.realpath(os.path.join(base, *parts))
+    base_real = os.path.realpath(base)
+    # Ensure target is either the base directory or a subdirectory of it
+    if target != base_real and not target.startswith(base_real + os.sep):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Path traversal detected: attempted to escape the base directory.",
+        )
+    return target
+
 
 class LocalBackend(BackendBase, AnnotationsBackendMixin):
     """Quick implementation of a local backend for testing purposes. This is not a production backend.
@@ -303,7 +342,8 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         self.path = path
 
     def _get_annotation_path(self, project_id: str) -> str:
-        return os.path.join(self.path, project_id, "annotations.jsonl")
+        _validate_identifier(project_id, "project_id")
+        return _safe_join(self.path, project_id, "annotations.jsonl")
 
     async def _load_project_annotations(self, project_id: str):
         annotations_path = self._get_annotation_path(project_id)
@@ -464,7 +504,8 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[Sequence[ApplicationSummary], int]:
-        project_filepath = os.path.join(self.path, project_id)
+        _validate_identifier(project_id, "project_id")
+        project_filepath = _safe_join(self.path, project_id)
         if not os.path.exists(project_filepath):
             return [], 0
             # raise fastapi.HTTPException(status_code=404, detail=f"Project: {project_id} not found")
@@ -506,7 +547,9 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
     ) -> ApplicationLogs:
         # TODO -- handle partition key here
         # This currently assumes uniqueness
-        app_filepath = os.path.join(self.path, project_id, app_id)
+        _validate_identifier(project_id, "project_id")
+        _validate_identifier(app_id, "app_id")
+        app_filepath = _safe_join(self.path, project_id, app_id)
         if not os.path.exists(app_filepath):
             raise fastapi.HTTPException(
                 status_code=404, detail=f"App: {app_id} from project: {project_id} not found"
