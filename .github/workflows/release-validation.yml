@@ -107,14 +107,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/apache-rat
-          key: apache-rat-0.16.1
+          key: apache-rat-0.18
 
       - name: Download Apache RAT if not cached
         if: steps.cache-rat.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.cache/apache-rat
-          curl -fL -o ~/.cache/apache-rat/apache-rat-0.16.1.jar \
-            https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.16.1/apache-rat-0.16.1.jar
+          curl -fL -o ~/.cache/apache-rat/apache-rat-0.18.jar \
+            https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.18/apache-rat-0.18.jar
 
       - name: Extract version
         id: version
@@ -137,7 +137,7 @@ jobs:
       - name: Run Apache RAT on source and sdist tarballs
         run: |
           python scripts/verify_apache_artifacts.py licenses \
-            --rat-jar ~/.cache/apache-rat/apache-rat-0.16.1.jar \
+            --rat-jar ~/.cache/apache-rat/apache-rat-0.18.jar \
             --artifacts-dir dist
 
       - name: Upload release artifacts
