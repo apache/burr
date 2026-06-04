@@ -104,7 +104,7 @@ def test_end_to_end_parallel_collatz_many_unreliable_tasks(tmpdir):
 
     MIN_NUMBER = 80
     MAX_NUMBER = 100
-    FAILURE_ODDS = 0.05  # 1 in twenty chance of faiulre, will be hit but not all the time
+    FAILURE_ODDS = 0.05  # 1 in twenty chance of failure, will be hit but not all the time
 
     seen = set()
 
@@ -237,7 +237,7 @@ async def test_end_to_end_parallel_collatz_many_unreliable_tasks_async(tmpdir):
 
     MIN_NUMBER = 80
     MAX_NUMBER = 100
-    FAILURE_ODDS = 0.05  # 1 in twenty chance of faiulre, will be hit but not all the time
+    FAILURE_ODDS = 0.05  # 1 in twenty chance of failure, will be hit but not all the time
 
     seen = set()
 

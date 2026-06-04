@@ -28,7 +28,7 @@ Install with pypi:
 
 .. code-block:: bash
 
-   pip install burr[streamlit]
+   pip install apache-burr[streamlit]
 
 .. autoclass:: burr.integrations.streamlit.AppState
     :members:

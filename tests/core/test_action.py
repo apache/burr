@@ -497,7 +497,7 @@ def test_function_based_action_with_defaults():
 
 
 def test_function_based_action_with_defaults_unbound():
-    # inputs can have defaults -- this tests that we treat them propertly
+    # inputs can have defaults -- this tests that we treat them properly
     @action(reads=["input_variable"], writes=["output_variable"])
     def my_action(
         state: State, unbound_input_1: int, unbound_input_2: int, unbound_default_input: int = 1000

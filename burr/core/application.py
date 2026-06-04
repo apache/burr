@@ -340,6 +340,8 @@ def _run_single_step_streaming_action(
     count = 0
     try:
         for item in generator:
+            if isinstance(item, dict):
+                item = (item, None)
             if not isinstance(item, tuple):
                 # TODO -- consider adding support for just returning a result.
                 raise ValueError(
@@ -406,6 +408,8 @@ async def _arun_single_step_streaming_action(
     count = 0
     try:
         async for item in generator:
+            if isinstance(item, dict):
+                item = (item, None)
             if not isinstance(item, tuple):
                 # TODO -- consider adding support for just returning a result.
                 raise ValueError(
