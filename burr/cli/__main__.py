@@ -49,6 +49,8 @@ except ImportError as e:
 # Clear default handlers
 setup_logging(logging.INFO)
 
+SERVER_READY_TIMEOUT_SECONDS = 1
+
 
 def _command(command: str, capture_output: bool, addl_env: dict | None = None) -> str:
     """Runs a simple command"""
@@ -100,7 +102,7 @@ def _locate_package_root() -> Optional[str]:
 def open_when_ready(check_url: str, open_url: str):
     while True:
         try:
-            response = requests.get(check_url)
+            response = requests.get(check_url, timeout=SERVER_READY_TIMEOUT_SECONDS)
             if response.status_code == 200:
                 webbrowser.open(open_url)
                 return
