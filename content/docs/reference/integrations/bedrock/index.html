@@ -281,6 +281,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l3"><a class="reference internal" href="../../../examples/deployment/web-server/">Burr in a web server</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../examples/deployment/infrastructure/">Provisioning Infrastructure/Deploying</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../examples/deployment/monitoring/">Monitoring in Production</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../examples/deployment/aws/">AWS Deployment Example</a></li>
 </ul>
 </li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/guardrails/">🚧 Guardrails / Tests</a><input aria-label="Toggle navigation of 🚧 Guardrails / Tests" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -302,6 +303,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-persistence/">State Persistence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/serde/">Serialization / Deserialization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/streaming-actions/">Streaming Actions</a></li>
@@ -410,8 +412,69 @@ Bedrock Runtime <strong>Converse</strong> and <strong>Converse Stream</strong> A
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[bedrock]&quot;</span>
 </pre></div>
 </div>
-<p>IAM permissions must allow <code class="docutils literal notranslate"><span class="pre">bedrock:InvokeModel</span></code> / streaming equivalents for your
-chosen models; see AWS documentation for your account and model IDs.</p>
+<section id="available-actions">
+<h2>Available Actions<a class="headerlink" href="#available-actions" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">BedrockAction</span></code> is a single-step action for standard request/response flows.
+<code class="docutils literal notranslate"><span class="pre">BedrockStreamingAction</span></code> is a streaming action that emits chunks during execution
+and applies final state updates when complete.</p>
+<p>Both actions accept:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">model_id</span></code>: Bedrock model identifier (for example Claude models on Bedrock)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">input_mapper</span></code>: maps Burr state to Bedrock <code class="docutils literal notranslate"><span class="pre">messages</span></code> (and optional <code class="docutils literal notranslate"><span class="pre">system</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reads</span></code> / <code class="docutils literal notranslate"><span class="pre">writes</span></code>: standard Burr state wiring</p></li>
+<li><p>Optional AWS settings: <code class="docutils literal notranslate"><span class="pre">region</span></code>, <code class="docutils literal notranslate"><span class="pre">max_retries</span></code>, optional injected <code class="docutils literal notranslate"><span class="pre">client</span></code></p></li>
+<li><p>Optional guardrails: <code class="docutils literal notranslate"><span class="pre">guardrail_id</span></code> + required <code class="docutils literal notranslate"><span class="pre">guardrail_version</span></code></p></li>
+<li><p>Optional <code class="docutils literal notranslate"><span class="pre">inference_config</span></code> passed through to Bedrock</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">guardrail_id</span></code> is set, <code class="docutils literal notranslate"><span class="pre">guardrail_version</span></code> is required.</p>
+</div>
+</section>
+<section id="supported-models">
+<h2>Supported Models<a class="headerlink" href="#supported-models" title="Link to this heading">¶</a></h2>
+<p>Burr passes <code class="docutils literal notranslate"><span class="pre">model_id</span></code> directly to Bedrock Runtime. Any model that supports
+the Bedrock <strong>Converse</strong> / <strong>ConverseStream</strong> API in your account and region can be
+used. See AWS model availability by region and account entitlement:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html">Supported foundation models in Amazon Bedrock</a></p></li>
+<li><p><a class="reference external" href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html">Converse API reference</a></p></li>
+<li><p><a class="reference external" href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html">ConverseStream API reference</a></p></li>
+</ul>
+</section>
+<section id="iam-permissions">
+<h2>IAM Permissions<a class="headerlink" href="#iam-permissions" title="Link to this heading">¶</a></h2>
+<p>At minimum, the runtime identity used by Burr should have permission to invoke
+the specific Bedrock model(s) you choose:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bedrock:InvokeModel</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bedrock:InvokeModelWithResponseStream</span></code> (for streaming)</p></li>
+</ul>
+<p>Depending on your setup, you may also need permissions for guardrails and
+cross-account resource access. Restrict resources to specific model ARNs whenever possible.</p>
+</section>
+<section id="quick-example">
+<h2>Quick Example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.integrations.bedrock</span><span class="w"> </span><span class="kn">import</span> <span class="n">BedrockAction</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">map_state_to_prompt</span><span class="p">(</span><span class="n">state</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">]}]}],</span>
+        <span class="s2">&quot;system&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;You are a concise assistant.&quot;</span><span class="p">}],</span>
+    <span class="p">}</span>
+
+<span class="n">ask_model</span> <span class="o">=</span> <span class="n">BedrockAction</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ask_model&quot;</span><span class="p">,</span>
+    <span class="n">model_id</span><span class="o">=</span><span class="s2">&quot;anthropic.claude-3-haiku-20240307-v1:0&quot;</span><span class="p">,</span>
+    <span class="n">input_mapper</span><span class="o">=</span><span class="n">map_state_to_prompt</span><span class="p">,</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_reason&quot;</span><span class="p">],</span>
+    <span class="n">region</span><span class="o">=</span><span class="s2">&quot;us-east-1&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>See the runnable integration example in the repository:
+<a class="reference external" href="https://github.com/apache/burr/tree/main/examples/integrations/bedrock">examples/integrations/bedrock</a>.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="burr.integrations.bedrock.BedrockAction">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">burr.integrations.bedrock.</span></span><span class="sig-name descname"><span class="pre">BedrockAction</span></span><span class="sig-paren">(</span>
@@ -567,6 +630,7 @@ This is not (yet) exposed as an interface for users to extend.</p>
 </dd></dl>
 
 </section>
+</section>
 
         </article>
       </div>
@@ -637,6 +701,10 @@ This is not (yet) exposed as an interface for users to extend.</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Amazon Bedrock</a><ul>
+<li><a class="reference internal" href="#available-actions">Available Actions</a></li>
+<li><a class="reference internal" href="#supported-models">Supported Models</a></li>
+<li><a class="reference internal" href="#iam-permissions">IAM Permissions</a></li>
+<li><a class="reference internal" href="#quick-example">Quick Example</a><ul>
 <li><a class="reference internal" href="#burr.integrations.bedrock.BedrockAction"><code class="docutils literal notranslate"><span class="pre">BedrockAction</span></code></a><ul>
 <li><a class="reference internal" href="#burr.integrations.bedrock.BedrockAction.run_and_update"><code class="docutils literal notranslate"><span class="pre">BedrockAction.run_and_update()</span></code></a></li>
 </ul>
@@ -644,6 +712,8 @@ This is not (yet) exposed as an interface for users to extend.</p>
 <li><a class="reference internal" href="#burr.integrations.bedrock.BedrockStreamingAction"><code class="docutils literal notranslate"><span class="pre">BedrockStreamingAction</span></code></a><ul>
 <li><a class="reference internal" href="#burr.integrations.bedrock.BedrockStreamingAction.stream_run"><code class="docutils literal notranslate"><span class="pre">BedrockStreamingAction.stream_run()</span></code></a></li>
 <li><a class="reference internal" href="#burr.integrations.bedrock.BedrockStreamingAction.update"><code class="docutils literal notranslate"><span class="pre">BedrockStreamingAction.update()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

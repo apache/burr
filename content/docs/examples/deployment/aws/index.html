@@ -22,12 +22,12 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../../genindex/"><link rel="search" title="Search" href="../../../search/"><link rel="next" title="Provisioning Infrastructure/Deploying" href="../infrastructure/"><link rel="prev" title="✈ Deployment" href="../">
-        <link rel="canonical" href="https://burr.apache.org/docs/examples/deployment/web-server/">
+<link rel="index" title="Index" href="../../../genindex/"><link rel="search" title="Search" href="../../../search/"><link rel="next" title="🚧 Guardrails / Tests" href="../../guardrails/"><link rel="prev" title="Monitoring in Production" href="../monitoring/">
+        <link rel="canonical" href="https://burr.apache.org/docs/examples/deployment/aws/">
         <link rel="prefetch" href="../../../_static/burr_logo.svg" as="image">
 
     <link rel="shortcut icon" href="../../../_static/favicon.ico"><!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Burr in a web server - Apache Burr</title>
+        <title>AWS Deployment Example - Apache Burr</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
@@ -278,10 +278,10 @@ s=d.getElementsByTagName('script')[0];
 </ul>
 </li>
 <li class="toctree-l2 current has-children"><a class="reference internal" href="../">✈ Deployment</a><input aria-label="Toggle navigation of ✈ Deployment" checked="" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">Burr in a web server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../web-server/">Burr in a web server</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../infrastructure/">Provisioning Infrastructure/Deploying</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../monitoring/">Monitoring in Production</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../aws/">AWS Deployment Example</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">AWS Deployment Example</a></li>
 </ul>
 </li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../guardrails/">🚧 Guardrails / Tests</a><input aria-label="Toggle navigation of 🚧 Guardrails / Tests" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -404,27 +404,78 @@ s=d.getElementsByTagName('script')[0];
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="burr-in-a-web-server">
-<h1>Burr in a web server<a class="headerlink" href="#burr-in-a-web-server" title="Link to this heading">¶</a></h1>
-<p>We like <a class="reference external" href="https://fastapi.tiangolo.com/">fastAPI</a>, but Burr can work with any python-friendly server framework
-(<a class="reference external" href="https://www.djangoproject.com">django</a>, <a class="reference external" href="https://flask.palletsprojects.com/">flask</a>, etc…).</p>
-<p>To run Burr in a FastAPI server, see the following examples:</p>
+          <section id="aws-deployment-example">
+<span id="id1"></span><h1>AWS Deployment Example<a class="headerlink" href="#aws-deployment-example" title="Link to this heading">¶</a></h1>
+<p>This example covers deploying Burr tracking infrastructure on AWS with S3, and
+optionally SQS for event-driven updates.</p>
+<p>The Terraform module lives in:</p>
 <ul class="simple">
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/web-server">Human in the loop FastAPI server</a> (<a class="reference external" href="https://towardsdatascience.com/building-an-email-assistant-application-with-burr-324bc34c547d">TDS blog post</a> )</p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/openai-compatible-agent">OpenAI-compatible agent with FastAPI</a></p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/streaming-fastapi">Streaming server using SSE + FastAPI</a>  (<a class="reference external" href="https://towardsdatascience.com/how-to-build-a-streaming-agent-with-burr-fastapi-and-react-e2459ef527a8">TDS blog post</a> )</p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/typed-state">Use typed state with Pydantic + FastAPI</a></p></li>
-<li><p><a class="reference external" href="https://github.com/mdrideout/burr-fastapi-docker-compose">Burr + FastAPI + docker</a> by <a class="reference external" href="https://github.com/mdrideout">Matthew Rideout</a>. This contains a sample web server API + UI + tracking server all bundled in one!</p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/email-assistant#running-the-ui-with-email-server-backend-in-a-docker-container">Docker compose + nginx proxy</a> by <a class="reference external" href="https://github.com/97k">Aditha Kaushik</a> for the email assistant example, demonstrates running the docker image with the tracking server.</p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/deployment/aws/bentoml">BentoML + Burr</a> for deploying Burr with BentoML as a web-service.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/deployment/aws/terraform</span></code></p></li>
 </ul>
-<section id="connecting-to-a-database">
-<h2>Connecting to a database<a class="headerlink" href="#connecting-to-a-database" title="Link to this heading">¶</a></h2>
-<p>To connect Burr to a database, you can use one of the provided persisters, or build your own:</p>
+<section id="architecture">
+<h2>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">¶</a></h2>
+<p>S3-only (polling mode):</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="../../../concepts/state-persistence/#id1"><span class="std std-ref">Documentation on persistence</span></a></p></li>
-<li><p><a class="reference internal" href="../../../reference/persister/#persistersref"><span class="std std-ref">Set of available persisters</span></a></p></li>
-<li><p><a class="reference external" href="https://github.com/apache/burr/blob/main/examples/simple-chatbot-intro/notebook.ipynb">Simple chatbot intro with persistence to SQLLite</a></p></li>
+<li><p>Burr applications write tracking data to S3.</p></li>
+<li><p>Tracking server polls/indexes S3 and serves the UI.</p></li>
+</ul>
+<p>S3+SQS (event-driven mode):</p>
+<ul class="simple">
+<li><p>S3 object notifications are delivered to SQS.</p></li>
+<li><p>Tracking server consumes SQS and ingests updates with lower latency.</p></li>
+</ul>
+</section>
+<section id="quick-start">
+<h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>examples/deployment/aws/terraform
+terraform<span class="w"> </span>init
+terraform<span class="w"> </span>apply<span class="w"> </span>-var-file<span class="o">=</span>dev.tfvars<span class="w">   </span><span class="c1"># S3 polling mode</span>
+<span class="c1"># or</span>
+terraform<span class="w"> </span>apply<span class="w"> </span>-var-file<span class="o">=</span>prod.tfvars<span class="w">  </span><span class="c1"># S3 + SQS event-driven mode</span>
+</pre></div>
+</div>
+<p>After apply, inspect outputs:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>terraform<span class="w"> </span>output<span class="w"> </span>burr_environment_variables
+</pre></div>
+</div>
+<p>Set these environment variables in the runtime where you launch <code class="docutils literal notranslate"><span class="pre">burr</span></code>.</p>
+</section>
+<section id="terraform-variables-and-modes">
+<h2>Terraform Variables and Modes<a class="headerlink" href="#terraform-variables-and-modes" title="Link to this heading">¶</a></h2>
+<p>Key variables:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">aws_region</span></code> (default <code class="docutils literal notranslate"><span class="pre">us-east-1</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">environment</span></code> (for example <code class="docutils literal notranslate"><span class="pre">dev</span></code> / <code class="docutils literal notranslate"><span class="pre">prod</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">s3_bucket_name</span></code> (optional custom name)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enable_sqs</span></code> (<code class="docutils literal notranslate"><span class="pre">true</span></code> for event-driven mode)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sqs_queue_name</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">log_retention_days</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">snapshot_retention_days</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dlq_alarm_notification_emails</span></code></p></li>
+</ul>
+<p>Mode mapping:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">dev.tfvars</span></code>: S3-only (polling)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prod.tfvars</span></code>: S3 + SQS (event-driven)</p></li>
+</ul>
+</section>
+<section id="terraform-outputs">
+<h2>Terraform Outputs<a class="headerlink" href="#terraform-outputs" title="Link to this heading">¶</a></h2>
+<p>Useful outputs include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">s3_bucket_name</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sqs_queue_url</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sqs_dlq_url</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dlq_alarm_arn</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dlq_alarm_sns_topic_arn</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">burr_environment_variables</span></code></p></li>
+</ul>
+</section>
+<section id="related-guides">
+<h2>Related Guides<a class="headerlink" href="#related-guides" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../../../concepts/s3-tracking-aws/#s3-tracking-aws"><span class="std std-ref">S3 tracking concepts</span></a></p></li>
+<li><p><a class="reference internal" href="../../../reference/integrations/bedrock/#bedrock-integration"><span class="std std-ref">Amazon Bedrock integration</span></a></p></li>
 </ul>
 </section>
 </section>
@@ -434,23 +485,23 @@ s=d.getElementsByTagName('script')[0];
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../infrastructure/">
+          <a class="next-page" href="../../guardrails/">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Provisioning Infrastructure/Deploying</div>
+                <div class="title">🚧 Guardrails / Tests</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../">
+          <a class="prev-page" href="../monitoring/">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">✈ Deployment</div>
+                <div class="title">Monitoring in Production</div>
                 
               </div>
             </a>
@@ -497,8 +548,12 @@ s=d.getElementsByTagName('script')[0];
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Burr in a web server</a><ul>
-<li><a class="reference internal" href="#connecting-to-a-database">Connecting to a database</a></li>
+<li><a class="reference internal" href="#">AWS Deployment Example</a><ul>
+<li><a class="reference internal" href="#architecture">Architecture</a></li>
+<li><a class="reference internal" href="#quick-start">Quick Start</a></li>
+<li><a class="reference internal" href="#terraform-variables-and-modes">Terraform Variables and Modes</a></li>
+<li><a class="reference internal" href="#terraform-outputs">Terraform Outputs</a></li>
+<li><a class="reference internal" href="#related-guides">Related Guides</a></li>
 </ul>
 </li>
 </ul>

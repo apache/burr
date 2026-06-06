@@ -22,12 +22,12 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Architecture" href="../architecture/"><link rel="prev" title="Setup" href="../setup/">
-        <link rel="canonical" href="https://burr.apache.org/docs/contributing/iterating/">
+<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="State Persistence" href="../state-persistence/"><link rel="prev" title="Tracking Burr" href="../tracking/">
+        <link rel="canonical" href="https://burr.apache.org/docs/concepts/s3-tracking-aws/">
         <link rel="prefetch" href="../../_static/burr_logo.svg" as="image">
 
     <link rel="shortcut icon" href="../../_static/favicon.ico"><!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Developing - Apache Burr</title>
+        <title>S3 Tracking on AWS (Concepts) - Apache Burr</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
@@ -295,25 +295,25 @@ s=d.getElementsByTagName('script')[0];
 </li>
 </ul>
 </li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../concepts/">Concepts</a><input aria-label="Toggle navigation of Concepts" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/overview/">Cheat Sheet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/sdlc/">SDLC with LLMs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/state-persistence/">State Persistence</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/serde/">Serialization / Deserialization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/streaming-actions/">Streaming Actions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/state-typing/">Typing State</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/hooks/">Hooks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/additional-visibility/">Additional Visibility</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/parallelism/">Parallelism</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/recursion/">Recursive Applications</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/sync-vs-async/">Sync vs Async Applications</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../concepts/planned-capabilities/">Planned Capabilities</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../">Concepts</a><input aria-label="Toggle navigation of Concepts" checked="" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../overview/">Cheat Sheet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sdlc/">SDLC with LLMs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">S3 Tracking on AWS (Concepts)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-persistence/">State Persistence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../serde/">Serialization / Deserialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../streaming-actions/">Streaming Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-typing/">Typing State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hooks/">Hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../additional-visibility/">Additional Visibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../parallelism/">Parallelism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../recursion/">Recursive Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sync-vs-async/">Sync vs Async Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../planned-capabilities/">Planned Capabilities</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../reference/">API reference</a><input aria-label="Toggle navigation of API reference" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -343,11 +343,11 @@ s=d.getElementsByTagName('script')[0];
 </li>
 </ul>
 </li>
-<li class="toctree-l1 current has-children"><a class="reference internal" href="../">Contributing</a><input aria-label="Toggle navigation of Contributing" checked="" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../setup/">Setup</a></li>
-<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Developing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../architecture/">Architecture</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../contributing/">Contributing</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../contributing/">Contributing</a><input aria-label="Toggle navigation of Contributing" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/setup/">Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/iterating/">Developing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/architecture/">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/contributing/">Contributing</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../ecosystem/">Ecosystem</a></li>
@@ -404,60 +404,108 @@ s=d.getElementsByTagName('script')[0];
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="developing">
-<h1>Developing<a class="headerlink" href="#developing" title="Link to this heading">¶</a></h1>
-<section id="python-module">
-<h2>Python Module<a class="headerlink" href="#python-module" title="Link to this heading">¶</a></h2>
-<p>The python module is located in the <code class="docutils literal notranslate"><span class="pre">burr/</span></code> directory. Tests are located in the
-<code class="docutils literal notranslate"><span class="pre">tests/</span></code> directory. To run the tests, use the following command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/
+          <section id="s3-tracking-on-aws-concepts">
+<span id="s3-tracking-aws"></span><h1>S3 Tracking on AWS (Concepts)<a class="headerlink" href="#s3-tracking-on-aws-concepts" title="Link to this heading">¶</a></h1>
+<p>This guide explains how Burr tracking works with S3-backed storage, and how to
+choose between local, hybrid, and production deployment modes.</p>
+<p>Use the S3 client in your app:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;burr[tracking-client-s3]&quot;</span>
 </pre></div>
 </div>
+<p>and run the S3-backed tracking server/UI:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;burr[tracking-server-s3,cli]&quot;</span>
+</pre></div>
+</div>
+<section id="deployment-models">
+<h2>Deployment Models<a class="headerlink" href="#deployment-models" title="Link to this heading">¶</a></h2>
+<section id="local">
+<h3>Local<a class="headerlink" href="#local" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">LocalTrackingClient</span></code> and local filesystem storage (default <code class="docutils literal notranslate"><span class="pre">~/.burr</span></code>).
+This is the simplest setup for development and debugging.</p>
 </section>
-<section id="tracking-server">
-<h2>Tracking server<a class="headerlink" href="#tracking-server" title="Link to this heading">¶</a></h2>
-<p>The tracking server is located inside the python package. To run the server, you can use the utility cli:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BURR_SERVE_STATIC</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span>burr-admin-server<span class="w"> </span>--no-open<span class="w"> </span>--dev-mode
-</pre></div>
-</div>
-<p>This will start the server on port 7241. Note that this is just a python wrapper – this also captures stdout.
-We will be fixing this, but if you want to run it directly (which is best for debugging), you’ll want to
-run it with uvicorn:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">BURR_SERVE_STATIC</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span>uvicorn<span class="w"> </span>burr.tracking.server.run:app<span class="w"> </span>--port<span class="w"> </span><span class="m">7241</span><span class="w"> </span>--reload
-</pre></div>
-</div>
-<p>We disable serving static files as we want to be able to develop simultaneously with the UI and
-npm’s reloading capabilities do not work with the static python server.</p>
+<section id="hybrid">
+<h3>Hybrid<a class="headerlink" href="#hybrid" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">S3TrackingClient</span></code> from applications while running the tracking server in
+one environment (for example a shared development server). Applications can run
+from local machines, jobs, or services as long as they can write to the bucket.</p>
 </section>
-<section id="tracking-ui">
-<h2>Tracking UI<a class="headerlink" href="#tracking-ui" title="Link to this heading">¶</a></h2>
-<p>The tracking UI lives within <code class="docutils literal notranslate"><span class="pre">telemetry/ui</span></code> To run the tracking UI, you will need to have npm installed.
-Then, you can run the following commands:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span><span class="nb">cd</span><span class="w"> </span>telemetry/ui
-$<span class="w"> </span>npm<span class="w"> </span>install
-$<span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>start
-</pre></div>
-</div>
-<p>This will start the UI on port 3000. You can then navigate to <code class="docutils literal notranslate"><span class="pre">http://localhost:3000</span></code> to see the UI.
-It currently assumes that the tracking server is running on port 7241. The proxy is set up in the
-<code class="docutils literal notranslate"><span class="pre">package.json</span></code> file.</p>
-<p>Note that if you want to just develop off the server you’ll first have to build the UI and symlink the
-<code class="docutils literal notranslate"><span class="pre">tracking/server/build</span></code> directory to the <code class="docutils literal notranslate"><span class="pre">telemetry/ui/build</span></code> directory. We have this structure to
-enable easy inclusion of package data in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>
-<p>You can do this with the following command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>burr-admin-build-ui
-</pre></div>
-</div>
+<section id="production">
+<h3>Production<a class="headerlink" href="#production" title="Link to this heading">¶</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">S3TrackingClient</span></code> for all application writes and a dedicated S3-backed
+tracking server for indexing and visualization. For near-real-time updates, pair
+S3 object events with SQS event-driven mode.</p>
 </section>
-<section id="documentation">
-<h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">¶</a></h2>
-<p>The documentation is located in the <code class="docutils literal notranslate"><span class="pre">docs/</span></code> directory. To build and serve the documentation,
-you can use the following sphinx command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>sphinx-autobuild<span class="w"> </span>-b<span class="w"> </span>dirhtml<span class="w"> </span>-W<span class="w"> </span>-E<span class="w"> </span>-T<span class="w">  </span>--watch<span class="w"> </span>docs/<span class="w"> </span>-a<span class="w"> </span>docs<span class="w"> </span>/tmp/mydocs
+</section>
+<section id="sqs-event-driven">
+<h2>SQS Event-Driven<a class="headerlink" href="#sqs-event-driven" title="Link to this heading">¶</a></h2>
+<p>S3 tracking server supports two modes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">POLLING</span></code>: periodic S3 scans (simpler infra)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EVENT_DRIVEN</span></code>: SQS-backed event consumption for lower latency</p></li>
+</ul>
+<p>To use event-driven mode, configure these environment variables on the tracking server:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_TRACKING_MODE=EVENT_DRIVEN</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_SQS_QUEUE_URL=&lt;queue-url&gt;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_SQS_REGION=&lt;aws-region&gt;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_SQS_WAIT_TIME_SECONDS=20</span></code> (default long-poll value)</p></li>
+</ul>
+</section>
+<section id="stream-buffering">
+<h2>Stream Buffering<a class="headerlink" href="#stream-buffering" title="Link to this heading">¶</a></h2>
+<p>S3 reads are buffered to improve reliability and large-object handling in the
+tracking server. Tune buffering memory with:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_S3_BUFFER_SIZE_MB</span></code> (default: <code class="docutils literal notranslate"><span class="pre">10</span></code>)</p></li>
+</ul>
+<p>The S3 tracking client also batches writes before flushes (default flush interval
+is 5 seconds), reducing object churn for high event volume.</p>
+</section>
+<section id="configuration-reference">
+<h2>Configuration Reference<a class="headerlink" href="#configuration-reference" title="Link to this heading">¶</a></h2>
+<p>Common S3 server environment variables:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_S3_BUCKET</span></code> (required)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_UPDATE_INTERVAL_MILLISECONDS</span></code> (default <code class="docutils literal notranslate"><span class="pre">120000</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_AWS_MAX_CONCURRENCY</span></code> (default <code class="docutils literal notranslate"><span class="pre">100</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_SNAPSHOT_INTERVAL_MILLISECONDS</span></code> (default <code class="docutils literal notranslate"><span class="pre">3600000</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_LOAD_SNAPSHOT_ON_START</span></code> (default <code class="docutils literal notranslate"><span class="pre">True</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_PRIOR_SNAPSHOTS_TO_KEEP</span></code> (default <code class="docutils literal notranslate"><span class="pre">5</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_TRACKING_MODE</span></code> (<code class="docutils literal notranslate"><span class="pre">POLLING</span></code> or <code class="docutils literal notranslate"><span class="pre">EVENT_DRIVEN</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_SQS_QUEUE_URL</span></code> / <code class="docutils literal notranslate"><span class="pre">BURR_SQS_REGION</span></code> / <code class="docutils literal notranslate"><span class="pre">BURR_SQS_WAIT_TIME_SECONDS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BURR_S3_BUFFER_SIZE_MB</span></code></p></li>
+</ul>
+</section>
+<section id="terraform-setup">
+<h2>Terraform Setup<a class="headerlink" href="#terraform-setup" title="Link to this heading">¶</a></h2>
+<p>Use the included AWS Terraform example to provision S3-only or S3+SQS tracking
+infrastructure:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/deployment/aws/terraform</span></code></p></li>
+<li><p><a class="reference internal" href="../../examples/deployment/aws/#aws-deployment-example"><span class="std std-ref">AWS deployment example</span></a></p></li>
+</ul>
+</section>
+<section id="migration-guide">
+<h2>Migration Guide<a class="headerlink" href="#migration-guide" title="Link to this heading">¶</a></h2>
+<p>From local tracking to S3 tracking:</p>
+<ol class="arabic simple">
+<li><p>Keep your existing Burr graph logic unchanged.</p></li>
+<li><p>Replace <code class="docutils literal notranslate"><span class="pre">LocalTrackingClient</span></code> with <code class="docutils literal notranslate"><span class="pre">S3TrackingClient</span></code> in
+<code class="docutils literal notranslate"><span class="pre">ApplicationBuilder.with_tracker(...)</span></code>.</p></li>
+<li><p>Provision bucket/IAM (and optionally SQS) in AWS.</p></li>
+<li><p>Configure tracking server environment variables.</p></li>
+<li><p>Validate with one test project before enabling for all workloads.</p></li>
+</ol>
+<p>Example client wiring:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.tracking.s3client</span><span class="w"> </span><span class="kn">import</span> <span class="n">S3TrackingClient</span>
+
+<span class="n">tracker</span> <span class="o">=</span> <span class="n">S3TrackingClient</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;my_project&quot;</span><span class="p">,</span>
+    <span class="n">bucket</span><span class="o">=</span><span class="s2">&quot;my-burr-tracking-bucket&quot;</span><span class="p">,</span>
+    <span class="n">region</span><span class="o">=</span><span class="s2">&quot;us-east-1&quot;</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-<p>This will start the server on port 8000. You can then navigate to <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> to see the documentation.
-Heed any warnings and fix them!</p>
 </section>
 </section>
 
@@ -466,23 +514,23 @@ Heed any warnings and fix them!</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../architecture/">
+          <a class="next-page" href="../state-persistence/">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Architecture</div>
+                <div class="title">State Persistence</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../setup/">
+          <a class="prev-page" href="../tracking/">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Setup</div>
+                <div class="title">Tracking Burr</div>
                 
               </div>
             </a>
@@ -529,11 +577,18 @@ Heed any warnings and fix them!</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Developing</a><ul>
-<li><a class="reference internal" href="#python-module">Python Module</a></li>
-<li><a class="reference internal" href="#tracking-server">Tracking server</a></li>
-<li><a class="reference internal" href="#tracking-ui">Tracking UI</a></li>
-<li><a class="reference internal" href="#documentation">Documentation</a></li>
+<li><a class="reference internal" href="#">S3 Tracking on AWS (Concepts)</a><ul>
+<li><a class="reference internal" href="#deployment-models">Deployment Models</a><ul>
+<li><a class="reference internal" href="#local">Local</a></li>
+<li><a class="reference internal" href="#hybrid">Hybrid</a></li>
+<li><a class="reference internal" href="#production">Production</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#sqs-event-driven">SQS Event-Driven</a></li>
+<li><a class="reference internal" href="#stream-buffering">Stream Buffering</a></li>
+<li><a class="reference internal" href="#configuration-reference">Configuration Reference</a></li>
+<li><a class="reference internal" href="#terraform-setup">Terraform Setup</a></li>
+<li><a class="reference internal" href="#migration-guide">Migration Guide</a></li>
 </ul>
 </li>
 </ul>
