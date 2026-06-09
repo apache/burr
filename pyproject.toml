@@ -136,6 +136,10 @@ bedrock = [
   "boto3"
 ]
 
+litellm = [
+  "litellm"
+]
+
 tracking-server-s3 = [
   "aerich",
   "aiobotocore",
