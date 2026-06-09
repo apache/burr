@@ -57,7 +57,7 @@ burr
 ```
 
 This will open up Burr's telemetry UI. It comes loaded with some default data so you can click around.
-It also has a demo chat application to help demonstrate what the UI captures enabling you too see things changing in
+It also has a demo chat application to help demonstrate what the UI captures enabling you to see things changing in
 real-time. Hit the "Demos" side bar on the left and select `chatbot`. To chat it requires the `OPENAI_API_KEY`
 environment variable to be set, but you can still see how it works if you don't have an API key set.
 
@@ -94,7 +94,7 @@ def ai_response(state: State) -> State:
     # query the LLM however you want (or don't use an LLM, up to you...)
     response = _query_llm(state["chat_history"]) # Burr doesn't care how you use LLMs!
     chat_item = {"role" : "system", "content" : response}
-    return state.update(response=content).append(chat_history=chat_item)
+    return state.update(response=response).append(chat_history=chat_item)
 
 app = (
     ApplicationBuilder()
@@ -113,7 +113,7 @@ print("answer:", app.state["response"])
 Apache Burr includes:
 
 1. A (dependency-free) low-abstraction python library that enables you to build and manage state machines with simple python functions
-2. A UI you can use view execution telemetry for introspection and debugging
+2. A UI you can use to view execution telemetry for introspection and debugging
 3. A set of integrations to make it easier to persist state, connect to telemetry, and integrate with other systems
 
 ![Burr at work](https://github.com/apache/burr/blob/main/chatbot.gif)
