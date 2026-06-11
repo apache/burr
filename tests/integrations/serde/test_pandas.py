@@ -18,6 +18,7 @@
 import os
 
 import pandas as pd
+import pytest
 
 from burr.core import serde, state
 
@@ -40,4 +41,30 @@ def test_serde_of_pandas_dataframe(tmp_path):
 
     ng = state.State.deserialize(serialized, pandas_kwargs={"path": tmp_path})
     assert isinstance(ng["df"], pd.DataFrame)
+    pd.testing.assert_frame_equal(ng["df"], df)
+
+
+def test_serialize_pandas_df_without_pandas_kwargs_raises_informative_error():
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    og = state.State({"df": df})
+    with pytest.raises(ValueError) as exc_info:
+        og.serialize()
+    assert "Failed to serialize state field 'df'" in str(exc_info.value)
+    assert "pandas_kwargs" in str(exc_info.value)
+    assert "path" in str(exc_info.value)
+
+
+def test_serialize_pandas_df_without_path_raises_informative_error():
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    og = state.State({"df": df})
+    with pytest.raises(ValueError) as exc_info:
+        og.serialize(pandas_kwargs={"compression": "snappy"})
+    assert "path" in str(exc_info.value)
+
+
+def test_deserialize_pandas_df_without_pandas_kwargs(tmp_path):
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    og = state.State({"df": df})
+    serialized = og.serialize(pandas_kwargs={"path": tmp_path})
+    ng = state.State.deserialize(serialized)
     pd.testing.assert_frame_equal(ng["df"], df)

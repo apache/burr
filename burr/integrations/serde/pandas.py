@@ -18,6 +18,7 @@
 # try to import to serialize Pandas Objects
 import hashlib
 import os
+from typing import Optional
 
 import pandas as pd
 
@@ -25,7 +26,9 @@ from burr.core import serde
 
 
 @serde.serialize.register(pd.DataFrame)
-def serialize_pandas_df(value: pd.DataFrame, pandas_kwargs: dict, **kwargs) -> dict:
+def serialize_pandas_df(
+    value: pd.DataFrame, pandas_kwargs: Optional[dict] = None, **kwargs
+) -> dict:
     """Custom serde for pandas dataframes.
 
     Saves the dataframe to a parquet file and returns the path to the file.
@@ -37,6 +40,15 @@ def serialize_pandas_df(value: pd.DataFrame, pandas_kwargs: dict, **kwargs) -> d
     :param kwargs:
     :return:
     """
+    if not isinstance(pandas_kwargs, dict) or "path" not in pandas_kwargs:
+        raise ValueError(
+            "Serializing a pandas DataFrame requires a `path` entry in `pandas_kwargs` -- "
+            "this is the base path where the dataframe is saved as a parquet file. "
+            "Pass it through whatever triggers serialization, e.g. "
+            '`LocalTrackingClient(..., serde_kwargs={"pandas_kwargs": {"path": "/some/dir"}})` '
+            'or `state.serialize(pandas_kwargs={"path": "/some/dir"})`. '
+            f"Got pandas_kwargs={pandas_kwargs!r}."
+        )
     hash_object = hashlib.sha256()
     hash_value = str(value.columns) + str(value.shape) + str(value.dtypes)
     hash_object.update(hash_value.encode())
@@ -53,15 +65,17 @@ def serialize_pandas_df(value: pd.DataFrame, pandas_kwargs: dict, **kwargs) -> d
 
 
 @serde.deserializer.register("pandas.DataFrame")
-def deserialize_pandas_df(value: dict, pandas_kwargs: dict, **kwargs) -> pd.DataFrame:
+def deserialize_pandas_df(
+    value: dict, pandas_kwargs: Optional[dict] = None, **kwargs
+) -> pd.DataFrame:
     """Custom deserializer for pandas dataframes.
 
     :param value: the dictionary to pull the path from to load the parquet file.
-    :param pandas_kwargs: other args to pass to the pandas read_parquet function.
+    :param pandas_kwargs: other args to pass to the pandas read_parquet function. Optional.
     :param kwargs:
     :return: pandas dataframe
     """
-    kwargs = pandas_kwargs.copy()
+    kwargs = pandas_kwargs.copy() if pandas_kwargs is not None else {}
     if "path" in kwargs:
         # remove this to not clash; we already have the full path.
         kwargs.pop("path")
