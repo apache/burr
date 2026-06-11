@@ -110,6 +110,31 @@ def _render_graphviz(
         pathlib.Path(f"{path_without_suffix}.{fmt}").write_bytes(graphviz_obj.pipe(format=fmt))
 
 
+def _get_state_label(action: Action) -> str:
+    """Builds a graphviz node label displaying the action's name with its
+    reads and writes each on their own line, e.g.::
+
+        action_name
+        reads:
+          read_1
+        writes:
+          write_1
+
+    Uses graphviz's ``\\l`` escape so lines are left-justified, keeping the
+    indentation visible.
+    """
+    if not action.reads and not action.writes:
+        return action.name
+    lines = [action.name]
+    if action.reads:
+        lines.append("reads:")
+        lines.extend(f"  {read}" for read in action.reads)
+    if action.writes:
+        lines.append("writes:")
+        lines.extend(f"  {write}" for write in action.writes)
+    return "\\l".join(lines) + "\\l"
+
+
 @dataclasses.dataclass
 class Graph:
     """Graph class allows you to specify actions and transitions between them.
@@ -229,11 +254,7 @@ class Graph:
                 digraph_attr[g_key] = g_value
         digraph = graphviz.Digraph(**digraph_attr)
         for action in self.actions:
-            label = (
-                action.name
-                if not include_state
-                else f"{action.name}({', '.join(action.reads)}): {', '.join(action.writes)}"
-            )
+            label = action.name if not include_state else _get_state_label(action)
             digraph.node(action.name, label=label, shape="box", style="rounded,filled")
             required_inputs, optional_inputs = action.optional_and_required_inputs
             for input_ in required_inputs | optional_inputs:
