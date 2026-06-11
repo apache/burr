@@ -26,11 +26,6 @@ BaseType = TypeVar("BaseType")
 if TYPE_CHECKING:
     from burr.core import Action, Graph, State
 
-try:
-    from typing import Self
-except ImportError:
-    Self = "TypingSystem"
-
 
 class TypingSystem(abc.ABC, Generic[BaseType]):
     @abc.abstractmethod
@@ -115,15 +110,15 @@ class ActionSchema(
     """
 
     @abc.abstractmethod
-    def state_input_type() -> Type[StateInputType]:
+    def state_input_type(self) -> Type[StateInputType]:
         pass
 
     @abc.abstractmethod
-    def state_output_type() -> Type[StateOutputType]:
+    def state_output_type(self) -> Type[StateOutputType]:
         pass
 
     @abc.abstractmethod
-    def intermediate_result_type() -> Type[IntermediateResultType]:
+    def intermediate_result_type(self) -> Type[IntermediateResultType]:
         pass
 
 
@@ -144,4 +139,7 @@ class DictBasedTypingSystem(TypingSystem[dict]):
         return state.get_all()
 
     def construct_state(self, data: dict) -> State[dict]:
+        # imported here to avoid a circular import -- state.py imports this module
+        from burr.core.state import State
+
         return State(data, typing_system=self)
