@@ -35,6 +35,7 @@ Overview of the concepts -- read these to get a mental model for how Burr works.
     state-machine
     transitions
     tracking
+    ui
     s3-tracking-aws
     state-persistence
     serde
