@@ -144,6 +144,22 @@ including tooling to build a UI in streamlit and watch your state machine execut
 See the documentation for [getting started](https://burr.apache.org/getting_started/simple-example), and follow the example.
 Then read through some of the concepts and write your own application!
 
+### Using Claude Code?
+
+If you use [Claude Code](https://claude.com/claude-code), install the [Burr Claude skill](.claude/skills/burr/) to get expert assistance building Burr applications. The skill teaches Claude about Burr's APIs, best practices, and common patterns.
+
+```bash
+# Easy install from GitHub
+claude skill install https://github.com/apache/burr/.claude/skills/burr
+
+# Or manual install
+cp -r /path/to/burr/.claude/skills/burr ~/.claude/skills/
+```
+
+Then just ask Claude naturally: *"Help me build a Burr application"* or use `/burr` for specific help.
+
+See [.claude/skills/burr/README.md](.claude/skills/burr/README.md) for installation details and the [skill documentation](https://burr.apache.org/getting_started/claude-skill) for full usage guide.
+
 ## 📃 Comparison against common frameworks
 
 While Apache Burr is attempting something (somewhat) unique, there are a variety of tools that occupy similar spaces:

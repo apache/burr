@@ -31,4 +31,5 @@ The following section of the docs will walk you through Burr and how to integrat
     why-burr
     install
     simple-example
+    claude-skill
     up-next

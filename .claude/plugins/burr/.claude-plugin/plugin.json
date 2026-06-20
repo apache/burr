@@ -1,0 +1,22 @@
+{
+  "name": "burr",
+  "version": "1.0.0",
+  "description": "Expert AI assistant for Apache Burr framework development - create state machines, define actions, manage transitions, and build stateful applications",
+  "author": {
+    "name": "Apache Burr Contributors",
+    "email": "dev@burr.apache.org"
+  },
+  "homepage": "https://burr.apache.org",
+  "repository": "https://github.com/apache/burr",
+  "license": "Apache-2.0",
+  "keywords": [
+    "burr",
+    "state-machine",
+    "llm",
+    "agent",
+    "workflow",
+    "stateful",
+    "python"
+  ],
+  "skills": "./skills/"
+}

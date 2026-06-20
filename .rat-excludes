@@ -22,6 +22,9 @@
 # Jupyter notebooks (JSON format, cannot practically add headers)
 **/*.ipynb
 
+# Plugin manifests (JSON format, cannot practically add headers)
+.*plugin\.json
+
 # Data files (CSV - not source code)
 **/*.csv
 
