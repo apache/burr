@@ -269,7 +269,15 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+# PartialType represents the type of intermediate results in a streaming action.
+# It can be:
+# - Type[pydantic.BaseModel]: A Pydantic model class
+# - Type[dict]: The dict type
+# - A union of BaseModel types (e.g., Model1 | Model2, or Union[Model1, Model2])
+# We use 'object' to accept union types since they are valid runtime values even if
+# the type system cannot precisely express them. Union types created with | (Python 3.10+)
+# or typing.Union are both supported.
+PartialType = Union[Type[pydantic.BaseModel], Type[dict], object]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -290,11 +298,11 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[PartialType],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel], Type[pydantic.BaseModel], PartialType
 ]:
     if stream_type is None:
         # TODO -- derive from the signature

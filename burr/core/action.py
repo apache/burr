@@ -1507,7 +1507,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict]],
+        stream_type: Union[Type["BaseModel"], Type[dict], object],
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
@@ -1515,7 +1515,7 @@ class streaming_action:
         :param reads: The fields this consumes from the state.
         :param writes: The fields this writes to the state.
         :param stream_type: The pydantic model or dictionary type that is used to represent the partial results.
-            Use a dict if you want this untyped.
+            Use a dict if you want this untyped. Can also be a union of models (e.g., Model1 | Model2).
         :param state_input_type: The pydantic model type that is used to represent the input state.
         :param state_output_type: The pydantic model type that is used to represent the output state.
         :param tags: Optional list of tags to associate with this action
