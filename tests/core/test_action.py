@@ -317,6 +317,271 @@ def test_condition_expr_complex():
     assert cond.run(State({"foo": "baz", "baz": "corge"})) == {Condition.KEY: False}
 
 
+# ---------------------------------------------------------------------------
+# Condition.safe_expr -- restricted-AST evaluator
+# ---------------------------------------------------------------------------
+
+
+# --- positive cases: every allowed grammar construct ------------------------
+
+
+def test_safe_expr_basic_equality():
+    cond = Condition.safe_expr("foo == 'bar'")
+    assert cond.name == "foo == 'bar'"
+    assert cond.reads == ["foo"]
+    assert cond.run(State({"foo": "bar"})) == {Condition.KEY: True}
+    assert cond.run(State({"foo": "baz"})) == {Condition.KEY: False}
+
+
+def test_safe_expr_all_comparisons():
+    cases = [
+        ("x < 5", {"x": 4}, True),
+        ("x <= 5", {"x": 5}, True),
+        ("x > 5", {"x": 6}, True),
+        ("x >= 5", {"x": 5}, True),
+        ("x != 5", {"x": 4}, True),
+        ("x in items", {"x": 2, "items": [1, 2, 3]}, True),
+        ("x not in items", {"x": 9, "items": [1, 2, 3]}, True),
+        ("x is None", {"x": None}, True),
+        ("x is not None", {"x": 1}, True),
+    ]
+    for expr_str, state, expected in cases:
+        cond = Condition.safe_expr(expr_str)
+        assert cond.run(State(state)) == {Condition.KEY: expected}, expr_str
+
+
+def test_safe_expr_chained_comparison():
+    cond = Condition.safe_expr("0 < x < 10")
+    assert cond.run(State({"x": 5})) == {Condition.KEY: True}
+    assert cond.run(State({"x": 11})) == {Condition.KEY: False}
+
+
+def test_safe_expr_boolean_ops_nested():
+    cond = Condition.safe_expr("(a > 0 and b < 10) or c == 'ok'")
+    assert sorted(cond.reads) == ["a", "b", "c"]
+    assert cond.run(State({"a": 1, "b": 5, "c": "no"})) == {Condition.KEY: True}
+    assert cond.run(State({"a": -1, "b": 5, "c": "ok"})) == {Condition.KEY: True}
+    assert cond.run(State({"a": -1, "b": 5, "c": "no"})) == {Condition.KEY: False}
+
+
+def test_safe_expr_arithmetic():
+    cond = Condition.safe_expr("(a + b) * 2 - c / 2 == 9.0")
+    assert cond.run(State({"a": 1, "b": 2, "c": 2})) == {Condition.KEY: False}
+    # (1+2)*2 - 4/2 = 6 - 2 = 4
+    cond2 = Condition.safe_expr("(a + b) * 2 - c // 2")
+    assert _eval_value(cond2, {"a": 1, "b": 2, "c": 5}) == 6 - 2
+
+
+def test_safe_expr_arithmetic_mod_pow():
+    assert _eval_value(Condition.safe_expr("x % 3"), {"x": 10}) == 1
+    assert _eval_value(Condition.safe_expr("x ** 3"), {"x": 2}) == 8
+
+
+def test_safe_expr_unary_ops():
+    assert _eval_value(Condition.safe_expr("-x"), {"x": 3}) == -3
+    assert _eval_value(Condition.safe_expr("+x"), {"x": 3}) == 3
+    assert Condition.safe_expr("not flag").run(State({"flag": False})) == {
+        Condition.KEY: True
+    }
+
+
+def test_safe_expr_negative_literal():
+    cond = Condition.safe_expr("x == -1")
+    assert cond.run(State({"x": -1})) == {Condition.KEY: True}
+
+
+def test_safe_expr_none_comparison():
+    cond = Condition.safe_expr("x is None")
+    assert cond.run(State({"x": None})) == {Condition.KEY: True}
+    assert cond.run(State({"x": 0})) == {Condition.KEY: False}
+
+
+def test_safe_expr_subscript_index_and_slice():
+    cond = Condition.safe_expr("items[0] == 'a'")
+    assert cond.run(State({"items": ["a", "b"]})) == {Condition.KEY: True}
+    cond2 = Condition.safe_expr("mapping['k'] == 1")
+    assert cond2.run(State({"mapping": {"k": 1}})) == {Condition.KEY: True}
+    assert _eval_value(Condition.safe_expr("items[1:3]"), {"items": [0, 1, 2, 3]}) == [1, 2]
+
+
+def test_safe_expr_attribute_access():
+    class Obj:
+        def __init__(self):
+            self.val = 42
+
+    cond = Condition.safe_expr("obj.val == 42")
+    assert cond.run(State({"obj": Obj()})) == {Condition.KEY: True}
+
+
+def test_safe_expr_literal_containers():
+    assert _eval_value(Condition.safe_expr("[1, 2, 3]"), {}) == [1, 2, 3]
+    assert _eval_value(Condition.safe_expr("(1, 2, 3)"), {}) == (1, 2, 3)
+    assert _eval_value(Condition.safe_expr("{1, 2, 3}"), {}) == {1, 2, 3}
+    assert _eval_value(Condition.safe_expr("{'a': 1, 'b': 2}"), {}) == {"a": 1, "b": 2}
+
+
+def test_safe_expr_all_allowed_builtins():
+    pairs = [
+        ("len(items)", {"items": [1, 2, 3]}, 3),
+        ("abs(x)", {"x": -4}, 4),
+        ("min(a, b)", {"a": 1, "b": 2}, 1),
+        ("max(a, b)", {"a": 1, "b": 2}, 2),
+        ("sum(items)", {"items": [1, 2, 3]}, 6),
+        ("all(items)", {"items": [True, True]}, True),
+        ("any(items)", {"items": [False, True]}, True),
+        ("str(x)", {"x": 5}, "5"),
+        ("int(x)", {"x": "5"}, 5),
+        ("float(x)", {"x": "1.5"}, 1.5),
+        ("bool(x)", {"x": 0}, False),
+    ]
+    for expr_str, state, expected in pairs:
+        assert _eval_value(Condition.safe_expr(expr_str), state) == expected, expr_str
+
+
+def test_safe_expr_reads_collected_correctly():
+    cond = Condition.safe_expr("foo == 'bar' and len(baz) == 3")
+    assert sorted(cond.reads) == ["baz", "foo"]
+
+
+def test_safe_expr_only_name_lookup_no_attributes():
+    """Edge case: an expression that uses *only* Name lookups still works."""
+    cond = Condition.safe_expr("a and b")
+    assert cond.run(State({"a": True, "b": True})) == {Condition.KEY: True}
+    assert cond.run(State({"a": True, "b": False})) == {Condition.KEY: False}
+
+
+def test_safe_expr_validate_missing_state_key():
+    cond = Condition.safe_expr("foo == 'bar'")
+    with pytest.raises(ValueError, match="foo"):
+        cond._validate(State({"baz": "bar"}))
+
+
+# --- determinism ------------------------------------------------------------
+
+
+def test_safe_expr_determinism_success():
+    state = State({"x": 5, "y": 3})
+    cond_a = Condition.safe_expr("x + y == 8")
+    cond_b = Condition.safe_expr("x + y == 8")
+    assert cond_a.run(state) == cond_b.run(state) == {Condition.KEY: True}
+    # Same condition, called twice, identical state -> identical result.
+    assert cond_a.run(state) == cond_a.run(state)
+
+
+def test_safe_expr_determinism_rejection():
+    # Same disallowed expression rejected the same way every time, at call time.
+    for _ in range(3):
+        with pytest.raises(ValueError):
+            Condition.safe_expr("lambda: 1")
+
+
+# --- negative cases: every rejected node category ---------------------------
+
+
+@pytest.mark.parametrize(
+    "expr_str",
+    [
+        # Attack patterns explicitly called out in the issue:
+        '__import__("os").system("touch /tmp/pwn")',
+        "(0).__class__.__bases__[0].__subclasses__()",
+        'open("/etc/passwd").read()',
+        "lambda: 1",
+        "[x for x in range(10)]",
+        # Other rejected categories:
+        "{x for x in range(10)}",  # set comp
+        "{x: x for x in range(10)}",  # dict comp
+        "(x for x in range(10))",  # generator exp
+        "1 if a else 2",  # IfExp
+        "(x := 5) > 0",  # walrus / NamedExpr
+        "foo()",  # Call to non-allowlisted name
+        "foo.bar()",  # Call via Attribute (indirect)
+        "obj.__class__",  # dunder attribute
+        "obj.__dict__",  # dunder attribute
+        "len(items, key=str)",  # keyword arg to builtin
+        "min(*items)",  # starred arg
+        "a & b",  # bitwise (not on allowlist)
+        "a | b",  # bitwise (not on allowlist)
+        "a << 1",  # bitshift
+        "f'hello {name}'",  # f-string / JoinedStr
+        "...",  # Ellipsis constant
+        "b'bytes'",  # bytes constant
+    ],
+)
+def test_safe_expr_rejects_at_call_time(expr_str):
+    """Every disallowed construct must raise at safe_expr() call time, not at run time."""
+    with pytest.raises((ValueError, SyntaxError)):
+        Condition.safe_expr(expr_str)
+
+
+def test_safe_expr_rejects_import_dunder_attack():
+    # `__import__("os").system(...)` -- the disallowed thing here is the dunder
+    # Name reference; we reject because `__import__` resolves nowhere (not a
+    # safe builtin, not in state), but specifically Call to non-allowlisted name.
+    with pytest.raises(ValueError, match="(?i)disallowed"):
+        Condition.safe_expr('__import__("os").system("touch /tmp/pwn")')
+
+
+def test_safe_expr_rejects_class_bases_sandbox_escape():
+    # The expression is rejected -- could be on either the dunder attribute
+    # access OR the call to a non-allowlisted name (the validator hits the
+    # outer Call first). Either rejection closes the escape; we just confirm
+    # the expression doesn't make it to a Condition.
+    with pytest.raises(ValueError, match="(?i)disallowed"):
+        Condition.safe_expr("(0).__class__.__bases__[0].__subclasses__()")
+    # And the bare dunder attribute (no call) is rejected with the dunder reason.
+    with pytest.raises(ValueError, match="(?i)dunder"):
+        Condition.safe_expr("(0).__class__")
+
+
+def test_safe_expr_rejects_open_call():
+    with pytest.raises(ValueError, match="(?i)disallowed"):
+        Condition.safe_expr('open("/etc/passwd").read()')
+
+
+def test_safe_expr_rejects_lambda():
+    with pytest.raises(ValueError):
+        Condition.safe_expr("lambda x: x")
+
+
+def test_safe_expr_rejects_list_comprehension():
+    with pytest.raises(ValueError):
+        Condition.safe_expr("[x for x in range(10)]")
+
+
+def test_safe_expr_rejects_syntax_error():
+    with pytest.raises(SyntaxError):
+        Condition.safe_expr("foo == ")
+
+
+def test_safe_expr_does_not_eval_during_validation():
+    """If validation accidentally executed code, this would raise at call time.
+
+    Build an expression that *would* error at run time but is syntactically
+    allowed. Confirm safe_expr() returns a Condition without raising; the
+    error only happens when .run() is called.
+    """
+    cond = Condition.safe_expr("1 / x")  # ZeroDivisionError at run time only
+    with pytest.raises(ZeroDivisionError):
+        cond.run(State({"x": 0}))
+
+
+def _eval_value(cond: Condition, state: dict):
+    """Helper: get the raw (pre-bool-coerce) interpreter result for a safe_expr.
+
+    ``Condition.safe_expr`` wraps the interpreter result in ``bool()`` because
+    a Condition is fundamentally a predicate. For tests of arithmetic /
+    container / builtin expressions we want the underlying value, so we
+    re-parse-and-interpret using the same internal machinery. This mirrors
+    what the Condition does at run time minus the ``bool()`` cast.
+    """
+    import ast as _ast
+
+    from burr.core.action import _SafeExprInterpreter  # type: ignore
+
+    tree = _ast.parse(cond.name, mode="eval")
+    return _SafeExprInterpreter(state).eval(tree)
+
+
 def test_condition__validate_success():
     cond = Condition.when(foo="bar")
     cond._validate(State({"foo": "bar"}))
