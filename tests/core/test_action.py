@@ -380,9 +380,7 @@ def test_safe_expr_arithmetic_mod_pow():
 def test_safe_expr_unary_ops():
     assert _eval_value(Condition.safe_expr("-x"), {"x": 3}) == -3
     assert _eval_value(Condition.safe_expr("+x"), {"x": 3}) == 3
-    assert Condition.safe_expr("not flag").run(State({"flag": False})) == {
-        Condition.KEY: True
-    }
+    assert Condition.safe_expr("not flag").run(State({"flag": False})) == {Condition.KEY: True}
 
 
 def test_safe_expr_negative_literal():
