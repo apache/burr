@@ -22,11 +22,7 @@ import pytest
 
 from burr.core import serde, state
 from burr.integrations.serde import pickle
-from burr.integrations.serde.pickle import (
-    SecurityWarning,
-    _is_allowed,
-    set_pickle_serde_allowlist,
-)
+from burr.integrations.serde.pickle import SecurityWarning, _is_allowed, set_pickle_serde_allowlist
 
 
 class User:
