@@ -26,7 +26,7 @@ Actions
 .. note::
 
     Actions are the core building block of Burr. They read from state and write to state.
-    They can be synchronous and asynchonous, and have both a ``sync`` and ``async`` API.
+    They can be synchronous and asynchronous, and have both a ``sync`` and ``async`` API.
     There are both function and class-based APIs.
 
 
@@ -96,7 +96,7 @@ above is equivalent to returning an empty dictionary instead of the results.
     from burr.core import action, State
 
     @action(reads=["var_from_state"], writes=["var_to_update"])
-    def custom_action(state: State) -> State
+    def custom_action(state: State) -> State:
         return results, state.update(var_to_update=var_from_state + 1)
 
     app = ApplicationBuilder().with_actions(

@@ -33,7 +33,8 @@ along with a fully built server.
 This will give you tools to visualize, track, and interact with the UI. You can explore the UI (including some sample projects)
 simply by running the command ``burr``. Up next we'll write our own application and follow it in the UI.
 
-If you're using poetry, you can't install the ``start`` target directly, due to [this issue](https://github.com/python-poetry/poetry/issues/3369).
+If you're using poetry, you can't install the ``start`` target directly, due to
+`this issue <https://github.com/python-poetry/poetry/issues/3369>`_.
 Instead, please install manually using the following command:
 
 .. code-block:: bash
