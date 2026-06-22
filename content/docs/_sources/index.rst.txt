@@ -25,6 +25,7 @@
    :caption: Apache Burr
 
    getting_started/index
+   ui/index
    examples/index
    concepts/index
    reference/index
