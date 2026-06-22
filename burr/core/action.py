@@ -410,14 +410,35 @@ class Condition(Function):
 
     @staticmethod
     def expr(expr: str) -> "Condition":
-        """Returns a condition that evaluates the given expression. Expression must use
-        only state variables and Python operators. Do not trust that anything else will work.
+        """Returns a condition that evaluates the given expression against state.
 
-        Do not accept expressions generated from user-inputted text, this has the potential to be unsafe.
+        This helper is intended for **developer-authored** expressions written in source
+        code alongside the rest of the application graph -- semantically equivalent to
+        passing a lambda. The string is handed to Python's built-in :func:`eval`, with
+        state keys bound as locals, so any valid Python expression is permitted.
 
         You can also refer to this as ``from burr.core import expr`` in the API.
 
-        :param expr: Expression to evaluate
+        .. warning::
+            ``Condition.expr`` runs the supplied string under a full Python ``eval``.
+            Passing user-supplied or otherwise attacker-controllable strings to this
+            function is equivalent to arbitrary code execution inside the application
+            process. For example, an attacker who controls the expression string can
+            execute ``__import__("os").system("...")`` or
+            ``__import__("subprocess").check_output([...])`` and reach anything the
+            host process can reach.
+
+            The ``globals=None`` argument to ``eval`` below is **not** a sandbox:
+            CPython auto-injects ``__builtins__`` when globals is empty or ``None``,
+            which is in fact relied upon here so that expressions like ``len(x)`` work.
+            No part of this function attempts to sandbox the evaluation.
+
+            If you need to accept untrusted expressions, do not use ``expr``. Track
+            ``apache/burr#817`` for the opt-in safe-AST evaluator intended for that
+            use case.
+
+        :param expr: Expression to evaluate. Must be a developer-authored Python
+            expression over state variables and standard operators/builtins.
         :return: A condition that evaluates the given expression
         """
         tree = ast.parse(expr, mode="eval")
@@ -440,7 +461,10 @@ class Condition(Function):
         # Compile the expression into a callable function
         def condition_func(state: State) -> bool:
             __globals = state.get_all()  # we can get all because externally we will subset
-            return eval(compile(tree, "<string>", "eval"), {}, __globals)
+            # NOTE: globals=None is *not* a sandbox -- CPython injects __builtins__
+            # automatically. See the docstring above. Builtins (e.g. ``len``) are
+            # intentionally available to developer-authored expressions.
+            return eval(compile(tree, "<string>", "eval"), None, __globals)
 
         return Condition(keys, condition_func, name=expr)
 
