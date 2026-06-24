@@ -18,11 +18,20 @@
 import json
 import logging
 from datetime import datetime, timezone
+from importlib.metadata import version as get_version
 from typing import Literal, Optional
 
 from pymongo import MongoClient
+from pymongo.driver_info import DriverInfo
 
 from burr.core import persistence, state
+
+try:
+    _VERSION = get_version("apache-burr")
+except Exception:
+    _VERSION = None
+
+_DRIVER_INFO = DriverInfo(name="Burr", version=_VERSION)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +78,7 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
         """Initializes the MongoDBBasePersister class."""
         if mongo_client_kwargs is None:
             mongo_client_kwargs = {}
+        mongo_client_kwargs.setdefault("driver", _DRIVER_INFO)
         client = MongoClient(uri, **mongo_client_kwargs)
         return cls(
             client=client,
@@ -92,6 +102,8 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
         :param serde_kwargs: serializer/deserializer keyword arguments to pass to the state object
         """
         self.client = client
+        if hasattr(client, "append_metadata"):
+            client.append_metadata(_DRIVER_INFO)
         self.db = self.client[db_name]
         self.collection = self.db[collection_name]
         self.serde_kwargs = serde_kwargs or {}
@@ -215,7 +227,9 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
     def __setstate__(self, state: dict):
         connection_params = state.pop("connection_params")
         # we assume MongoClient.
-        self.client = MongoClient(connection_params["uri"], connection_params["port"])
+        self.client = MongoClient(
+            connection_params["uri"], connection_params["port"], driver=_DRIVER_INFO
+        )
         self.db = self.client[connection_params["db_name"]]
         self.collection = self.db[connection_params["collection_name"]]
         self.__dict__.update(state)

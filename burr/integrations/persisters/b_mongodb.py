@@ -21,6 +21,9 @@ import logging
 
 from pymongo import MongoClient
 
+from burr.integrations.persisters.b_pymongo import (
+    _DRIVER_INFO,
+)
 from burr.integrations.persisters.b_pymongo import MongoDBBasePersister as PymongoPersister
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,7 @@ class MongoDBBasePersister(PymongoPersister):
 
         if mongo_client_kwargs is None:
             mongo_client_kwargs = {}
+        mongo_client_kwargs.setdefault("driver", _DRIVER_INFO)
         client = MongoClient(uri, **mongo_client_kwargs)
         return PymongoPersister(
             client=client,
@@ -76,6 +80,7 @@ class MongoDBPersister(PymongoPersister):
         """Initializes the MongoDBPersister class."""
         if mongo_client_kwargs is None:
             mongo_client_kwargs = {}
+        mongo_client_kwargs.setdefault("driver", _DRIVER_INFO)
         client = MongoClient(uri, **mongo_client_kwargs)
         super(MongoDBPersister, self).__init__(
             client=client,
