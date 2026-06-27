@@ -25,9 +25,10 @@ export const DISCORD_URL = "https://discord.gg/6Zy2DwP4f3";
 export const TWITTER_URL = "https://x.com/burr_framework";
 
 export const NAV_LINKS = [
-  { label: "Features", href: "#features" },
-  { label: "Integrations", href: "#integrations" },
-  { label: "Community", href: "#community" },
+  { label: "Features", href: "/#features" },
+  { label: "Integrations", href: "/#integrations" },
+  { label: "Community", href: "/#community" },
+  { label: "Download", href: "/downloads" },
   { label: "Docs", href: DOCS_URL, external: true },
 ];
 

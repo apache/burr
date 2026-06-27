@@ -64,3 +64,13 @@ def test_string_dispatch_with_key():
     dispatch = StringDispatch()
     dispatch.register("test_key")(lambda x: x)
     assert dispatch.call("test_key", "test_value") == "test_value"
+
+
+def test_string_dispatch_no_key_informative_message():
+    dispatch = StringDispatch()
+    dispatch.register("known_key")(lambda value: value)
+    with pytest.raises(ValueError) as exc_info:
+        dispatch.call("nonexistent_key")
+    assert "nonexistent_key" in str(exc_info.value)
+    assert "known_key" in str(exc_info.value)
+    assert "imported" in str(exc_info.value)

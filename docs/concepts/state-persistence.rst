@@ -271,7 +271,7 @@ tracked runs. This is useful for debugging, or building an application that enab
             tracker,
             resume_at_next_action=True,
             default_state={"chat_history" : []},
-            default_entrypoint="human_converse
+            default_entrypoint="human_converse"
         )
         .with_tracker(tracker)
         .with_identifiers(app_id=app_id)

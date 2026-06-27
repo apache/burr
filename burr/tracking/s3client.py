@@ -204,7 +204,7 @@ class S3TrackingClient(SyncTrackingClient):
         self.stream_state: Dict[StateKey, StreamState] = dict()
 
     def _get_time_partition(self):
-        time = datetime.datetime.utcnow().isoformat()
+        time = datetime.datetime.now(datetime.UTC).isoformat()
         return [time[:4], time[5:7], time[8:10], time[11:13], time[14:]]
 
     def get_prefix(self):

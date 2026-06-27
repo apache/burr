@@ -38,12 +38,24 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import NoReturn, Optional
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, NoReturn, Optional
 
 # --- Configuration ---
 PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+DEFAULT_DOWNLOADS_URL = f"https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/"
+DEFAULT_DEV_SVN_ROOT = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}"
+DEFAULT_RELEASE_SVN_ROOT = (
+    f"https://dist.apache.org/repos/dist/release/incubator/{PROJECT_SHORT_NAME}"
+)
+RC_LABEL_PATTERN = re.compile(
+    r"^(?P<version>\d+\.\d+\.\d+)(?:-incubating)?-RC(?P<rc_num>\d+)$", re.IGNORECASE
+)
 
 # Required examples for wheel (from pyproject.toml)
 REQUIRED_EXAMPLES = [
@@ -54,7 +66,6 @@ REQUIRED_EXAMPLES = [
     "deep-researcher",
     "hello-world-counter",
 ]
-
 
 # ============================================================================
 # Utility Functions
@@ -120,6 +131,265 @@ def _run_command(
         _fail(f"{error_message}{error_detail}")
 
 
+def _render_template(template_name: str, context: dict[str, Any]) -> str:
+    """Render a template with Jinja2."""
+    template_path = TEMPLATES_DIR / template_name
+
+    if not template_path.exists():
+        _fail(f"Template not found: {template_path}")
+
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
+    environment = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=False,
+        keep_trailing_newline=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        undefined=StrictUndefined,
+    )
+    return environment.get_template(template_name).render(**context)
+
+
+def _clipboard_commands() -> list[list[str]]:
+    """Return clipboard commands for macOS, Linux, and Windows."""
+    return [
+        ["pbcopy"],  # macOS
+        ["xclip", "-selection", "clipboard"],  # Linux with xclip
+        ["xsel", "--clipboard", "--input"],  # Linux with xsel
+        ["clip"],  # Windows
+    ]
+
+
+def _copy_to_clipboard(content: str) -> bool:
+    """Copy content to the system clipboard when a known clipboard tool exists."""
+    for command in _clipboard_commands():
+        if shutil.which(command[0]) is None:
+            continue
+        try:
+            subprocess.run(command, input=content, text=True, check=True)
+            return True
+        except subprocess.CalledProcessError:
+            continue
+    return False
+
+
+def _emit_email_output(content: str, copy_to_clipboard: bool = False) -> None:
+    """Emit rendered email to stdout and optionally copy it to the clipboard."""
+    print(content)
+    if copy_to_clipboard:
+        if _copy_to_clipboard(content):
+            print("\n Copied email content to clipboard", file=sys.stderr)
+        else:
+            print(
+                "\n Clipboard tool not found; email content was printed to stdout instead",
+                file=sys.stderr,
+            )
+
+
+def _parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse an X.Y.Z version string into a sortable tuple."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+    if not match:
+        _fail(f"Invalid version format: {version}")
+    return tuple(int(part) for part in match.groups())
+
+
+def _list_release_tags() -> list[tuple[tuple[int, int, int], str]]:
+    """List known release tags in the repository."""
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return []
+
+    tags: list[tuple[tuple[int, int, int], str]] = []
+    for line in result.stdout.splitlines():
+        match = re.fullmatch(r"(?:v|burr-)(\d+\.\d+\.\d+)", line.strip())
+        if match:
+            tags.append((_parse_semver(match.group(1)), line.strip()))
+    return sorted(tags)
+
+
+def _find_previous_release_tag(version: str) -> Optional[str]:
+    """Find the most recent release tag strictly older than the requested version."""
+    target = _parse_semver(version)
+    previous_tags = [tag for parsed, tag in _list_release_tags() if parsed < target]
+    if not previous_tags:
+        return None
+    return previous_tags[-1]
+
+
+def _find_release_tag(version: str) -> Optional[str]:
+    """Find the exact release tag for a version, if it exists."""
+    target = _parse_semver(version)
+    matching_tags = [tag for parsed, tag in _list_release_tags() if parsed == target]
+    if not matching_tags:
+        return None
+    return matching_tags[-1]
+
+
+def _build_changelog_summary(
+    version: str, previous_tag: Optional[str] = None, max_entries: int = 8
+) -> str:
+    """Summarize recent commits since the prior release tag."""
+    if previous_tag is None:
+        previous_tag = _find_previous_release_tag(version)
+    release_tag = _find_release_tag(version)
+
+    if not previous_tag:
+        return "- Changelog summary unavailable; please add a short summary before sending."
+
+    revision_range = f"{previous_tag}..{release_tag or 'HEAD'}"
+
+    try:
+        result = subprocess.run(
+            ["git", "log", revision_range, "--pretty=format:%s"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return f"- Changelog summary unavailable; review commits in {revision_range} manually."
+
+    subjects = []
+    for line in result.stdout.splitlines():
+        cleaned = line.strip()
+        if cleaned and cleaned not in subjects:
+            subjects.append(cleaned)
+
+    if not subjects:
+        return f"- No commits found in {revision_range}; verify the tag range before sending."
+
+    summary_lines = [f"- {subject}" for subject in subjects[:max_entries]]
+    remaining = len(subjects) - len(summary_lines)
+    if remaining > 0:
+        summary_lines.append(f"- ... plus {remaining} more commits in {revision_range}")
+    return "\n".join(summary_lines)
+
+
+def _build_vote_deadline(hours: int = 72) -> datetime:
+    """Return the vote deadline timestamp in UTC."""
+    return datetime.now(timezone.utc) + timedelta(hours=hours)
+
+
+def _format_vote_deadline(deadline: datetime) -> str:
+    """Format the vote deadline for email output."""
+    return deadline.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _build_vote_email_context(
+    version: str,
+    rc_num: str,
+    svn_url: Optional[str] = None,
+    pypi_url: Optional[str] = None,
+    keys_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+    deadline: Optional[datetime] = None,
+) -> dict[str, str]:
+    """Build rendering context for the vote email template."""
+    version_with_incubating = f"{version}-incubating"
+    svn_url = svn_url or _build_svn_dev_url(version, rc_num)
+    deadline = deadline or _build_vote_deadline()
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "project_display_name": PROJECT_SHORT_NAME.capitalize(),
+        "version": version,
+        "version_with_incubating": version_with_incubating,
+        "rc_num": rc_num,
+        "svn_url": svn_url,
+        "pypi_url": pypi_url or _build_pypi_rc_url(version, rc_num),
+        "keys_url": keys_url or _build_keys_url(),
+        "git_tag": f"v{version}-incubating-RC{rc_num}",
+        "changelog_summary": changelog_summary
+        or _build_changelog_summary(version, previous_tag=previous_tag),
+        "vote_deadline": _format_vote_deadline(deadline),
+    }
+
+
+def _build_result_email_context(
+    version: str,
+    rc_num: str,
+    binding_yes: int,
+    non_binding_yes: int,
+    abstain: int,
+    binding_no: int,
+    non_binding_no: int,
+    vote_thread_url: Optional[str] = None,
+) -> dict[str, str]:
+    """Build rendering context for the result email template."""
+    release_passed = binding_yes >= 3 and binding_yes > binding_no
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "project_display_name": PROJECT_SHORT_NAME.capitalize(),
+        "version": version,
+        "version_with_incubating": f"{version}-incubating",
+        "rc_num": rc_num,
+        "binding_yes": str(binding_yes),
+        "non_binding_yes": str(non_binding_yes),
+        "abstain": str(abstain),
+        "binding_no": str(binding_no),
+        "non_binding_no": str(non_binding_no),
+        "vote_thread_url": vote_thread_url or "[add link to vote thread]",
+        "result_outcome": (
+            "Therefore, the release candidate has passed."
+            if release_passed
+            else "Therefore, the release candidate has not passed."
+        ),
+    }
+
+
+def _build_announcement_email_context(
+    version: str,
+    pypi_url: Optional[str] = None,
+    downloads_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+) -> dict[str, str]:
+    """Build rendering context for the release announcement template."""
+    return {
+        "project_short_name": PROJECT_SHORT_NAME,
+        "project_display_name": PROJECT_SHORT_NAME.capitalize(),
+        "version": version,
+        "version_with_incubating": f"{version}-incubating",
+        "pypi_url": pypi_url or f"https://pypi.org/project/apache-burr/{version}/",
+        "downloads_url": downloads_url or DEFAULT_DOWNLOADS_URL,
+        "changelog_summary": changelog_summary
+        or _build_changelog_summary(version, previous_tag=previous_tag),
+    }
+
+
+def _build_svn_dev_url(version: str, rc_num: str) -> str:
+    """Build the Apache SVN development artifacts URL for an RC."""
+    return (
+        "https://dist.apache.org/repos/dist/dev/incubator/"
+        f"{PROJECT_SHORT_NAME}/{version}-incubating-RC{rc_num}"
+    )
+
+
+def _build_keys_url() -> str:
+    """Build the Apache KEYS URL."""
+    return f"{DEFAULT_DOWNLOADS_URL}KEYS"
+
+
+def _build_pypi_rc_url(version: str, rc_num: str) -> str:
+    """Build the PyPI URL for a release candidate."""
+    return f"https://pypi.org/project/apache-burr/{version}rc{rc_num}/"
+
+
+def _parse_rc_label(rc_label: str) -> tuple[str, str]:
+    """Parse an RC label like 0.42.0-RC1 or 0.42.0-incubating-RC1."""
+    match = RC_LABEL_PATTERN.fullmatch(rc_label.strip())
+    if not match:
+        _fail("Invalid RC label. Expected format like '0.42.0-RC1' " "or '0.42.0-incubating-RC1'.")
+    return match.group("version"), match.group("rc_num")
+
+
 # ============================================================================
 # Environment Validation
 # ============================================================================
@@ -137,8 +407,12 @@ def _validate_environment_for_command(args) -> None:
         "sdist": ["git", "gpg", "flit"],
         "wheel": ["git", "gpg", "flit", "node", "npm", "twine"],
         "upload": ["git", "gpg", "svn"],
+        "promote": ["svn"],
         "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
         "verify": ["git", "gpg", "twine"],
+        "vote-email": ["git"],
+        "result-email": [],
+        "announce-email": ["git"],
     }
 
     required_tools = list(command_requirements.get(args.command, ["git", "gpg"]))
@@ -246,14 +520,20 @@ def _check_git_working_tree() -> None:
 
 
 def _checksum_artifact(artifact_path: str) -> str:
-    """Create SHA512 checksum for artifact."""
+    """Create SHA512 checksum for artifact in the standard ``sha512sum`` layout.
+
+    The file is written as ``<digest>  <filename>\n`` so that voters can verify
+    with the standard ``sha512sum -c <file>.sha512`` recipe without having to
+    splice the filename in by hand.
+    """
     checksum_path = f"{artifact_path}.sha512"
     sha512_hash = hashlib.sha512()
     with open(artifact_path, "rb") as f:
         while chunk := f.read(65536):
             sha512_hash.update(chunk)
+    artifact_filename = os.path.basename(artifact_path)
     with open(checksum_path, "w", encoding="utf-8") as f:
-        f.write(f"{sha512_hash.hexdigest()}\n")
+        f.write(f"{sha512_hash.hexdigest()}  {artifact_filename}\n")
     print(f"  ✓ Created SHA512 checksum: {checksum_path}")
     return checksum_path
 
@@ -422,6 +702,9 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
 
     env = os.environ.copy()
     env["FLIT_USE_VCS"] = "0"
+    source_epoch = _source_date_epoch(version, output_dir)
+    if source_epoch is not None:
+        env["SOURCE_DATE_EPOCH"] = str(source_epoch)
     _run_command(
         ["flit", "build", "--format", "sdist"],
         description="Running flit build --format sdist...",
@@ -449,6 +732,14 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
 
     return apache_sdist
+
+
+def _source_date_epoch(version: str, output_dir: str = "dist") -> Optional[int]:
+    """Use the source archive timestamp when available so local rebuilds are comparable."""
+    source_archive = os.path.join(output_dir, f"apache-burr-{version}-incubating-src.tar.gz")
+    if os.path.exists(source_archive):
+        return int(os.path.getmtime(source_archive))
+    return None
 
 
 # ============================================================================
@@ -503,14 +794,15 @@ def _build_ui_artifacts() -> None:
         _fail(f"UI build directory is empty: {ui_build_dir}")
 
 
-def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
-    """Handle burr/examples symlink: replace with real files for wheel."""
+def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str], list[tuple[str, str]]]:
+    """Prepare wheel contents and temporarily remove files excluded from the sdist."""
     burr_examples_dir = "burr/examples"
     source_examples_dir = "examples"
+    removed_files: list[tuple[str, str]] = []
 
     if not os.path.exists(source_examples_dir):
         print(f"    ⚠️  {source_examples_dir} not found")
-        return (False, False, None)
+        return (False, False, None, removed_files)
 
     # Check if burr/examples is a symlink (should be in dev repo)
     was_symlink = False
@@ -547,11 +839,25 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str]]:
             shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
             print(f"    ✓ Copied {example_dir}")
 
-    return (True, was_symlink, symlink_target)
+    # Keep wheel contents aligned with the sdist so rebuild verification compares like-for-like artifacts.
+    excluded_wheel_files = [
+        "burr/tracking/server/s3/deployment/terraform/.gitignore",
+    ]
+    for path in excluded_wheel_files:
+        if os.path.exists(path):
+            backup_dir = tempfile.mkdtemp(prefix="apache-release-wheel-")
+            backup_path = os.path.join(backup_dir, os.path.basename(path))
+            os.replace(path, backup_path)
+            removed_files.append((path, backup_path))
+            print(f"    ✓ Temporarily excluded {path}")
+
+    return (True, was_symlink, symlink_target, removed_files)
 
 
-def _cleanup_wheel_contents(was_symlink: bool, symlink_target: Optional[str]) -> None:
-    """Restore burr/examples symlink after wheel build."""
+def _cleanup_wheel_contents(
+    was_symlink: bool, symlink_target: Optional[str], removed_files: list[tuple[str, str]]
+) -> None:
+    """Restore temporary wheel-build changes after the wheel build finishes."""
     burr_examples_dir = "burr/examples"
 
     if os.path.exists(burr_examples_dir):
@@ -561,6 +867,14 @@ def _cleanup_wheel_contents(was_symlink: bool, symlink_target: Optional[str]) ->
             print(f"  Restoring symlink: burr/examples -> {symlink_target}")
             os.symlink(symlink_target, burr_examples_dir)
             print("    ✓ Symlink restored")
+
+    for original_path, backup_path in removed_files:
+        if os.path.exists(backup_path):
+            os.replace(backup_path, original_path)
+            print(f"  Restored {original_path}")
+            backup_dir = os.path.dirname(backup_path)
+            if os.path.isdir(backup_dir):
+                shutil.rmtree(backup_dir)
 
 
 def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str:
@@ -575,13 +889,16 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     _build_ui_artifacts()
 
     _print_step(2, 3, "Preparing wheel contents")
-    copied, was_symlink, symlink_target = _prepare_wheel_contents()
+    copied, was_symlink, symlink_target, removed_files = _prepare_wheel_contents()
 
     _print_step(3, 3, "Building wheel with flit")
 
     try:
         env = os.environ.copy()
         env["FLIT_USE_VCS"] = "0"
+        source_epoch = _source_date_epoch(version, output_dir)
+        if source_epoch is not None:
+            env["SOURCE_DATE_EPOCH"] = str(source_epoch)
 
         _run_command(
             ["flit", "build", "--format", "wheel"],
@@ -606,7 +923,7 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     finally:
         # Always restore symlinks
         if copied:
-            _cleanup_wheel_contents(was_symlink, symlink_target)
+            _cleanup_wheel_contents(was_symlink, symlink_target, removed_files)
 
 
 def _verify_wheel(wheel_path: str) -> bool:
@@ -745,50 +1062,183 @@ def _upload_to_svn(
 
 
 def _generate_vote_email(version: str, rc_num: str, svn_url: str) -> str:
-    """Generate [VOTE] email template."""
-    version_with_incubating = f"{version}-incubating"
-    tag = f"v{version}-incubating-RC{rc_num}"
+    """Generate [VOTE] email from template."""
+    context = _build_vote_email_context(version=version, rc_num=rc_num, svn_url=svn_url)
+    return _render_template("vote_email.j2", context)
 
-    return f"""[VOTE] Release Apache {PROJECT_SHORT_NAME} {version_with_incubating} (RC{rc_num})
 
-Hi all,
+def _generate_result_email(
+    version: str,
+    rc_num: str,
+    binding_yes: int,
+    non_binding_yes: int,
+    abstain: int,
+    binding_no: int,
+    non_binding_no: int,
+    vote_thread_url: Optional[str] = None,
+) -> str:
+    """Generate [RESULT] email from template."""
+    context = _build_result_email_context(
+        version=version,
+        rc_num=rc_num,
+        binding_yes=binding_yes,
+        non_binding_yes=non_binding_yes,
+        abstain=abstain,
+        binding_no=binding_no,
+        non_binding_no=non_binding_no,
+        vote_thread_url=vote_thread_url,
+    )
+    return _render_template("result_email.j2", context)
 
-This is a call for a vote on releasing Apache {PROJECT_SHORT_NAME} {version_with_incubating},
-release candidate {rc_num}.
 
-The artifacts for this release candidate can be found at:
-{svn_url}
+def _generate_announcement_email(
+    version: str,
+    pypi_url: Optional[str] = None,
+    downloads_url: Optional[str] = None,
+    changelog_summary: Optional[str] = None,
+    previous_tag: Optional[str] = None,
+) -> str:
+    """Generate [ANNOUNCE] email from template."""
+    context = _build_announcement_email_context(
+        version=version,
+        pypi_url=pypi_url,
+        downloads_url=downloads_url,
+        changelog_summary=changelog_summary,
+        previous_tag=previous_tag,
+    )
+    return _render_template("announce_email.j2", context)
 
-The Git tag to be voted upon is:
-{tag}
 
-Release artifacts are signed with the release manager's GPG key. The KEYS file is available at:
-https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/KEYS
+def _promotion_source_url(version: str, rc_num: str, dev_svn_root: str) -> str:
+    """Return the SVN URL for a voted RC in dist/dev."""
+    return f"{dev_svn_root}/{version}-incubating-RC{rc_num}"
 
-Please download, verify, and test the release candidate.
 
-For detailed step-by-step instructions on how to verify this release, please see the
-"For Voters: Verifying a Release" section in the scripts/README.md file within the
-source archive.
+def _promotion_target_url(version: str, release_svn_root: str) -> str:
+    """Return the SVN URL for the final per-version release directory.
 
-The vote will run for a minimum of 72 hours.
-Please vote:
+    Releases are published under a per-version subdirectory
+    (e.g. dist/release/incubator/burr/0.42.0), alongside any existing
+    releases and the shared KEYS file at the project root.
+    """
+    return f"{release_svn_root}/{version}"
 
-[ ] +1 Release this package as Apache {PROJECT_SHORT_NAME} {version_with_incubating}
-[ ] +0 No opinion
-[ ] -1 Do not release this package because... (reason required)
 
-Checklist for reference:
-[ ] Download links are valid
-[ ] Checksums and signatures are valid
-[ ] LICENSE/NOTICE files exist
-[ ] No unexpected binary files in source
-[ ] All source files have ASF headers
-[ ] Can compile from source
+def _promotion_commit_message(version: str, rc_num: str) -> str:
+    """Return the SVN commit message for a promotion."""
+    return f"Promote Apache Burr {version}-incubating RC{rc_num} to release"
 
-On behalf of the Apache {PROJECT_SHORT_NAME} PPMC,
-[Your Name]
-"""
+
+def _expected_promotion_artifact_patterns(version: str) -> dict[str, str]:
+    """Return the required artifact patterns for a final release promotion."""
+    return {
+        "source_archive": f"apache-burr-{version}-incubating-src.tar.gz",
+        "sdist": f"apache-burr-{version}-incubating-sdist.tar.gz",
+        "wheel": f"apache_burr-{version}-*.whl",
+    }
+
+
+def _find_single_glob_match(directory: str, pattern: str, description: str) -> str:
+    matches = sorted(glob.glob(os.path.join(directory, pattern)))
+    if not matches:
+        _fail(f"Missing required {description}: {pattern}")
+    if len(matches) > 1:
+        names = ", ".join(os.path.basename(match) for match in matches)
+        _fail(f"Expected exactly one {description} for pattern {pattern}, found: {names}")
+    return matches[0]
+
+
+def _validate_promotion_artifacts(rc_checkout_dir: str, version: str) -> list[str]:
+    """Validate the expected release artifacts exist in the RC checkout."""
+    artifacts: list[str] = []
+    patterns = _expected_promotion_artifact_patterns(version)
+
+    source_archive = _find_single_glob_match(
+        rc_checkout_dir, patterns["source_archive"], "source archive"
+    )
+    sdist = _find_single_glob_match(rc_checkout_dir, patterns["sdist"], "source distribution")
+    wheel = _find_single_glob_match(rc_checkout_dir, patterns["wheel"], "wheel")
+
+    for artifact_path in [source_archive, sdist, wheel]:
+        artifacts.append(artifact_path)
+        for suffix in [".asc", ".sha512"]:
+            companion_path = f"{artifact_path}{suffix}"
+            if not os.path.exists(companion_path):
+                _fail(f"Missing required companion artifact: {os.path.basename(companion_path)}")
+            artifacts.append(companion_path)
+
+    return sorted(artifacts)
+
+
+def _twine_upload_command(promoted_artifacts: list[str]) -> str:
+    """Return the PyPI upload command for the final release artifacts."""
+    upload_candidates = [
+        artifact
+        for artifact in promoted_artifacts
+        if artifact.endswith(".whl") or artifact.endswith("-incubating-sdist.tar.gz")
+    ]
+    upload_names = " ".join(sorted(os.path.basename(artifact) for artifact in upload_candidates))
+    return f"twine upload {upload_names}"
+
+
+def _svn_checkout(url: str, checkout_dir: str) -> None:
+    """Check out an SVN URL into a local directory."""
+    _run_command(
+        ["svn", "checkout", url, checkout_dir],
+        description=f"Checking out SVN path: {url}",
+        error_message=f"SVN checkout failed for {url}",
+        success_message="SVN checkout completed",
+    )
+
+
+def _svn_target_exists(url: str) -> bool:
+    """Return True if an SVN URL already exists in the repository."""
+    result = subprocess.run(
+        ["svn", "info", url],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _promote_with_server_copy(
+    source_url: str,
+    target_url: str,
+    message: str,
+    apache_id: str,
+    dry_run: bool = False,
+) -> bool:
+    """Promote a voted RC by copying it server-side into the release tree.
+
+    A single ``svn cp <rc_url> <release>/<version>`` is atomic: it copies the
+    voted RC directory (artifacts plus their .asc / .sha512 companions) into a
+    new per-version release directory in one commit, without downloading the
+    artifacts. Existing release directories and the shared KEYS file are left
+    untouched, matching the additive layout used in dist/release.
+    """
+    command = [
+        "svn",
+        "cp",
+        source_url,
+        target_url,
+        "-m",
+        message,
+        "--username",
+        apache_id,
+    ]
+    if dry_run:
+        print(f"  [DRY RUN] Would run: {' '.join(command)}")
+        return True
+
+    _run_command(
+        command,
+        description="Promoting RC to release via server-side copy...",
+        error_message="SVN server-side copy failed for promotion",
+        success_message="Release promoted",
+        capture_output=False,
+    )
+    return True
 
 
 # ============================================================================
@@ -882,6 +1332,55 @@ def cmd_upload(args) -> bool:
     return True
 
 
+def cmd_promote(args) -> bool:
+    """Handle 'promote' subcommand."""
+    _print_section(f"Promoting Release Candidate - {args.rc_label}")
+    _verify_project_root()
+
+    version, rc_num = _parse_rc_label(args.rc_label)
+    source_url = _promotion_source_url(version, rc_num, args.dev_svn_root)
+    target_url = _promotion_target_url(version, args.release_svn_root)
+
+    print(f"Source RC URL: {source_url}")
+    print(f"Release URL:   {target_url}")
+    if args.dry_run:
+        print("\n*** DRY RUN MODE ***")
+
+    if _svn_target_exists(target_url):
+        _fail(
+            f"Release path already exists: {target_url}\n"
+            "Refusing to overwrite an already-promoted release."
+        )
+
+    with tempfile.TemporaryDirectory(prefix="burr-promote-") as temp_dir:
+        rc_checkout_dir = os.path.join(temp_dir, "rc")
+        _svn_checkout(source_url, rc_checkout_dir)
+
+        print("\nValidating expected artifacts...")
+        validated_artifacts = _validate_promotion_artifacts(rc_checkout_dir, version)
+        for artifact in validated_artifacts:
+            print(f"  ✓ {os.path.basename(artifact)}")
+
+    print("\nPromoting RC into release...")
+    _promote_with_server_copy(
+        source_url,
+        target_url,
+        _promotion_commit_message(version, rc_num),
+        args.apache_id,
+        dry_run=args.dry_run,
+    )
+
+    print("\nPromotion summary:")
+    print(f"  Release path: {target_url}")
+    for artifact in validated_artifacts:
+        print(f"  - {os.path.basename(artifact)}")
+
+    print("\nPyPI upload command:")
+    print(f"  {_twine_upload_command(validated_artifacts)}")
+
+    return True
+
+
 def cmd_verify(args) -> bool:
     """Handle 'verify' subcommand."""
     _print_section(f"Verifying Artifacts - v{args.version}-RC{args.rc_num}")
@@ -905,6 +1404,62 @@ def cmd_verify(args) -> bool:
         print("❌ Some artifacts failed verification")
 
     return all_valid
+
+
+def cmd_vote_email(args) -> bool:
+    """Handle 'vote-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _render_template(
+        "vote_email.j2",
+        _build_vote_email_context(
+            version=args.version,
+            rc_num=args.rc_num,
+            svn_url=args.svn_url,
+            pypi_url=args.pypi_url,
+            keys_url=args.keys_url,
+            changelog_summary=args.changelog_summary,
+            previous_tag=args.previous_tag,
+        ),
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
+
+
+def cmd_result_email(args) -> bool:
+    """Handle 'result-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _generate_result_email(
+        version=args.version,
+        rc_num=args.rc_num,
+        binding_yes=args.binding_yes,
+        non_binding_yes=args.non_binding_yes,
+        abstain=args.abstain,
+        binding_no=args.binding_no,
+        non_binding_no=args.non_binding_no,
+        vote_thread_url=args.vote_thread_url,
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
+
+
+def cmd_announce_email(args) -> bool:
+    """Handle 'announce-email' subcommand."""
+    _verify_project_root()
+    _validate_version(args.version)
+
+    content = _generate_announcement_email(
+        version=args.version,
+        pypi_url=args.pypi_url,
+        downloads_url=args.downloads_url,
+        changelog_summary=args.changelog_summary,
+        previous_tag=args.previous_tag,
+    )
+    _emit_email_output(content, copy_to_clipboard=args.copy)
+    return True
 
 
 def cmd_all(args) -> bool:
@@ -970,8 +1525,14 @@ def cmd_all(args) -> bool:
 # ============================================================================
 
 
-def main():
-    """Main entry point."""
+def _add_email_common_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add common CLI arguments shared by email-generation commands."""
+    parser.add_argument("--version", required=True, help="Version (e.g., '0.41.0')")
+    parser.add_argument("--copy", action="store_true", help="Copy rendered email to clipboard")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(description="Apache Burr Release Script (Simplified)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1008,11 +1569,87 @@ def main():
     upload_parser.add_argument("--artifacts-dir", default="dist")
     upload_parser.add_argument("--dry-run", action="store_true")
 
+    # promote subcommand
+    promote_parser = subparsers.add_parser(
+        "promote", help="Promote a voted RC from dist/dev to dist/release"
+    )
+    promote_parser.add_argument(
+        "rc_label", help="Release candidate label, e.g. '0.42.0-RC1' or '0.42.0-incubating-RC1'"
+    )
+    promote_parser.add_argument("apache_id", help="Apache ID")
+    promote_parser.add_argument("--dry-run", action="store_true")
+    promote_parser.add_argument(
+        "--dev-svn-root",
+        default=DEFAULT_DEV_SVN_ROOT,
+        help="SVN root for RC artifacts in dist/dev",
+    )
+    promote_parser.add_argument(
+        "--release-svn-root",
+        default=DEFAULT_RELEASE_SVN_ROOT,
+        help="SVN root for promoted artifacts in dist/release",
+    )
+
     # verify subcommand
     verify_parser = subparsers.add_parser("verify", help="Verify artifacts")
     verify_parser.add_argument("version", help="Version")
     verify_parser.add_argument("rc_num", help="RC number")
     verify_parser.add_argument("--artifacts-dir", default="dist")
+
+    # vote-email subcommand
+    vote_email_parser = subparsers.add_parser("vote-email", help="Generate release vote email")
+    _add_email_common_arguments(vote_email_parser)
+    vote_email_parser.add_argument("--rc", dest="rc_num", required=True, help="RC number")
+    vote_email_parser.add_argument("--svn-url", help="Override the Apache SVN RC URL")
+    vote_email_parser.add_argument("--pypi-url", help="Override the PyPI RC package URL")
+    vote_email_parser.add_argument("--keys-url", help="Override the Apache KEYS URL")
+    vote_email_parser.add_argument(
+        "--previous-tag",
+        help="Use a specific previous release tag when building the changelog summary",
+    )
+    vote_email_parser.add_argument(
+        "--changelog-summary",
+        help="Provide a custom changelog summary instead of generating one from git history",
+    )
+
+    # result-email subcommand
+    result_email_parser = subparsers.add_parser(
+        "result-email", help="Generate release vote result email"
+    )
+    _add_email_common_arguments(result_email_parser)
+    result_email_parser.add_argument("--rc", dest="rc_num", required=True, help="RC number")
+    result_email_parser.add_argument(
+        "--binding-yes", type=int, required=True, help="Number of binding +1 votes"
+    )
+    result_email_parser.add_argument(
+        "--non-binding-yes", type=int, default=0, help="Number of non-binding +1 votes"
+    )
+    result_email_parser.add_argument("--abstain", type=int, default=0, help="Number of 0 votes")
+    result_email_parser.add_argument(
+        "--binding-no", type=int, default=0, help="Number of binding -1 votes"
+    )
+    result_email_parser.add_argument(
+        "--non-binding-no", type=int, default=0, help="Number of non-binding -1 votes"
+    )
+    result_email_parser.add_argument("--vote-thread-url", help="Link to the vote thread archive")
+
+    # announce-email subcommand
+    announce_email_parser = subparsers.add_parser(
+        "announce-email", help="Generate release announcement email"
+    )
+    _add_email_common_arguments(announce_email_parser)
+    announce_email_parser.add_argument("--pypi-url", help="Override the PyPI release URL")
+    announce_email_parser.add_argument(
+        "--downloads-url",
+        help="Override the Apache downloads URL",
+    )
+    announce_email_parser.add_argument(
+        "--previous-tag",
+        help="Use a specific previous release tag when building the changelog summary",
+    )
+    announce_email_parser.add_argument(
+        "--changelog-summary",
+        help="Provide a custom changelog summary instead of generating one from git history",
+    )
 
     # all subcommand
     all_parser = subparsers.add_parser("all", help="Run complete workflow")
@@ -1028,6 +1665,12 @@ def main():
         help="Skip GPG signing (for CI). SHA512 checksum is still generated.",
     )
 
+    return parser
+
+
+def main():
+    """Main entry point."""
+    parser = _build_parser()
     args = parser.parse_args()
 
     # Validate environment
@@ -1043,8 +1686,16 @@ def main():
             success = cmd_wheel(args)
         elif args.command == "upload":
             success = cmd_upload(args)
+        elif args.command == "promote":
+            success = cmd_promote(args)
         elif args.command == "verify":
             success = cmd_verify(args)
+        elif args.command == "vote-email":
+            success = cmd_vote_email(args)
+        elif args.command == "result-email":
+            success = cmd_result_email(args)
+        elif args.command == "announce-email":
+            success = cmd_announce_email(args)
         elif args.command == "all":
             success = cmd_all(args)
         else:

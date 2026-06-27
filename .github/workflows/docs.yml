@@ -51,7 +51,7 @@ jobs:
           echo "burr.apache.org" > _build/CNAME # keep the cname file which this clobbers -- todo, unhardcode
       - name: Comment on PR
         uses: hasura/comment-progress@v2.2.0
-        if: github.ref != 'refs/heads/main'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
@@ -60,7 +60,7 @@ jobs:
           message: "Starting deployment of preview ⏳..."
       - name: Build PR preview website
         uses: peaceiris/actions-gh-pages@v3
-        if: github.ref != 'refs/heads/main'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: _build/
@@ -75,7 +75,7 @@ jobs:
           keep_files: true # Add this line to keep existing files in the gh-pages branch
       - name: Update comment
         uses: hasura/comment-progress@v2.2.0
-        if: github.ref != 'refs/heads/main'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}

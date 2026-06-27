@@ -1,0 +1,68 @@
+{#
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+#}
+[VOTE] Release Apache {{ project_display_name }} (Incubating) {{ version }} RC{{ rc_num }}
+
+Hi all,
+
+I propose the following RC to be released as the official Apache {{ project_display_name }} {{ version }} release.
+
+Apache {{ project_display_name }} is an effort undergoing incubation at The Apache Software Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of all newly accepted projects until a further review indicates that the infrastructure, communications, and decision making process have stabilized in a manner consistent with other successful ASF projects. While incubation status is not necessarily a reflection of the completeness or stability of the code, it does indicate that the project has yet to be fully endorsed by the ASF.
+
+The artifacts for this release candidate can be found at:
+{{ svn_url }}
+
+The PyPI release candidate package is available at:
+{{ pypi_url }}
+
+The Git tag to be voted upon is:
+{{ git_tag }}
+
+Release artifacts are signed with the release manager's GPG key. The KEYS file is available at:
+{{ keys_url }}
+
+Changelog summary:
+{{ changelog_summary }}
+
+Please download, verify, and test the release candidate.
+
+For detailed step-by-step instructions on how to verify this release, please see the
+"For Voters: Verifying a Release" section in the scripts/README.md file within the
+source archive.
+
+The vote will run for a minimum of 72 hours and close no earlier than:
+{{ vote_deadline }}
+
+Please vote:
+
+[ ] +1 Release this as Apache {{ project_display_name }} {{ version }}
+[ ] +0
+[ ] -1 Do not release this package because... (reason required)
+
+Only PPMC members have binding votes, but community votes are encouraged.
+
+Checklist for reference:
+[ ] Download links are valid
+[ ] Checksums and signatures are valid
+[ ] LICENSE/NOTICE files exist
+[ ] No unexpected binary files in source
+[ ] All source files have ASF headers
+[ ] Can compile from source
+
+On behalf of the Apache {{ project_display_name }} PPMC,
+[Your Name]

@@ -328,15 +328,20 @@ class State(Mapping, Generic[StateType]):
 
         def _serialize(k, v, **extrakwargs) -> Union[dict, str]:
             """chooses the correct serde function for the given key and calls it"""
-            if k in FIELD_SERIALIZATION:
-                result = FIELD_SERIALIZATION[k][0](v, **extrakwargs)
-                if not isinstance(result, dict):
-                    raise ValueError(
-                        f"Field serde for {k} must return a dict,"
-                        f" but {FIELD_SERIALIZATION[k][0].__name__} returned {type(result)} ({str(result)[0:10]})."
-                    )
-                return result
-            return serde.serialize(v, **extrakwargs)
+            try:
+                if k in FIELD_SERIALIZATION:
+                    result = FIELD_SERIALIZATION[k][0](v, **extrakwargs)
+                    if not isinstance(result, dict):
+                        raise ValueError(
+                            f"Field serde for {k} must return a dict,"
+                            f" but {FIELD_SERIALIZATION[k][0].__name__} returned {type(result)} ({str(result)[0:10]})."
+                        )
+                    return result
+                return serde.serialize(v, **extrakwargs)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to serialize state field '{k}' (value of type {type(v).__name__}): {e}"
+                ) from e
 
         return {k: _serialize(k, v, **kwargs) for k, v in _dict.items()}
 
@@ -346,9 +351,12 @@ class State(Mapping, Generic[StateType]):
 
         def _deserialize(k, v: Union[str, dict], **extrakwargs) -> Callable:
             """chooses the correct serde function for the given key and calls it"""
-            if k in FIELD_SERIALIZATION:
-                return FIELD_SERIALIZATION[k][1](v, **extrakwargs)
-            return serde.deserialize(v, **extrakwargs)
+            try:
+                if k in FIELD_SERIALIZATION:
+                    return FIELD_SERIALIZATION[k][1](v, **extrakwargs)
+                return serde.deserialize(v, **extrakwargs)
+            except Exception as e:
+                raise ValueError(f"Failed to deserialize state field '{k}': {e}") from e
 
         return State({k: _deserialize(k, v, **kwargs) for k, v in json_dict.items()})
 

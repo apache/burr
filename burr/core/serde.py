@@ -61,7 +61,12 @@ class StringDispatch:
         if key in self.func_map:
             return self.func_map[key](*args, **kwargs)
         else:
-            raise ValueError(f"No function registered for key: {key}")
+            raise ValueError(
+                f"No deserializer registered for key: '{key}'. "
+                f"Registered keys: {sorted(self.func_map)}. "
+                f"Make sure the module registering the deserializer for '{key}' has been "
+                f"imported (e.g. `import burr.integrations.serde.pandas` for 'pandas.DataFrame')."
+            )
 
 
 deserializer = StringDispatch()
