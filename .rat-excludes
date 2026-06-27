@@ -31,6 +31,7 @@
 # Build and tool config files
 **/*.bat
 **/robots.txt
+**/.npmrc
 
 # JSON config files (cannot contain comments)
 **/*.json
