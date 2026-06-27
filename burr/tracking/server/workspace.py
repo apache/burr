@@ -32,7 +32,6 @@ import logging
 import os
 import re
 import signal
-import threading
 import time
 from typing import Dict, List, Optional
 
@@ -232,8 +231,9 @@ def _is_binary(file_path: str) -> bool:
 _LINKS_PATH = os.path.join(os.path.expanduser("~/.burr"), "workspace_links.json")
 
 # In-process cache for workspace links to avoid disk reads on every request.
+# No lock needed: all callers are async endpoints on the single event loop
+# thread and these helpers never await, so they run serialized.
 _links_cache: Optional[dict] = None
-_links_cache_lock = threading.Lock()
 
 
 def _read_links() -> dict:
@@ -242,16 +242,14 @@ def _read_links() -> dict:
     Uses an in-process cache that is invalidated on writes via _write_links().
     """
     global _links_cache
-    with _links_cache_lock:
-        if _links_cache is not None:
-            return _links_cache
+    if _links_cache is not None:
+        return _links_cache
     if os.path.exists(_LINKS_PATH):
         with open(_LINKS_PATH, "r") as f:
             data = json_module.load(f)
     else:
         data = {}
-    with _links_cache_lock:
-        _links_cache = data
+    _links_cache = data
     return data
 
 
@@ -264,8 +262,7 @@ def _write_links(data: dict):
     os.makedirs(os.path.dirname(_LINKS_PATH), exist_ok=True)
     with open(_LINKS_PATH, "w") as f:
         json_module.dump(data, f, indent=2)
-    with _links_cache_lock:
-        _links_cache = data
+    _links_cache = data
 
 
 def is_available() -> bool:
