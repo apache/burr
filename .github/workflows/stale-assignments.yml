@@ -24,6 +24,10 @@
 #   - 21 days total -> unassign + add help wanted
 #   - Issues with lifecycle/frozen are exempt
 #
+# "Activity" = last human comment or the assignment event -- deliberately NOT
+# issue.updated_at, which is bumped by the bot's own comment and label edits and
+# would reset the clock every run (so the unassign threshold was never reached).
+#
 # Security: only uses numeric IDs and login names from the GitHub API.
 # No untrusted string input is interpolated into shell commands.
 
@@ -83,18 +87,51 @@ jobs:
                 continue;
               }
 
-              const updatedAt = new Date(issue.updated_at);
-              const daysSinceUpdate = Math.floor((now - updatedAt) / (1000 * 60 * 60 * 24));
               const assigneeLogins = issue.assignees.map(a => a.login);
 
+              // Measure inactivity from the last *human* activity, NOT issue.updated_at.
+              // updated_at is bumped by anything that touches the issue -- including this
+              // bot's own warning comment and label edits -- which reset the clock every
+              // run, so the unassign threshold was never reached. Take the most recent of:
+              // last non-bot comment, the assignment event for a current assignee (so a
+              // freshly assigned issue is not instantly stale), and issue creation time.
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+
+              let lastActivity = new Date(issue.created_at);
+              for (const c of comments) {
+                if (c.user.login === 'github-actions[bot]') continue;
+                const t = new Date(c.created_at);
+                if (t > lastActivity) lastActivity = t;
+              }
+
+              const events = await github.paginate(github.rest.issues.listEvents, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+              for (const e of events) {
+                if (e.event === 'assigned' && e.assignee && assigneeLogins.includes(e.assignee.login)) {
+                  const t = new Date(e.created_at);
+                  if (t > lastActivity) lastActivity = t;
+                }
+              }
+
+              const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
+
               // 21+ days -> unassign and add help wanted
-              if (daysSinceUpdate >= UNASSIGN_DAYS) {
+              if (daysSinceActivity >= UNASSIGN_DAYS) {
                 const names = assigneeLogins.map(l => `@${l}`).join(', ');
 
-                console.log(`#${issue.number}: unassigning ${names} (${daysSinceUpdate} days)`);
+                console.log(`#${issue.number}: unassigning ${names} (${daysSinceActivity} days)`);
 
                 const unassignMsg = [
-                  `Removing assignment from ${names} after ${daysSinceUpdate} days of inactivity`,
+                  `Removing assignment from ${names} after ${daysSinceActivity} days of inactivity`,
                   '(per the [assignment policy](../blob/main/CONTRIBUTING.rst#issue-assignment-policy)).',
                   '',
                   'Feel free to comment if you want to pick this back up or if someone else wants to take it.',
@@ -127,15 +164,8 @@ jobs:
               }
 
               // 14+ days -> warn
-              if (daysSinceUpdate >= WARN_DAYS) {
-                // Check if we already warned (avoid spamming)
-                const { data: comments } = await github.rest.issues.listComments({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
-                  per_page: 5,
-                });
-
+              if (daysSinceActivity >= WARN_DAYS) {
+                // Avoid spamming: skip if we already warned within the last 10 days.
                 const recentWarn = comments.some(c =>
                   c.user.login === 'github-actions[bot]' &&
                   c.body.includes('assignment policy') &&
@@ -149,10 +179,10 @@ jobs:
 
                 const names = assigneeLogins.map(l => `@${l}`).join(', ');
 
-                console.log(`#${issue.number}: warning ${names} (${daysSinceUpdate} days)`);
+                console.log(`#${issue.number}: warning ${names} (${daysSinceActivity} days)`);
 
                 const warnMsg = [
-                  `${names}, this issue has been inactive for ${daysSinceUpdate} days.`,
+                  `${names}, this issue has been inactive for ${daysSinceActivity} days.`,
                   'Are you still working on it? Drop a comment to let us know.',
                   '',
                   'If there is no update within 7 days, the assignment will be removed',
