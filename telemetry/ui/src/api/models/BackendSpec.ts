@@ -29,4 +29,5 @@ export type BackendSpec = {
   snapshotting: boolean;
   supports_demos: boolean;
   supports_annotations: boolean;
+  supports_workspace: boolean;
 };

@@ -23,7 +23,7 @@ import { Button } from '../components/common/button';
 import { TwoColumnLayout } from '../components/common/layout';
 import { ApplicationSummary, ChatItem, DefaultService } from '../api';
 import { KeyboardEvent, useEffect, useState } from 'react';
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loading } from '../components/common/loading';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -129,41 +129,40 @@ const scrollToLatest = () => {
 export const Chatbot = (props: { projectId: string; appId: string | undefined }) => {
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [displayedChatHistory, setDisplayedChatHistory] = useState(DEFAULT_CHAT_HISTORY);
-  const { isLoading } = useQuery(
+  const { data: chatHistoryData, isLoading } = useQuery({
     // TODO -- handle errors
-    ['chat', props.projectId, props.appId],
-    () =>
+    queryKey: ['chat', props.projectId, props.appId],
+    queryFn: () =>
       DefaultService.chatHistoryApiV0ChatbotResponseProjectIdAppIdGet(
         props.projectId,
         props.appId || '' // TODO -- find a cleaner way of doing a skip-token like thing here
       ),
-    {
-      enabled: props.appId !== undefined,
-      onSuccess: (data) => {
-        setDisplayedChatHistory(data); // when its succesful we want to set the displayed chat history
-      }
+    enabled: props.appId !== undefined
+  });
+
+  useEffect(() => {
+    if (chatHistoryData) {
+      setDisplayedChatHistory(chatHistoryData);
     }
-  );
+  }, [chatHistoryData]);
 
   // Scroll to the latest message when the chat history changes
   useEffect(() => {
     scrollToLatest();
   }, [displayedChatHistory]);
 
-  const mutation = useMutation(
-    (message: string) => {
+  const mutation = useMutation({
+    mutationFn: (message: string) => {
       return DefaultService.chatResponseApiV0ChatbotResponseProjectIdAppIdPost(
         props.projectId,
         props.appId || '',
         message
       );
     },
-    {
-      onSuccess: (data) => {
-        setDisplayedChatHistory(data);
-      }
+    onSuccess: (data) => {
+      setDisplayedChatHistory(data);
     }
-  );
+  });
 
   if (isLoading) {
     return <Loading />;
@@ -182,7 +181,7 @@ export const Chatbot = (props: { projectId: string; appId: string | undefined })
       ]);
     }
   };
-  const isChatWaiting = mutation.isLoading;
+  const isChatWaiting = mutation.isPending;
   return (
     <div className="mr-4 bg-white  w-full flex flex-col h-full">
       <h1 className="text-2xl font-bold px-4 text-gray-600">{'Learn Burr '}</h1>

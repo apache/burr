@@ -27,6 +27,7 @@ from starlette import status
 
 # TODO -- remove this, just for testing
 from burr.log_setup import setup_logging
+from burr.tracking.server import workspace
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
@@ -150,7 +151,10 @@ async def lifespan(app: FastAPI):
             await event_consumer_task
         except asyncio.CancelledError:
             pass
-    await backend.lifespan(app).__anext__()
+    try:
+        await workspace.cleanup_processes()
+    finally:
+        await backend.lifespan(app).__anext__()
 
 
 def _get_app_spec() -> BackendSpec:
@@ -164,6 +168,7 @@ def _get_app_spec() -> BackendSpec:
         snapshotting=is_snapshotting_backend,
         supports_demos=supports_demos,
         supports_annotations=is_annotations_backend,
+        supports_workspace=workspace.is_available(),
     )
 
 
@@ -354,6 +359,7 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
                 burr_version = "unknown"
         return {"version": burr_version}
 
+    ui_app.include_router(workspace.router, prefix="/api/v0/workspace")
     # Examples -- todo -- put them behind `if` statements
     ui_app.include_router(chatbot.router, prefix="/api/v0/chatbot")
     ui_app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")

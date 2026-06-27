@@ -200,6 +200,7 @@ class BackendSpec(pydantic.BaseModel):
     snapshotting: bool
     supports_demos: bool
     supports_annotations: bool
+    supports_workspace: bool
 
 
 class AnnotationDataPointer(pydantic.BaseModel):

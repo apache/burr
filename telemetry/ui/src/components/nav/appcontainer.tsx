@@ -22,6 +22,7 @@ import { Dialog, Disclosure, Transition } from '@headlessui/react';
 import {
   ComputerDesktopIcon,
   Square2StackIcon,
+  SquaresPlusIcon,
   QuestionMarkCircleIcon,
   XMarkIcon,
   ChatBubbleLeftEllipsisIcon,
@@ -36,7 +37,7 @@ import { Link } from 'react-router-dom';
 import { classNames } from '../../utils/tailwind';
 import React from 'react';
 import { DefaultService } from '../../api';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 
 // Define your GitHub logo SVG as a React component
 const GithubLogo = () => (
@@ -45,7 +46,8 @@ const GithubLogo = () => (
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 22 22"
-    stroke="currentColor">
+    stroke="currentColor"
+  >
     {/* SVG path for GitHub logo */}
     <path
       strokeLinecap="round"
@@ -84,11 +86,13 @@ const ToggleOpenButton = (props: { open: boolean; toggleSidebar: () => void }) =
 export const AppContainer = (props: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [smallSidebarOpen, setSmallSidebarOpen] = useState(false);
-  const { data: backendSpec } = useQuery(['backendSpec'], () =>
-    DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
-      return response;
-    })
-  );
+  const { data: backendSpec } = useQuery({
+    queryKey: ['backendSpec'],
+    queryFn: () =>
+      DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
+        return response;
+      })
+  });
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
@@ -97,6 +101,12 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
       name: 'Projects',
       href: '/projects',
       icon: Square2StackIcon,
+      linkType: 'internal'
+    },
+    {
+      name: 'Graph Builder',
+      href: '/graph-builder',
+      icon: SquaresPlusIcon,
       linkType: 'internal'
     },
     {
@@ -191,7 +201,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
               enterTo="opacity-100"
               leave="transition-opacity ease-linear duration-300"
               leaveFrom="opacity-100"
-              leaveTo="opacity-0">
+              leaveTo="opacity-0"
+            >
               <div className="fixed inset-0 bg-gray-900/80" />
             </Transition.Child>
 
@@ -203,7 +214,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                 enterTo="translate-x-0"
                 leave="transition ease-in-out duration-300 transform"
                 leaveFrom="translate-x-0"
-                leaveTo="-translate-x-full">
+                leaveTo="-translate-x-full"
+              >
                 <Dialog.Panel className="relative mr-16 flex w-full max-w-xs flex-1">
                   <Transition.Child
                     as={Fragment}
@@ -212,12 +224,14 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                     enterTo="opacity-100"
                     leave="ease-in-out duration-300"
                     leaveFrom="opacity-100"
-                    leaveTo="opacity-0">
+                    leaveTo="opacity-0"
+                  >
                     <div className="absolute left-full top-0 flex w-16 justify-center pt-5">
                       <button
                         type="button"
                         className="-m-2.5 p-2.5"
-                        onClick={() => setSmallSidebarOpen(false)}>
+                        onClick={() => setSmallSidebarOpen(false)}
+                      >
                         <span className="sr-only">Close sidebar</span>
                         <XMarkIcon className="h-6 w-6 text-white" aria-hidden="true" />
                       </button>
@@ -249,7 +263,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                                     'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold'
                                   )}
                                   target={item.linkType === 'external' ? '_blank' : undefined}
-                                  rel={item.linkType === 'external' ? 'noreferrer' : undefined}>
+                                  rel={item.linkType === 'external' ? 'noreferrer' : undefined}
+                                >
                                   <item.icon
                                     className={classNames(
                                       isCurrent(item.href, item.linkType)
@@ -278,7 +293,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
         <div
           className={`hidden ${
             sidebarOpen ? 'h-screen lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col' : ''
-          }`}>
+          }`}
+        >
           {/* Sidebar component, swap this element with another sidebar if you like */}
           <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 py-2">
             <div className="flex h-16 shrink-0 items-center">
@@ -304,7 +320,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                               'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold text-gray-700'
                             )}
                             target={item.linkType === 'external' ? '_blank' : undefined}
-                            rel={item.linkType === 'external' ? 'noreferrer' : undefined}>
+                            rel={item.linkType === 'external' ? 'noreferrer' : undefined}
+                          >
                             <item.icon
                               className="h-6 w-6 shrink-0 text-gray-400"
                               aria-hidden="true"
@@ -321,7 +338,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                                       ? 'bg-gray-50'
                                       : 'hover:bg-gray-50',
                                     'flex items-center w-full text-left rounded-md p-2 gap-x-3 text-sm leading-6 font-semibold text-gray-700'
-                                  )}>
+                                  )}
+                                >
                                   <item.icon
                                     className="h-6 w-6 shrink-0 text-gray-400"
                                     aria-hidden="true"
@@ -351,7 +369,8 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                                         }
                                         rel={
                                           subItem.linkType === 'external' ? 'noreferrer' : undefined
-                                        }>
+                                        }
+                                      >
                                         {subItem.name}
                                       </Link>
                                     </li>
@@ -377,17 +396,17 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
             !sidebarOpen
               ? 'lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-8 lg:flex-col justify-end lg:py-2 lg:px-1'
               : ''
-          }`}>
+          }`}
+        >
           <ToggleOpenButton open={sidebarOpen} toggleSidebar={toggleSidebar} />
         </div>
 
-        {/* This is a bit hacky -- just quickly prototyping and these margins were the ones that worked! */}
-        <main className={`py-14 -my-1 ${sidebarOpen ? 'lg:pl-72' : 'lg:pl-5'} h-full`}>
-          <div className="flex items-center px-5 sm:px-7 lg:px-9 pb-8 -my-4">
+        <main className={`${sidebarOpen ? 'lg:pl-72' : 'lg:pl-5'} h-full flex flex-col`}>
+          <div className="flex items-center px-5 sm:px-7 lg:px-9 h-14 flex-shrink-0">
             <BreadCrumb />
           </div>
-          <div className="flex h-full flex-col">
-            <div className="px-4 sm:px-6 lg:px-2 max-h-full h-full flex-1"> {props.children}</div>
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 sm:px-6 lg:px-2 h-full flex-1 min-h-0">{props.children}</div>
           </div>
         </main>
       </div>
