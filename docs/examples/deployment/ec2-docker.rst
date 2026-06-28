@@ -55,5 +55,5 @@ Deploy to AWS
 Related Guides
 --------------
 
-* :ref:`S3 Tracking and AWS <aws-tracking>`
-* :ref:`AWS Deployment overview <aws-deployment>`
+* :ref:`S3 Tracking on AWS <s3-tracking-aws>`
+* :ref:`AWS Deployment overview <aws-deployment-example>`
