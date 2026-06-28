@@ -42,11 +42,11 @@ module "networking" {
 module "compute" {
   source = "./modules/compute"
 
-  environment        = var.environment
-  instance_type      = var.instance_type
-  key_name           = var.key_name
-  app_port           = var.app_port
-  security_group_id  = module.networking.security_group_id
-  enable_monitoring  = var.enable_monitoring
-  root_volume_size   = var.root_volume_size
+  environment       = var.environment
+  instance_type     = var.instance_type
+  key_name          = var.key_name
+  app_port          = var.app_port
+  security_group_id = module.networking.security_group_id
+  enable_monitoring = var.enable_monitoring
+  root_volume_size  = var.root_volume_size
 }

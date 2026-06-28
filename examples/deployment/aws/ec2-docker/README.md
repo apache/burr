@@ -112,6 +112,10 @@ curl -X POST http://<public_ip>:8000/run -H "Content-Type: application/json" -d 
   - Runs the container with `--restart=unless-stopped`
 - The app exposes port 8000 (configurable via `app_port` variable)
 
+> **Note:** The user_data script clones from `apache/burr` main branch. This path only
+> works once this example is merged to main. For pre-merge testing on EC2, edit
+> `terraform/modules/compute/templates/user_data.sh.tpl` to point at your fork and branch.
+
 ## Verify the Deployment
 
 ```bash
