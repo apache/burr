@@ -77,3 +77,8 @@
 **/*.gif
 **/*.ico
 **/*.jpg
+
+# burr-redirect: non-ASF PyPI redirect package, not part of the ASF source release.
+# The directory carries ASF-licensed templates but is not voted on as part of
+# any apache-burr release artifact.
+burr-redirect/**
