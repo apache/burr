@@ -30,9 +30,9 @@ See the full example and step-by-step guide:
 * Source: `GitHub <https://github.com/apache/burr/tree/main/examples/deployment/aws/ec2-docker>`_
 * ``examples/deployment/aws/ec2-docker/README.md``
 
-----------
+-----------
 Quick Start
-----------
+-----------
 
 .. code-block:: bash
 
@@ -41,9 +41,9 @@ Quick Start
     docker run -p 8000:8000 burr-ec2-example
     curl -X POST http://localhost:8000/run -H "Content-Type: application/json" -d '{"number": 5}'
 
------------
+-------------
 Deploy to AWS
------------
+-------------
 
 .. code-block:: bash
 
