@@ -66,10 +66,10 @@ export const ProjectListTable = (props: { projects: Project[]; includeAnnotation
           return (
             <TableRow
               key={project.id}
-              className="hover:bg-gray-50 cursor-pointer"
+              className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
               onClick={() => navigate(`/project/${project.id}`)}
             >
-              <TableCell className="font-semibold text-gray-700">
+              <TableCell className="font-semibold text-gray-700 dark:text-gray-200">
                 <div className="flex flex-row gap-2">
                   {chipType !== undefined && <Chip label={chipType} chipType={chipType}></Chip>}
                   {projectName}

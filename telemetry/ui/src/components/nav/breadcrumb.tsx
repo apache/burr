@@ -67,11 +67,13 @@ export const BreadCrumb = () => {
                     <path d="M5.555 17.776l8-16 .894.448-8 16-.894-.448z" />
                   </svg>
                   {isNullPK ? (
-                    <span className="ml-4 text-sm font-medium text-gray-200">no primary key</span>
+                    <span className="ml-4 text-sm font-medium text-gray-200 dark:text-gray-600">
+                      no primary key
+                    </span>
                   ) : (
                     <Link
                       to={page.href}
-                      className="ml-4 text-sm font-medium text-gray-500 hover:text-gray-700"
+                      className="ml-4 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                       aria-current={page.current ? 'page' : undefined}
                     >
                       {decodeURIComponent(page.name)}

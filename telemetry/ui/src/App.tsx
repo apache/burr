@@ -31,6 +31,7 @@ import { StreamingChatbotWithTelemetry } from './examples/StreamingChatbot';
 import { AdminView } from './components/routes/AdminView';
 import { AnnotationsViewContainer } from './components/routes/app/AnnotationsView';
 import { DeepResearcherWithTelemetry } from './examples/DeepResearcher';
+import { useTheme } from './hooks/useTheme';
 
 /**
  * Basic application. We have an AppContainer -- this has a breadcrumb and a sidebar.
@@ -48,6 +49,9 @@ import { DeepResearcherWithTelemetry } from './examples/DeepResearcher';
  * @returns A rendered application object
  */
 const App = () => {
+  // Initialize theme at the app root so the `dark` class is applied on load
+  // (respects system preference, falls back to stored manual override).
+  useTheme();
   return (
     <QueryClientProvider client={new QueryClient()}>
       <Router basename={window.__BURR_BASE_PATH__ || ''}>

@@ -34,5 +34,5 @@ module.exports = {
   plugins: [
     require("tailwindcss-question-mark"),
   ],
-  darkMode: 'false',
+  darkMode: 'class',
 };
