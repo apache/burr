@@ -32,28 +32,23 @@ This deploys a single-tenant Burr UI server that:
 - Is accessible only via SSM port forwarding (no public internet exposure)
 - Uses a single EC2 instance (not horizontally scaled — by design)
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ VPC (10.0.0.0/16)                                       │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │ Private Subnet                                  │    │
-│  │                                                 │    │
-│  │  ┌──────────────────────────┐                   │    │
-│  │  │ EC2 (t3.small)           │                   │    │
-│  │  │ - burr --no-open         │                   │    │
-│  │  │ - port 7241              │                   │    │
-│  │  │ - BURR_S3_BUCKET=...     │──── reads ──── S3 │    │
-│  │  └──────────────────────────┘                   │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  SSM VPC Endpoints (ssm, ssmmessages, ec2messages)      │
-│  NAT Gateway (outbound for pip install)                 │
-└─────────────────────────────────────────────────────────┘
-         │
-         │ SSM port-forward (your laptop)
-         ▼
-   http://localhost:7241
+```mermaid
+graph TB
+    subgraph VPC["VPC (10.0.0.0/16)"]
+        subgraph Private["Private Subnet"]
+            EC2["EC2 (t3.small)<br/>burr --no-open<br/>port 7241<br/>BURR_S3_BUCKET=..."]
+        end
+        NAT["NAT Gateway"]
+        SSM_EP["SSM VPC Endpoints"]
+    end
+
+    S3["S3 Bucket<br/>(existing tracking data)"]
+    User["Your Laptop<br/>http://localhost:7241"]
+
+    EC2 -->|"reads tracking logs"| S3
+    EC2 -->|"outbound via NAT"| NAT
+    EC2 --- SSM_EP
+    User -->|"SSM port-forward 7241"| SSM_EP
 ```
 
 ## Prerequisites
