@@ -36,7 +36,7 @@ from aiobotocore import session
 from fastapi import FastAPI
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
-from tortoise import functions, transactions
+from tortoise import Tortoise, functions, transactions
 from tortoise.contrib.fastapi import RegisterTortoise
 from tortoise.expressions import Q
 
@@ -448,6 +448,7 @@ class SQLiteS3Backend(
         logger.info(f"Scanning log data for project: {project.name}")
         async with self._session.create_client("s3") as client:
             paginator = client.get_paginator("list_objects_v2")
+            cap_reached = False
             async for result in paginator.paginate(
                 Bucket=self._bucket,
                 Prefix=f"{self._data_prefix}/{project.name}/",
@@ -460,7 +461,10 @@ class SQLiteS3Backend(
                     logger.info(f"Found new file: {key}")
                     paths_to_update.append(DataFile.from_path(key, created_date=last_modified))
                     if len(paths_to_update) >= max_paths:
+                        cap_reached = True
                         break
+                if cap_reached:
+                    break
         logger.info(f"Found {len(paths_to_update)} new files to index")
         return paths_to_update
 
@@ -639,7 +643,15 @@ class SQLiteS3Backend(
     async def lifespan(self, app: FastAPI):
         if not os.path.exists(dirname := os.path.dirname(settings.DB_PATH)):
             os.mkdir(dirname)
-        async with RegisterTortoise(app, config=settings.TORTOISE_ORM, add_exception_handlers=True):
+        async with RegisterTortoise(
+            app,
+            config=settings.TORTOISE_ORM,
+            add_exception_handlers=True,
+        ):
+            # Ensure index tables exist on first start (no-op if tables already
+            # exist from a downloaded snapshot). safe=True uses CREATE TABLE IF
+            # NOT EXISTS, so it never clobbers existing data.
+            await Tortoise.generate_schemas(safe=True)
             yield
 
     async def list_projects(self, request: fastapi.Request) -> Sequence[schema.Project]:
