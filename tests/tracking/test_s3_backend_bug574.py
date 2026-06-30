@@ -67,6 +67,11 @@ def mock_s3(s3_bucket_name):
     """Create a mock S3 bucket using moto."""
     if not HAS_MOTO:
         pytest.skip("moto not installed")
+
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+
     with mock_aws():
         import boto3
 
