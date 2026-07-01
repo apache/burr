@@ -36,6 +36,7 @@ level importlib.import_module calls in burr/tracking/server/run.py.
 import argparse
 import json
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -45,6 +46,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 
 def _free_port() -> int:
@@ -79,7 +81,49 @@ def _poll_url(url: str, timeout_s: int = 30, server_proc: "subprocess.Popen | No
     return False
 
 
-def main() -> None:
+def _poll_projects(
+    base_url: str,
+    project_name: str,
+    timeout_s: int = 30,
+    server_proc: "subprocess.Popen | None" = None,
+) -> bool:
+    """Poll /api/v0/projects until project_name appears or timeout.
+
+    The Burr server discovers tracking data from the filesystem on demand, so
+    there is a short lag between a tracked app writing its data and the server
+    reporting the project over the API. Polling is more reliable than a fixed
+    sleep because it succeeds as soon as the data is visible and bails early
+    if the server process has already died.
+    """
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if server_proc is not None and server_proc.poll() is not None:
+            return False
+        try:
+            with urllib.request.urlopen(f"{base_url}/api/v0/projects", timeout=2) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if project_name in [p.get("name") for p in data]:
+                        return True
+        except (urllib.error.URLError, ConnectionResetError, TimeoutError):
+            pass
+        time.sleep(1)
+    return False
+
+
+def _should_cleanup(explicit: Optional[bool]) -> bool:
+    """Return True if the work directory should be removed after the run.
+
+    Priority: explicit flag > GITHUB_ACTIONS env var > default (clean locally).
+    In GitHub Actions the workspace is preserved so the upload-artifact step
+    can capture it on failure; locally it is cleaned up by default.
+    """
+    if explicit is not None:
+        return explicit
+    return os.environ.get("GITHUB_ACTIONS") != "true"
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", required=True, help="Path to the wheel to smoke-test")
     parser.add_argument(
@@ -99,13 +143,28 @@ def main() -> None:
         default=45,
         help="Seconds to wait for the server to become ready",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--cleanup",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Remove work directory after run. "
+            "Defaults to True locally and False in GitHub Actions "
+            "(so CI can upload the workspace as a debug artifact)."
+        ),
+    )
+    return parser
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
 
     wheel_path = Path(args.wheel).resolve()
     if not wheel_path.is_file():
         _fail(f"Wheel not found: {wheel_path}")
 
     port = args.port if args.port else _free_port()
+    should_cleanup = _should_cleanup(args.cleanup)
 
     # Fresh working dirs, outside of any source tree
     work_dir = Path(tempfile.mkdtemp(prefix="burr-smoke-"))
@@ -118,6 +177,7 @@ def main() -> None:
     _log(f"Workspace: {work_dir}")
     _log(f"Python: {args.python}")
     _log(f"Wheel: {wheel_path}")
+    _log(f"Cleanup after run: {should_cleanup}")
 
     server_proc = None
     try:
@@ -149,6 +209,9 @@ def main() -> None:
         )
 
         # 4. Start server from outside the source tree so CWD can't shadow the install.
+        # start_new_session=True puts the server and all its children (uvicorn) into a
+        # dedicated process group. This lets us send SIGTERM to the entire group on
+        # teardown, preventing orphaned uvicorn processes from holding the port.
         _log(f"Starting burr server on port {port}...")
         env = os.environ.copy()
         env["burr_path"] = str(burr_data_dir)
@@ -160,6 +223,7 @@ def main() -> None:
                 env=env,
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
 
         base_url = f"http://127.0.0.1:{port}"
@@ -173,7 +237,15 @@ def main() -> None:
             _fail("Server did not become ready")
         _log("Server is up")
 
-        # 5. Run a tracked Burr app as a separate process using the venv.
+        # 5. Verify the UI is served at the web root. If the frontend build is
+        # missing from the wheel, GET / returns 404 even though the API works.
+        _log("Checking UI is served at GET /...")
+        with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+            if resp.status != 200:
+                _fail(f"GET / returned HTTP {resp.status}, expected 200 — UI may be missing from wheel")
+        _log("UI served correctly")
+
+        # 6. Run a tracked Burr app as a separate process using the venv.
         _log("Running tracked Burr app...")
         app_script.write_text(
             f"""\
@@ -207,27 +279,42 @@ print(f"count={{app.state['count']}} app_id={{app.uid}}")
         )
         subprocess.run([str(venv_py), str(app_script)], check=True, cwd=str(work_dir), env=env)
 
-        # 6. Verify the server sees the project.
-        _log("Verifying server sees project 'ci-smoke-test'...")
-        time.sleep(2)  # give the server a moment to pick up the filesystem change
-        with urllib.request.urlopen(f"{base_url}/api/v0/projects", timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        names = [p.get("name") for p in data]
-        if "ci-smoke-test" not in names:
-            _fail(f"Project 'ci-smoke-test' not found. Projects seen: {names}")
-        _log(f"Projects: {names}")
+        # 7. Poll until the server reports the project. The server discovers tracking
+        # data from the filesystem on demand, so there is a short lag after the app
+        # writes its data. Polling is preferable to a fixed sleep: it succeeds as soon
+        # as the data appears and gives a clear failure message on timeout.
+        _log("Waiting for server to report project 'ci-smoke-test'...")
+        if not _poll_projects(
+            base_url, "ci-smoke-test", timeout_s=30, server_proc=server_proc
+        ):
+            if server_proc.poll() is not None:
+                _log(f"Server process exited with code {server_proc.returncode}")
+            _log("--- server log ---")
+            print(server_log.read_text(), flush=True)
+            _log("--- end server log ---")
+            _fail("Project 'ci-smoke-test' never appeared in /api/v0/projects")
 
         _log("SUCCESS")
     finally:
         if server_proc is not None and server_proc.poll() is None:
-            _log("Stopping server...")
-            server_proc.send_signal(signal.SIGTERM)
+            _log("Stopping server (sending SIGTERM to process group)...")
+            try:
+                # Kill the entire process group so uvicorn (a child of burr) is also
+                # terminated. Without this, uvicorn becomes an orphan that holds the
+                # port and consumes resources after the script exits.
+                os.killpg(os.getpgid(server_proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass  # process group already gone
             try:
                 server_proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 server_proc.kill()
-        # Leave work_dir intact in CI (uploadable as artifact); also leave it locally
-        # on failure for easier debugging. Caller can rm -rf /tmp/burr-smoke-* to clean up.
+
+        if should_cleanup:
+            _log(f"Cleaning up workspace {work_dir} ...")
+            shutil.rmtree(work_dir, ignore_errors=True)
+        else:
+            _log(f"Workspace preserved at {work_dir} (upload as CI artifact if needed)")
 
 
 if __name__ == "__main__":
