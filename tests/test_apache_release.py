@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import hashlib
 import importlib.util
 import sys
 from argparse import Namespace
@@ -163,9 +164,30 @@ def test_cmd_promote_dry_run_uses_server_copy_without_committing(monkeypatch, tm
     assert release.cmd_promote(args) is True
     # only the RC is checked out; the release tree is never downloaded
     assert len(calls["checkout"]) == 1
+
     assert calls["checkout"][0][0].endswith("/0.42.0-incubating-RC1")
     source_url, target_url, message, apache_id, dry_run = calls["promote"]
     assert source_url.endswith("/0.42.0-incubating-RC1")
     assert target_url == "https://dist.apache.org/repos/dist/release/incubator/burr/0.42.0"
     assert apache_id == "hari"
     assert dry_run is True
+
+
+def test_verify_parser_accepts_skip_signing():
+    parser = release._build_parser()
+    args = parser.parse_args(["verify", "0.42.0", "0", "--skip-signing"])
+    assert args.skip_signing is True
+
+
+def test_cmd_verify_skip_signing_succeeds_without_asc_files(tmp_path):
+    version = "0.42.0"
+    content = b"fake artifact content"
+    sha = hashlib.sha512(content).hexdigest()
+
+    artifact_name = f"apache-burr-{version}-incubating-src.tar.gz"
+    (tmp_path / artifact_name).write_bytes(content)
+    (tmp_path / f"{artifact_name}.sha512").write_text(f"{sha}  {artifact_name}\n")
+    # No .asc file — simulates a --skip-signing build
+
+    args = Namespace(version=version, rc_num="0", artifacts_dir=str(tmp_path), skip_signing=True)
+    assert release.cmd_verify(args) is True

@@ -1385,6 +1385,7 @@ def cmd_verify(args) -> bool:
     """Handle 'verify' subcommand."""
     _print_section(f"Verifying Artifacts - v{args.version}-RC{args.rc_num}")
 
+    skip_signing = getattr(args, "skip_signing", False)
     artifacts = _collect_all_artifacts(args.version, args.artifacts_dir)
 
     if not artifacts:
@@ -1395,7 +1396,7 @@ def cmd_verify(args) -> bool:
     for artifact in artifacts:
         if artifact.endswith((".asc", ".sha512")):
             continue  # Skip signature/checksum files
-        if not _verify_artifact_complete(artifact):
+        if not _verify_artifact_complete(artifact, skip_signing=skip_signing):
             all_valid = False
 
     if all_valid:
@@ -1594,6 +1595,11 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("version", help="Version")
     verify_parser.add_argument("rc_num", help="RC number")
     verify_parser.add_argument("--artifacts-dir", default="dist")
+    verify_parser.add_argument(
+        "--skip-signing",
+        action="store_true",
+        help="Skip GPG signature verification (for builds produced with --skip-signing).",
+    )
 
     # vote-email subcommand
     vote_email_parser = subparsers.add_parser("vote-email", help="Generate release vote email")

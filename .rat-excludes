@@ -44,15 +44,12 @@
 
 # Third-party MIT-licensed files (attributed in LICENSE).
 # Most names are unique within the repo so basename matching is safe.
-# Known collisions:
-#   - utils.py: also matches our own ASF code in burr/tracking/, etc.
-#     (4 other utils.py files; all currently have ASF headers)
+# Known collision:
 #   - button.tsx: also matches telemetry/ui/src/components/common/button.tsx
 #     (our own ASF code with header)
-# A future regression in any of those collision targets would silently pass
-# RAT. Tracked as a follow-up to rename or restructure.
+# A future regression in that collision target would silently pass RAT.
 **/prompts.py
-**/utils.py
+**/deep_researcher_utils.py
 **/animated-beam.tsx
 **/animated-shiny-text.tsx
 **/blur-fade.tsx

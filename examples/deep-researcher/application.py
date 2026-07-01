@@ -32,9 +32,9 @@ except ModuleNotFoundError:
     import prompts
 
 try:
-    utils = importlib.import_module("burr.examples.deep-researcher.utils")
+    utils = importlib.import_module("burr.examples.deep-researcher.deep_researcher_utils")
 except ModuleNotFoundError:
-    import utils
+    import deep_researcher_utils as utils
 
 
 @functools.lru_cache
