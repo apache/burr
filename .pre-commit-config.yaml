@@ -78,3 +78,12 @@ repos:
         entry: npx --prefix telemetry/ui lint-staged
         pass_filenames: false
         always_run: true
+    -   id: check-asf-headers
+        name: Check ASF license headers
+        language: python
+        entry: python scripts/check_asf_headers.py
+        # Run on Python, YAML, and shell files — the source types that must
+        # carry the Apache 2.0 header. Exclusions are read from .rat-excludes
+        # at runtime so known third-party files are automatically respected.
+        types_or: [python, yaml, shell]
+        pass_filenames: true
