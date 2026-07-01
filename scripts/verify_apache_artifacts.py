@@ -194,6 +194,46 @@ def _wheel_file_bytes(artifact_path: str) -> dict[str, bytes]:
         return {name: wheel.read(name) for name in wheel.namelist() if not name.endswith("/")}
 
 
+def _wheel_content_hashes(wheel_path: str) -> dict[str, str]:
+    """Return {member_path: sha256_hex} for all non-directory members of a wheel.
+
+    RECORD is excluded because it is a manifest that lists other files' hashes.
+    Two wheels built from identical source at different times will produce
+    different RECORD files, but their other content will be the same.
+    """
+    result: dict[str, str] = {}
+    with zipfile.ZipFile(wheel_path, "r") as zf:
+        for name in zf.namelist():
+            if name.endswith("/"):
+                continue  # directory entry — no content to hash
+            if PurePosixPath(name).name == "RECORD":
+                continue  # manifest of other files' hashes — legitimately differs
+            result[name] = hashlib.sha256(zf.read(name)).hexdigest()
+    return result
+
+
+def _compare_wheel_contents(wheel_a: str, wheel_b: str) -> tuple[bool, list[str]]:
+    """Compare two wheels by file content hash, ignoring zip metadata and RECORD.
+
+    Returns (all_match, list_of_difference_descriptions). Uses content hashes
+    rather than whole-file SHA because zip timestamps make binary comparison
+    fail for wheels built from the same source at different times.
+    """
+    hashes_a = _wheel_content_hashes(wheel_a)
+    hashes_b = _wheel_content_hashes(wheel_b)
+    name_a = os.path.basename(wheel_a)
+    name_b = os.path.basename(wheel_b)
+    diffs: list[str] = []
+    for key in sorted(set(hashes_a) | set(hashes_b)):
+        if key not in hashes_b:
+            diffs.append(f"only in {name_a}: {key}")
+        elif key not in hashes_a:
+            diffs.append(f"only in {name_b}: {key}")
+        elif hashes_a[key] != hashes_b[key]:
+            diffs.append(f"content differs: {key}")
+    return len(diffs) == 0, diffs
+
+
 def _find_files_by_basename(file_bytes: dict[str, bytes], basename: str) -> list[str]:
     matches = []
     for path in file_bytes:
@@ -558,8 +598,12 @@ def _check_licenses_with_rat(
 
         print("  Extracting archive...")
         try:
-            with tarfile.open(artifact_path, "r:gz") as tar:
-                _safe_extract_tar(tar, extract_dir)
+            if artifact_path.endswith(".whl"):
+                with zipfile.ZipFile(artifact_path, "r") as whl:
+                    whl.extractall(extract_dir)
+            else:
+                with tarfile.open(artifact_path, "r:gz") as tar:
+                    _safe_extract_tar(tar, extract_dir)
             print("    ✓ Extracted to temp directory")
         except Exception as exc:
             print(f"    ✗ Error extracting archive: {exc}")
@@ -703,15 +747,17 @@ def verify_licenses(
         _fail("Java not found. Required for Apache RAT.")
 
     tar_artifacts = [name for name in _artifact_files(artifacts_dir) if name.endswith(".tar.gz")]
-    if not tar_artifacts:
-        print(f"⚠️  No tar.gz artifacts found in {artifacts_dir}")
-        summary.fail("Apache RAT", "no tar.gz artifacts found")
+    wheel_artifacts = [name for name in _artifact_files(artifacts_dir) if name.endswith(".whl")]
+    rat_artifacts = tar_artifacts + wheel_artifacts
+    if not rat_artifacts:
+        print(f"⚠️  No tar.gz or .whl artifacts found in {artifacts_dir}")
+        summary.fail("Apache RAT", "no tar.gz or .whl artifacts found")
         return False
 
-    print(f"Found {len(tar_artifacts)} tar.gz artifact(s) to check:\n")
+    print(f"Found {len(rat_artifacts)} artifact(s) to check ({len(tar_artifacts)} tarball(s), {len(wheel_artifacts)} wheel(s)):\n")
 
     all_valid = True
-    for artifact_name in tar_artifacts:
+    for artifact_name in rat_artifacts:
         artifact_path = os.path.join(artifacts_dir, artifact_name)
         report_name = artifact_name.replace(".tar.gz", "").replace(".", "-")
         if not _check_licenses_with_rat(
@@ -881,15 +927,19 @@ def _compare_rebuilt_artifacts(
                 all_valid = False
                 continue
             rebuilt_wheel = matching_wheels[0]
-            if _sha512_for_file(release_wheel) == _sha512_for_file(rebuilt_wheel):
-                summary.pass_(f"Rebuilt wheel checksum: {release_name}")
+            match, diffs = _compare_wheel_contents(release_wheel, rebuilt_wheel)
+            if match:
+                summary.pass_(f"Rebuilt wheel contents: {release_name}")
             else:
+                for diff in diffs[:5]:
+                    print(f"    {diff}")
                 summary.fail(
-                    f"Rebuilt wheel checksum: {release_name}", "rebuilt wheel differs from release"
+                    f"Rebuilt wheel contents: {release_name}",
+                    f"{len(diffs)} file(s) differ between release and rebuilt wheel",
                 )
                 all_valid = False
     else:
-        summary.skip("Rebuilt wheel checksum", "no release wheel found")
+        summary.skip("Rebuilt wheel contents", "no release wheel found")
 
     return all_valid
 
@@ -1116,6 +1166,32 @@ def cmd_all(args: argparse.Namespace) -> bool:
     return summary.ok
 
 
+def cmd_compare_wheels(args: argparse.Namespace) -> bool:
+    """Handle 'compare-wheels' subcommand.
+
+    Compares two wheel files by their file content hashes, ignoring zip
+    metadata (timestamps) and the RECORD manifest. Exits non-zero on any
+    difference so it can be used as a CI gate.
+    """
+    _print_section("Comparing Wheel Contents")
+    for path in [args.wheel_a, args.wheel_b]:
+        if not os.path.isfile(path):
+            _fail(f"Wheel not found: {path}")
+
+    print(f"  Wheel A: {os.path.basename(args.wheel_a)}")
+    print(f"  Wheel B: {os.path.basename(args.wheel_b)}")
+
+    match, diffs = _compare_wheel_contents(args.wheel_a, args.wheel_b)
+    if match:
+        print("\n✅ Wheel contents are equivalent (same files, same content)")
+        return True
+
+    print(f"\n❌ Wheel contents differ ({len(diffs)} difference(s)):")
+    for diff in diffs:
+        print(f"    {diff}")
+    return False
+
+
 def cmd_list_contents(args: argparse.Namespace) -> None:
     list_contents(args.artifact)
 
@@ -1239,6 +1315,13 @@ Examples:
         "--artifacts-dir", default="dist", help="Directory containing artifacts (default: dist)"
     )
 
+    compare_wheels_parser = subparsers.add_parser(
+        "compare-wheels",
+        help="Compare two wheel files by content hash (ignores zip metadata and RECORD)",
+    )
+    compare_wheels_parser.add_argument("wheel_a", help="Path to first wheel")
+    compare_wheels_parser.add_argument("wheel_b", help="Path to second wheel")
+
     args = parser.parse_args()
 
     success = False
@@ -1258,6 +1341,8 @@ Examples:
             success = cmd_all(args)
         elif args.command == "twine-check":
             success = cmd_twine_check(args)
+        elif args.command == "compare-wheels":
+            success = cmd_compare_wheels(args)
         else:
             _fail(f"Unknown command: {args.command}")
     except KeyboardInterrupt:

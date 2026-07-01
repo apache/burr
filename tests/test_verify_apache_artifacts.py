@@ -16,6 +16,7 @@
 # under the License.
 
 import importlib.util
+import os
 import sys
 import tarfile
 import tempfile
@@ -157,7 +158,7 @@ def test_verify_reproducible_build_compares_rebuilt_outputs(monkeypatch):
             for result in summary.results
         )
         assert any(
-            result.name == f"Rebuilt wheel checksum: {release_wheel.name}"
+            result.name == f"Rebuilt wheel contents: {release_wheel.name}"
             and result.status == verify.PASS
             for result in summary.results
         )
@@ -261,3 +262,148 @@ def test_artifact_files_ignores_rat_reports():
         artifact_files = verify._artifact_files(str(artifacts_dir))
 
         assert artifact_files == ["apache_burr-0.41.0-py3-none-any.whl"]
+
+
+def test_wheel_content_hashes_returns_sha256_per_file(tmp_path):
+    """Returns a dict mapping each member path to its SHA256 hex digest."""
+    import hashlib
+    wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
+    content = b"hello burr"
+    _write_wheel(wheel_path, {"burr/__init__.py": content})
+
+    hashes = verify._wheel_content_hashes(str(wheel_path))
+
+    assert hashes == {"burr/__init__.py": hashlib.sha256(content).hexdigest()}
+
+
+def test_wheel_content_hashes_excludes_record_file(tmp_path):
+    """RECORD (the manifest) is excluded — it lists other files' hashes and
+    will legitimately differ between two wheels built from identical source."""
+    wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
+    _write_wheel(wheel_path, {
+        "burr/__init__.py": b"code",
+        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=abc,4\n",
+    })
+
+    hashes = verify._wheel_content_hashes(str(wheel_path))
+
+    assert "burr-1.0.dist-info/RECORD" not in hashes
+    assert "burr/__init__.py" in hashes
+
+
+def test_wheel_content_hashes_excludes_directory_entries(tmp_path):
+    """Directory entries (zip members whose name ends with /) have no content."""
+    wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
+    _write_wheel(wheel_path, {
+        "burr/": b"",
+        "burr/__init__.py": b"code",
+    })
+
+    hashes = verify._wheel_content_hashes(str(wheel_path))
+
+    assert "burr/" not in hashes
+    assert "burr/__init__.py" in hashes
+
+
+def test_compare_wheel_contents_returns_true_for_identical_content(tmp_path):
+    """Two wheels with the same files and byte content compare as equal."""
+    files = {"burr/__init__.py": b"code", "burr/core.py": b"more code"}
+    wheel_a = tmp_path / "a.whl"
+    wheel_b = tmp_path / "b.whl"
+    _write_wheel(wheel_a, files)
+    _write_wheel(wheel_b, files)
+
+    match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
+
+    assert match is True
+    assert diffs == []
+
+
+def test_compare_wheel_contents_ignores_record_differences(tmp_path):
+    """RECORD files that differ between wheels are not reported as differences."""
+    wheel_a = tmp_path / "a.whl"
+    wheel_b = tmp_path / "b.whl"
+    _write_wheel(wheel_a, {
+        "burr/__init__.py": b"code",
+        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=aaa,4\n",
+    })
+    _write_wheel(wheel_b, {
+        "burr/__init__.py": b"code",
+        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=bbb,4\n",
+    })
+
+    match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
+
+    assert match is True
+    assert diffs == []
+
+
+def test_compare_wheel_contents_detects_content_difference(tmp_path):
+    """Returns False when a file exists in both wheels but has different bytes."""
+    wheel_a = tmp_path / "a.whl"
+    wheel_b = tmp_path / "b.whl"
+    _write_wheel(wheel_a, {"burr/__init__.py": b"version = '1'"})
+    _write_wheel(wheel_b, {"burr/__init__.py": b"version = '2'"})
+
+    match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
+
+    assert match is False
+    assert any("burr/__init__.py" in d for d in diffs)
+
+
+def test_compare_wheel_contents_detects_file_missing_from_second_wheel(tmp_path):
+    """Returns False when wheel_a contains a file absent from wheel_b."""
+    wheel_a = tmp_path / "a.whl"
+    wheel_b = tmp_path / "b.whl"
+    _write_wheel(wheel_a, {"burr/__init__.py": b"code", "burr/extra.py": b"bonus"})
+    _write_wheel(wheel_b, {"burr/__init__.py": b"code"})
+
+    match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
+
+    assert match is False
+    assert any("burr/extra.py" in d for d in diffs)
+
+
+def test_compare_wheel_contents_detects_file_missing_from_first_wheel(tmp_path):
+    """Returns False when wheel_b contains a file absent from wheel_a."""
+    wheel_a = tmp_path / "a.whl"
+    wheel_b = tmp_path / "b.whl"
+    _write_wheel(wheel_a, {"burr/__init__.py": b"code"})
+    _write_wheel(wheel_b, {"burr/__init__.py": b"code", "burr/extra.py": b"bonus"})
+
+    match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
+
+    assert match is False
+    assert any("burr/extra.py" in d for d in diffs)
+
+
+def test_verify_licenses_runs_rat_on_wheel_in_addition_to_tarball(tmp_path, monkeypatch):
+    """verify_licenses must run Apache RAT on .whl artifacts as well as .tar.gz tarballs."""
+    tar_path = tmp_path / "apache-burr-0.42.0-incubating-src.tar.gz"
+    wheel_path = tmp_path / "apache_burr-0.42.0-py3-none-any.whl"
+    _write_tar_gz(tar_path, "apache-burr-0.42.0-incubating-src", {"README.md": b"content"})
+    _write_wheel(wheel_path, {"burr/__init__.py": b"content"})
+
+    rat_targets = []
+
+    def fake_check_licenses(artifact_path, rat_jar, report_name, summary, report_only=False):
+        rat_targets.append(artifact_path)
+        summary.pass_(f"RAT: {Path(artifact_path).name}")
+        return True
+
+    monkeypatch.setattr(verify, "_check_licenses_with_rat", fake_check_licenses)
+    monkeypatch.setattr(verify.shutil, "which", lambda _: "/usr/bin/java")
+
+    real_exists = os.path.exists
+    monkeypatch.setattr(
+        verify.os.path,
+        "exists",
+        lambda p: True if p == "/fake/rat.jar" else real_exists(p),
+    )
+
+    summary = verify.VerificationSummary()
+    result = verify.verify_licenses(str(tmp_path), "/fake/rat.jar", summary)
+
+    assert result is True
+    assert str(tar_path) in rat_targets
+    assert str(wheel_path) in rat_targets
