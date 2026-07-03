@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import inspect
+import sys
 import types
 import typing
 from typing import (
@@ -269,7 +270,10 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+if sys.version_info >= (3, 10):
+    PartialType = Union[Type[pydantic.BaseModel], Type[dict], types.UnionType]  # noqa: E501
+else:
+    PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -290,7 +294,7 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[PartialType],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
@@ -421,3 +425,4 @@ class PydanticTypingSystem(TypingSystem[StateModel]):
 
     def construct_state(self, data: StateModel) -> State:
         return State(model_to_dict(data))
+
