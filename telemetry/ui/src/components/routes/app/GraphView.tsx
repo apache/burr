@@ -47,17 +47,9 @@ const dagreOptions = {
   marginy: 20
 };
 
-type ActionNodeData = {
-  action: ActionModel;
+type NodeData = {
   label: string;
 };
-
-type InputNodeData = {
-  input: string;
-  label: string;
-};
-
-type NodeData = ActionNodeData | InputNodeData;
 
 type NodeType = {
   id: string;
@@ -93,10 +85,9 @@ const ActionNode = (props: { data: NodeData }) => {
     currentAction
   } = React.useContext(NodeStateProvider);
   const highlightedActions = [currentAction, ...(previousActions || [])].reverse();
-  const data = props.data as ActionNodeData;
-  const name = data.action.name;
+  const name = props.data.label;
   const indexOfAction = highlightedActions.findIndex(
-    (step) => step?.step_start_log.action === data.action.name
+    (step) => step?.step_start_log.action === name
   );
   const shouldHighlight = indexOfAction !== -1;
   const step = highlightedActions[indexOfAction];
@@ -267,7 +258,7 @@ const convertApplicationToGraph = (
   const allActionNodes = stateMachine.actions.map((action) => ({
     id: action.name,
     type: 'action',
-    data: { action, label: action.name },
+    data: { label: action.name },
     position: { x: 0, y: 0 }
   }));
   // TODO -- consider displaying optional inputs
@@ -275,7 +266,7 @@ const convertApplicationToGraph = (
     (action.inputs || []).filter(shouldDisplayInput).map((input) => ({
       id: inputUniqueID(action, input),
       type: 'externalInput',
-      data: { input, label: input },
+      data: { label: input },
       position: { x: 0, y: 0 }
     }))
   );
@@ -336,17 +327,16 @@ export const _Graph = (props: {
 
   const { fitView } = useReactFlow();
 
-  // Keyed on structure rather than object identity: polling refetches produce a new
-  // stateMachine object every 500ms, which must not trigger a full relayout.
+  // Keyed on the rendered structure rather than object identity: refetches and focus
+  // switches that don't change the graph must not trigger a full relayout.
   // See https://github.com/apache/burr/issues/833
-  const structureKey = useMemo(
-    () =>
-      JSON.stringify([
-        props.stateMachine.actions.map((action) => [action.name, action.inputs]),
-        props.stateMachine.transitions.map((t) => [t.from_, t.to, t.condition])
-      ]),
-    [props.stateMachine]
-  );
+  const structureKey = useMemo(() => {
+    const [nextNodes, nextEdges] = convertApplicationToGraph(props.stateMachine, showInputs);
+    return JSON.stringify([
+      nextNodes.map((node) => [node.id, node.type]),
+      nextEdges.map((edge) => [edge.source, edge.target, edge.data.condition])
+    ]);
+  }, [props.stateMachine, showInputs]);
 
   useLayoutEffect(() => {
     const [nextNodes, nextEdges] = convertApplicationToGraph(props.stateMachine, showInputs);
@@ -359,8 +349,9 @@ export const _Graph = (props: {
         window.requestAnimationFrame(() => fitView());
       }
     );
+    // showInputs is covered by structureKey: toggling it changes the rendered node ids
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInputs, structureKey, fitView]);
+  }, [structureKey, fitView]);
 
   const nodeState = useMemo(
     () => ({
