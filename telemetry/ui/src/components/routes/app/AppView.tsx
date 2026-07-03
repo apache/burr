@@ -542,7 +542,7 @@ export const AppView = (props: {
                   stateMachine={data.application}
                   currentAction={currentStep}
                   // highlightedActions={previousActions}
-                  highlightedActions={[]}
+                  highlightedActions={undefined}
                   hoverAction={hoverAction}
                 />
               </div>
@@ -555,7 +555,7 @@ export const AppView = (props: {
             stateMachine={currentFocusStepsData?.application || data.application}
             // stateMachine={data.application}
             // highlightedActions={previousActions}
-            highlightedActions={[]}
+            highlightedActions={undefined}
             hoverAction={hoverAction}
             currentActionLocation={currentSequenceLocation}
             displayGraphAsTab={displayGraphAsTabs} // in this case we want the graph as a tab
