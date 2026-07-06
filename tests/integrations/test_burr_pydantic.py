@@ -779,3 +779,114 @@ async def test_end_to_end_pydantic_streaming_async(tmpdir):
     assert state.data.count == 20
     assert isinstance(result, IntermediateModel)
     assert result.result == 20
+
+
+# --- Tests for stream_type union support (Issue #607) ---
+
+
+import sys
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Union type syntax with | requires Python 3.10+",
+)
+def test_validate_streaming_signature_accepts_union_stream_type():
+    """Regression test: _validate_and_extract_signature_types_streaming should accept
+    a union stream_type (e.g. ModelA | ModelB) on Python 3.10+.
+
+    Before the fix, PartialType did not include types.UnionType, causing a TypeError
+    when a union type was passed as stream_type.
+    """
+    from burr.integrations.pydantic import _validate_and_extract_signature_types_streaming
+
+    class ModelA(BaseModel):
+        value: int
+
+    class ModelB(BaseModel):
+        label: str
+
+    def dummy_fn(
+        state: AppStateModel,
+    ) -> Generator[Tuple[ModelA, Optional[AppStateModel]], None, None]:
+        yield ModelA(value=1), state
+
+    union_type = ModelA | ModelB  # This is types.UnionType on Python 3.10+
+
+    state_in, state_out, resolved_stream_type = _validate_and_extract_signature_types_streaming(
+        dummy_fn,
+        stream_type=union_type,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    assert state_in is AppStateModel
+    assert state_out is AppStateModel
+    assert resolved_stream_type is union_type
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Union type syntax with | requires Python 3.10+",
+)
+def test_pydantic_streaming_action_accepts_union_stream_type():
+    """Regression test: @pydantic_streaming_action should accept a union stream_type
+    on Python 3.10+.
+
+    This is the user-facing decorator that was broken by issue #607.
+    """
+
+    class ResultA(BaseModel):
+        value: int
+
+    class ResultB(BaseModel):
+        label: str
+
+    @pydantic_streaming_action(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=ResultA | ResultB,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel,
+    ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+        state.count += 1
+        yield ResultA(value=state.count), state
+
+    assert hasattr(act, "bind")
+    action_fn = getattr(act, FunctionBasedAction.ACTION_FUNCTION, None)
+    assert action_fn is not None
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Union type syntax with | requires Python 3.10+",
+)
+def test_streaming_action_pydantic_decorator_accepts_union_stream_type():
+    """Regression test: @streaming_action.pydantic should accept a union stream_type
+    on Python 3.10+, matching pydantic_streaming_action behavior.
+    """
+
+    class ResultA(BaseModel):
+        value: int
+
+    class ResultB(BaseModel):
+        label: str
+
+    @streaming_action.pydantic(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=ResultA | ResultB,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel,
+    ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+        state.count += 1
+        yield ResultA(value=state.count), state
+
+    assert hasattr(act, "bind")
+    assert getattr(act, FunctionBasedAction.ACTION_FUNCTION, None) is not None
+
