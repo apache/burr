@@ -152,3 +152,17 @@ def test_examples_include_exclude_coverage():
         errors.append(summary)
 
     assert not errors, "\n".join(errors)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib requires Python 3.11+")
+def test_license_files_include_combined_project_license():
+    """Ensure package metadata advertises the combined project license file."""
+    project_root = Path(__file__).parent.parent
+    pyproject_path = project_root / "pyproject.toml"
+
+    with open(pyproject_path, "rb") as f:
+        config = tomllib.load(f)
+
+    license_files = config.get("project", {}).get("license-files", [])
+
+    assert license_files == ["LICENSE", "LICENSE-wheel", "NOTICE", "DISCLAIMER"]
