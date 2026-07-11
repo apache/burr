@@ -1184,3 +1184,62 @@ class TestTypeEraser:
         from burr.core import type_eraser as te
 
         assert te is type_eraser
+
+
+def test_capture_as_returns_serializable_dict():
+    import json
+
+    from burr.core.action import capture_as
+
+    handler = capture_as("error")
+    state = State()
+    try:
+        raise ValueError("boom")
+    except ValueError as e:
+        new_state = handler(state, e)
+    record = new_state["error"]
+    assert record["type"] == "ValueError"
+    assert record["message"] == "boom"
+    assert "traceback" in record
+    # must be JSON-serializable -- no raw Exception object
+    json.dumps(record)
+
+
+def test_capture_as_include_traceback_toggle():
+    from burr.core.action import capture_as
+
+    state = State()
+    try:
+        raise RuntimeError("nope")
+    except RuntimeError as e:
+        with_tb = capture_as("error", include_traceback=True)(state, e)
+        without_tb = capture_as("error", include_traceback=False)(state, e)
+    assert "traceback" in with_tb["error"]
+    assert "traceback" not in without_tb["error"]
+
+
+def test_action_decorator_accepts_on_error_and_attaches_it():
+    from burr.core.action import FunctionBasedAction, capture_as
+
+    handler = capture_as("error")
+
+    @action(reads=[], writes=["error"], on_error=handler)
+    def my_action(state: State) -> Tuple[dict, State]:
+        return {}, state
+
+    fba = getattr(my_action, FunctionBasedAction.ACTION_FUNCTION)
+    assert fba.on_error is handler
+
+
+def test_bind_preserves_on_error():
+    from burr.core.action import FunctionBasedAction, capture_as
+
+    handler = capture_as("error")
+
+    @action(reads=[], writes=["error"], on_error=handler)
+    def my_action(state: State, z: int) -> Tuple[dict, State]:
+        return {}, state
+
+    bound = my_action.bind(z=2)
+    fba = getattr(bound, FunctionBasedAction.ACTION_FUNCTION)
+    assert fba.on_error is handler

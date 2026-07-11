@@ -22,6 +22,7 @@ import copy
 import inspect
 import sys
 import textwrap
+import traceback
 import types
 import typing
 from collections.abc import AsyncIterator
@@ -378,6 +379,82 @@ class Action(Function, Reducer, abc.ABC):
         :return: List of string tags
         """
         return []
+
+    @property
+    def on_error(self) -> Optional[Callable[[State, Exception], State]]:
+        """Returns the error handler associated with this action, if any.
+
+        An error handler is any callable ``(State, Exception) -> State``. If it is set
+        and the action raises, the application will call it to produce a new state
+        (suppressing the exception) instead of re-raising. See
+        :py:func:`capture_as <burr.core.action.capture_as>` for a built-in handler.
+
+        :return: The error handler callable, or None if not set
+        """
+        return getattr(self, "_on_error", None)
+
+
+class capture_as:
+    """Error handler that suppresses an exception and records a JSON-serializable
+    summary of it into the given state field.
+
+    Use this with the ``on_error`` parameter of the :py:func:`@action <burr.core.action.action>`
+    decorator, or with :py:meth:`ApplicationBuilder.with_error_handling
+    <burr.core.application.ApplicationBuilder.with_error_handling>`:
+
+    .. code-block:: python
+
+        @action(reads=[], writes=["output"], on_error=capture_as("error"))
+        def flaky(state: State) -> tuple[dict, State]:
+            result = {"output": call_some_api(...)}
+            return result, state.update(**result)
+
+        @action(reads=["error"], writes=[])
+        def handler(state: State) -> tuple[dict, State]:
+            ...  # inspect/reset state["error"], then route onward
+
+        app = (
+            ApplicationBuilder()
+            .with_actions(flaky=flaky, handler=handler)
+            # the capture field MUST be initialized -- expr() raises on a missing key,
+            # so seed ``error`` to None so the wildcard condition is safe to evaluate
+            # on every step before any exception has occurred.
+            .with_state(error=None)
+            .with_transitions(("*", "handler", expr("error is not None")))
+            .with_entrypoint("flaky")
+            .build()
+        )
+
+    Note the captured field need NOT appear in the action's ``writes`` -- the handler
+    writes it directly, bypassing reducer write-validation. When the action raises,
+    ``state["error"]`` is set to a JSON-serializable dict like::
+
+        {"type": "ValueError", "message": "...", "traceback": "..."}
+
+    which the wildcard transition above then routes on.
+    """
+
+    def __init__(self, field: str, include_traceback: bool = True):
+        """:param field: State field to write the error record to.
+        :param include_traceback: Whether to include the formatted traceback string.
+        """
+        self.field = field
+        self.include_traceback = include_traceback
+
+    def __call__(self, state: State, exception: Exception) -> State:
+        record = {"type": type(exception).__name__, "message": str(exception)}
+        if self.include_traceback:
+            # Formatting must never fail -- a handler that raises would mask the
+            # original exception in the calling context. Fall back to a safe
+            # placeholder if traceback formatting blows up (e.g. corrupted
+            # traceback objects or pathological custom exceptions).
+            try:
+                record["traceback"] = "".join(
+                    traceback.format_exception(type(exception), exception, exception.__traceback__)
+                )
+            except Exception as e:  # noqa: BLE001
+                record["traceback"] = f"<Traceback formatting failed: {e}>"
+        return state.update(**{self.field: record})
 
 
 class Condition(Function):
@@ -806,6 +883,7 @@ class FunctionBasedAction(SingleStepAction):
         originating_fn: Optional[Callable] = None,
         schema: ActionSchema = DEFAULT_SCHEMA,
         tags: Optional[List[str]] = None,
+        on_error: Optional[Callable[[State, Exception], State]] = None,
     ):
         """Instantiates a function-based action with the given function, reads, and writes.
         The function must take in a state and return a tuple of (result, new_state).
@@ -815,6 +893,8 @@ class FunctionBasedAction(SingleStepAction):
         :param writes: Keys that the function writes to the state
         :param bound_params: Prior bound parameters
         :param input_spec: Specification for inputs. Will derive from function if not provided.
+        :param on_error: Optional error handler ``(State, Exception) -> State``. If set and the
+            action raises, the exception is suppressed and the returned state is used instead.
         """
         super(FunctionBasedAction, self).__init__()
         self._originating_fn = originating_fn if originating_fn is not None else fn
@@ -834,6 +914,7 @@ class FunctionBasedAction(SingleStepAction):
         )
         self._schema = schema
         self._tags = tags if tags is not None else []
+        self._on_error = on_error
 
     @property
     def fn(self) -> Callable:
@@ -877,6 +958,7 @@ class FunctionBasedAction(SingleStepAction):
             originating_fn=self._originating_fn,
             schema=self._schema,
             tags=self._tags,
+            on_error=self._on_error,
         )
 
     def run_and_update(self, state: State, **run_kwargs) -> tuple[dict, State]:
@@ -1473,7 +1555,13 @@ class action:
             tags=tags,
         )
 
-    def __init__(self, reads: List[str], writes: List[str], tags: Optional[List[str]] = None):
+    def __init__(
+        self,
+        reads: List[str],
+        writes: List[str],
+        tags: Optional[List[str]] = None,
+        on_error: Optional[Callable[[State, Exception], State]] = None,
+    ):
         """Decorator to create a function-based action. This is user-facing.
         Note that, in the future, with typed state, we may not need this for
         all cases.
@@ -1484,17 +1572,24 @@ class action:
 
         :param reads: Items to read from the state
         :param writes: Items to write to the state
+        :param tags: Optional list of tags to associate with this action
+        :param on_error: Optional error handler ``(State, Exception) -> State``. If set and the
+            action raises, the exception is suppressed and the returned state is used instead.
+            See :py:func:`capture_as <burr.core.action.capture_as>` for a built-in handler.
         :return: The decorator to assign the function as an action
         """
         self.reads = reads
         self.writes = writes
         self.tags = tags
+        self.on_error = on_error
 
     def __call__(self, fn) -> FunctionRepresentingAction:
         setattr(
             fn,
             FunctionBasedAction.ACTION_FUNCTION,
-            FunctionBasedAction(fn, self.reads, self.writes, tags=self.tags),
+            FunctionBasedAction(
+                fn, self.reads, self.writes, tags=self.tags, on_error=self.on_error
+            ),
         )
         setattr(fn, "bind", types.MethodType(bind, fn))
         return fn
@@ -1537,7 +1632,12 @@ class streaming_action:
             tags=tags,
         )
 
-    def __init__(self, reads: List[str], writes: List[str], tags: Optional[List[str]] = None):
+    def __init__(
+        self,
+        reads: List[str],
+        writes: List[str],
+        tags: Optional[List[str]] = None,
+    ):
         """Decorator to create a streaming function-based action. This is user-facing.
 
         If parameters are not bound, they will be interpreted as inputs and must be passed in at runtime.

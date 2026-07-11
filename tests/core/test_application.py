@@ -4299,3 +4299,189 @@ def test_initialize_from_applies_override_state_values():
     app = builder.build()
 
     assert app.state["x"] == 100
+
+
+@action(reads=["error"], writes=[])
+def _error_route_handler(state: State) -> Tuple[dict, State]:
+    return {}, state
+
+
+def _build_flaky_app(builder_handler=None, action_handler=None):
+    """Builds an app where 'flaky' raises, routes via wildcard to 'handler'
+    when error is set. flaky declares writes=['count'] but never writes it
+    (it raises); the error field is written by the on_error handler and must
+    NOT trip writes-validation."""
+    from burr.core.action import capture_as  # noqa: F401
+
+    @action(reads=[], writes=["count"], on_error=action_handler)
+    def flaky(state: State) -> Tuple[dict, State]:
+        raise ValueError("boom")
+
+    b = (
+        ApplicationBuilder()
+        .with_actions(flaky=flaky, handler=_error_route_handler)
+        .with_transitions(("*", "handler", expr("error is not None")))
+        .with_entrypoint("flaky")
+        .with_state(error=None)
+    )
+    if builder_handler is not None:
+        b = b.with_error_handling(builder_handler)
+    return b.build()
+
+
+def test_on_error_capture_as_suppresses_and_routes_to_wildcard_handler_sync():
+    import json
+
+    from burr.core.action import capture_as
+
+    app = _build_flaky_app(action_handler=capture_as("error"))
+    last_action, result, state = app.run(halt_after=["handler"])
+    assert last_action.name == "handler"
+    assert isinstance(state["error"], dict)
+    assert state["error"]["type"] == "ValueError"
+    assert state["error"]["message"] == "boom"
+    # JSON-serializable -- no raw Exception object
+    json.dumps(state["error"])
+
+
+async def test_on_error_capture_as_suppresses_and_routes_to_wildcard_handler_async():
+    import json
+
+    from burr.core.action import capture_as
+
+    @action(reads=[], writes=["count"], on_error=capture_as("error"))
+    async def flaky(state: State) -> Tuple[dict, State]:
+        await asyncio.sleep(0)
+        raise ValueError("boom")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(flaky=flaky, handler=_error_route_handler)
+        .with_transitions(("*", "handler", expr("error is not None")))
+        .with_entrypoint("flaky")
+        .with_state(error=None)
+        .build()
+    )
+    last_action, result, state = await app.arun(halt_after=["handler"])
+    assert last_action.name == "handler"
+    assert isinstance(state["error"], dict)
+    assert state["error"]["type"] == "ValueError"
+    json.dumps(state["error"])
+
+
+def test_builder_with_error_handling_applies_when_no_per_action_handler():
+    from burr.core.action import capture_as
+
+    app = _build_flaky_app(builder_handler=capture_as("error"))
+    last_action, result, state = app.run(halt_after=["handler"])
+    assert last_action.name == "handler"
+    assert state["error"]["type"] == "ValueError"
+
+
+def test_captured_field_not_in_declared_writes_still_works():
+    """flaky declares writes=['count'] (not 'error'); capturing 'error' must
+    bypass writes-validation and not raise."""
+    from burr.core.action import capture_as
+
+    app = _build_flaky_app(action_handler=capture_as("error"))
+    last_action, result, state = app.run(halt_after=["handler"])
+    assert "error" in state
+    assert last_action.name == "handler"
+
+
+def test_action_without_error_handler_still_raises():
+    @action(reads=[], writes=["count"])
+    def flaky(state: State) -> Tuple[dict, State]:
+        raise ValueError("boom")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(flaky=flaky, handler=_error_route_handler)
+        .with_transitions(("*", "handler", expr("error is not None")))
+        .with_entrypoint("flaky")
+        .with_state(error=None)
+        .build()
+    )
+    with pytest.raises(ValueError, match="boom"):
+        app.run(halt_after=["handler"])
+
+
+def test_per_action_on_error_takes_precedence_over_global_handler():
+    """When both a per-action on_error and a builder-level global handler are set,
+    the per-action handler wins."""
+    from burr.core.action import capture_as
+
+    @action(reads=[], writes=["count"], on_error=capture_as("error"))
+    def flaky(state: State) -> Tuple[dict, State]:
+        raise ValueError("boom")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(flaky=flaky, handler=_error_route_handler)
+        .with_transitions(("*", "handler", expr("error is not None")))
+        .with_entrypoint("flaky")
+        .with_state(error=None, global_error=None)
+        .with_error_handling(capture_as("global_error"))
+        .build()
+    )
+    last_action, result, state = app.run(halt_after=["handler"])
+    assert last_action.name == "handler"
+    assert isinstance(state["error"], dict)  # per-action handler wrote this
+    assert state["global_error"] is None  # global handler did NOT run
+
+
+def test_wildcard_error_condition_safe_on_success_path():
+    """The documented wildcard pattern ('*', handler, expr('error is not None')) must
+    NOT crash on a normal (non-raising) step and must NOT hijack the success path.
+    ``error`` is seeded to None so the wildcard condition evaluates to False on every
+    step and flow follows the action's own default transition."""
+
+    @action(reads=[], writes=["output"])
+    def ok(state: State) -> Tuple[dict, State]:
+        return {"output": 1}, state.update(output=1)
+
+    @action(reads=["output"], writes=[])
+    def done(state: State) -> Tuple[dict, State]:
+        return {}, state
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(ok=ok, done=done, handler=_error_route_handler)
+        .with_transitions(
+            ("ok", "done"),  # source default
+            ("*", "handler", expr("error is not None")),  # guarded wildcard
+        )
+        .with_entrypoint("ok")
+        .with_state(error=None)
+        .build()
+    )
+    last_action, result, state = app.run(halt_after=["done", "handler"])
+    assert last_action.name == "done"  # wildcard did not hijack the success path
+    assert state["error"] is None
+
+
+async def test_astep_sync_action_post_run_step_receives_correct_result_and_state():
+    """Regression for the _astep restructure: running a SYNC action through
+    arun/_astep must report the real result and updated state to the async
+    post_run_step hook. The prior `return self._step(...)` delegation left
+    result/state stale on this path."""
+    tracker = ActionTrackerAsync()
+
+    @action(reads=[], writes=["count"])
+    def sync_inc(state: State) -> Tuple[dict, State]:
+        return {"count": 1}, state.update(count=1)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(sync_inc=sync_inc)
+        .with_entrypoint("sync_inc")
+        .with_state(count=0)
+        .with_hooks(tracker)
+        .build()
+    )
+    await app.astep()
+    assert len(tracker.post_called) == 1
+    name, kwargs = tracker.post_called[0]
+    assert name == "sync_inc"
+    assert kwargs["result"] == {"count": 1}
+    assert kwargs["state"]["count"] == 1

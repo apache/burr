@@ -204,3 +204,80 @@ def test_get_actions_by_tag():
     assert len(graph.get_actions_by_tag("tag3")) == 1
     with pytest.raises(ValueError, match="not found"):
         graph.get_actions_by_tag("tag4")
+
+
+def _flaky_handler_graph():
+    """Source 'flaky' has BOTH a default ('flaky'->'next') AND a wildcard guarded
+    error route ('*'->'handler', error is not None). Plus 'next' and 'handler'
+    actions so targets are real."""
+    return (
+        GraphBuilder()
+        .with_actions(
+            flaky=Result("count"),
+            next=Result("count"),
+            handler=Result("count"),
+        )
+        .with_transitions(
+            ("flaky", "next"),  # default
+            ("*", "handler", Condition.expr("error is not None")),
+        )
+        .build()
+    )
+
+
+def test_wildcard_guarded_route_beats_source_default_when_error_set():
+    """THE crux test: with error set, a guarded wildcard wins over the source's own default."""
+    graph = _flaky_handler_graph()
+    state = State({"count": 0, "error": {"type": "ValueError"}})
+    assert graph.get_next_node("flaky", state, entrypoint="flaky").name == "handler"
+
+
+def test_wildcard_guarded_route_falls_through_to_source_default_when_error_unset():
+    graph = _flaky_handler_graph()
+    state = State({"count": 0, "error": None})
+    assert graph.get_next_node("flaky", state, entrypoint="flaky").name == "next"
+
+
+def test_specific_guarded_beats_wildcard_guarded():
+    """A source-specific guarded transition wins over a wildcard guarded transition."""
+    graph = (
+        GraphBuilder()
+        .with_actions(
+            a=Result("count"),
+            specific=Result("count"),
+            wild=Result("count"),
+        )
+        .with_transitions(
+            ("a", "specific", Condition.expr("error is not None")),
+            ("*", "wild", Condition.expr("error is not None")),
+        )
+        .build()
+    )
+    state = State({"count": 0, "error": {"type": "ValueError"}})
+    assert graph.get_next_node("a", state, entrypoint="a").name == "specific"
+
+
+def test_default_last_regression_resolves_identically():
+    """Existing guarded + default-last graph (no wildcards) resolves as before."""
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=base_counter_action, result=Result("count"))
+        .with_transitions(
+            ("counter", "counter", Condition.expr("count < 10")),
+            ("counter", "result"),
+        )
+        .build()
+    )
+    assert (
+        graph.get_next_node("counter", State({"count": 0}), entrypoint="counter").name == "counter"
+    )
+    assert (
+        graph.get_next_node("counter", State({"count": 10}), entrypoint="counter").name == "result"
+    )
+
+
+def test__validate_transitions_accepts_wildcard():
+    assert _validate_transitions(
+        [("*", "handler", Condition.expr("error is not None"))],
+        {"flaky", "handler"},
+    )

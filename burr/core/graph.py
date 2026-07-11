@@ -22,7 +22,7 @@ import logging
 import pathlib
 from typing import Any, Callable, List, Literal, Optional, Set, Tuple, Union
 
-from burr.core.action import Action, Condition, create_action, default
+from burr.core.action import Action, Condition, Result, create_action, default
 from burr.core.state import State
 from burr.core.validation import BASE_ERROR_MESSAGE, assert_set
 
@@ -59,7 +59,9 @@ def _validate_transitions(
 ):
     exhausted = {}  # items for which we have seen a default transition
     for from_, to, condition in transitions:
-        if from_ not in actions:
+        # "*" is a wildcard source -- it routes from ANY action, so it is not
+        # required to be a declared action. The target, however, must be real.
+        if from_ != "*" and from_ not in actions:
             raise ValueError(
                 f"Transition source: `{from_}` not found in actions! "
                 f"Please add to actions using with_actions({from_}=...)"
@@ -69,7 +71,9 @@ def _validate_transitions(
                 f"Transition target: `{to}` not found in actions! "
                 f"Please add to actions using with_actions({to}=...)"
             )
-        if condition.name == "default":  # we have seen a default transition
+        # Skip default-exhaustion bookkeeping for the wildcard source -- it does not
+        # shadow per-source defaults (see get_next_node's 4-tier resolution).
+        if from_ != "*" and condition.name == "default":  # we have seen a default transition
             if from_ in exhausted:
                 raise ValueError(
                     f"Transition `{from_}` -> `{to}` is redundant -- "
@@ -150,13 +154,36 @@ class Graph:
     def get_next_node(
         self, prior_step: Optional[str], state: State, entrypoint: str
     ) -> Optional[Action]:
-        """Gives the next node to execute given state + prior step."""
+        """Gives the next node to execute given state + prior step.
+
+        Resolution uses a 4-tier precedence so that guarded wildcard ("*") transitions
+        can route errors from any action while leaving common default-last graphs
+        unchanged. A condition is "default" iff ``condition.name == "default"``. The
+        tiers, evaluated in order with first match winning:
+
+            1. source-specific non-default transitions (insertion order)
+            2. wildcard non-default transitions (insertion order)
+            3. source-specific default transition
+            4. wildcard default transition
+        """
         if prior_step is None:
             return self._action_map[entrypoint]
-        possibilities = self._adjacency_map[prior_step]
-        for next_action, condition in possibilities:
-            if condition.run(state)[Condition.KEY]:
-                return self._action_map[next_action]
+        src = self._adjacency_map[prior_step]
+        wild = self._adjacency_map.get("*", [])
+
+        def _is_default(condition: Condition) -> bool:
+            return condition.name == "default"
+
+        tiers = (
+            [(t, c) for t, c in src if not _is_default(c)],
+            [(t, c) for t, c in wild if not _is_default(c)],
+            [(t, c) for t, c in src if _is_default(c)],
+            [(t, c) for t, c in wild if _is_default(c)],
+        )
+        for tier in tiers:
+            for next_action, condition in tier:
+                if condition.run(state)[Condition.KEY]:
+                    return self._action_map[next_action]
         return None
 
     def get_action(self, action_name: str) -> Optional[Action]:
@@ -372,11 +399,18 @@ class GraphBuilder:
         actions_by_name = {action.name: action for action in self.actions}
         all_actions = set(actions_by_name.keys())
         _validate_transitions(self.transitions, all_actions)
+
+        # Sentinel action used solely as the `from_` of wildcard ("*") transitions.
+        # It is never added to `actions`, so `_action_map` is unaffected; it exists
+        # only so the Transition dataclass and adjacency map (which key off
+        # `from_.name`) can carry the "*" source. We reuse Result as a concrete,
+        # no-op Action so it behaves like a real Action if anything inspects it.
+        wildcard_source = Result().with_name("*")
         return Graph(
             actions=self.actions,
             transitions=[
                 Transition(
-                    from_=actions_by_name[from_],
+                    from_=wildcard_source if from_ == "*" else actions_by_name[from_],
                     to=actions_by_name[to],
                     condition=condition,
                 )

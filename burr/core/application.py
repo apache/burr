@@ -849,6 +849,7 @@ class Application(Generic[ApplicationStateType]):
         parallel_executor_factory: Optional[Executor] = None,
         state_persister: Union[BaseStateSaver, LifecycleAdapter, None] = None,
         state_initializer: Union[BaseStateLoader, LifecycleAdapter, None] = None,
+        global_error_handler: Optional[Callable[[State, Exception], State]] = None,
     ):
         """Instantiates an Application. This is an internal API -- use the builder!
 
@@ -900,6 +901,7 @@ class Application(Generic[ApplicationStateType]):
         self._spawning_parent_pointer = spawning_parent_pointer
         self._state_initializer = state_initializer
         self._state_persister = state_persister
+        self._global_error_handler = global_error_handler
         self._adapter_set.call_all_lifecycle_hooks_sync(
             "post_application_create",
             state=self._state,
@@ -985,9 +987,29 @@ class Application(Generic[ApplicationStateType]):
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
             except Exception as e:
-                exc = e
-                logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
-                raise e
+                # Resolve the effective error handler: per-action takes precedence
+                # over the builder-level global handler.
+                handler = next_action.on_error or self._global_error_handler
+                if handler is not None:
+                    # The handler writes the captured record via state.update, bypassing
+                    # the normal reducer -- so it is NOT subject to writes-validation.
+                    # The handler itself must never mask the original exception: if it
+                    # raises, surface the original exception with the handler failure as
+                    # its cause rather than silently swapping which error propagates.
+                    try:
+                        new_state = handler(self._state, e)
+                    except Exception as handler_exc:
+                        logger.exception(f"Error handler for {next_action.name} failed")
+                        raise e from handler_exc
+                    new_state = self._update_internal_state_value(new_state, next_action)
+                    self._set_state(new_state)
+                    result = None
+                    exc = e  # keep for post_run_step hook observability
+                    # DO NOT re-raise; flow continues. get_next_node routes via the captured state field.
+                else:
+                    exc = e
+                    logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
+                    raise e
             finally:
                 if _run_hooks:
                     self._adapter_set.call_all_lifecycle_hooks_sync(
@@ -1094,12 +1116,19 @@ class Application(Generic[ApplicationStateType]):
                 return None
             if inputs is None:
                 inputs = {}
+            # Process inputs before the pre_run_step hook so that hooks in the async path
+            # observe the same processed inputs (dependency factory injection + validation
+            # applied) as the sync path does. We process once here and run the action inline
+            # (rather than delegating to _step) so the async lifecycle dispatcher still fires
+            # and the dependency factory -- which constructs fresh tracer/context objects per
+            # call -- is not invoked twice for a single step.
+            action_inputs = self._process_inputs(inputs, next_action)
             if _run_hooks:
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "pre_run_step",
                     action=next_action,
                     state=self._state,
-                    inputs=inputs,
+                    inputs=action_inputs,
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
@@ -1109,18 +1138,20 @@ class Application(Generic[ApplicationStateType]):
             new_state = self._state
             try:
                 if not next_action.is_async():
-                    # we can just delegate to the synchronous version, it will block the event loop,
-                    # but that's safer than assuming its OK to launch a thread
-                    # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
-                    # which this is supposed to be its OK).
-                    # this delegates hooks to the synchronous version, so we'll call all of them as well
-                    # In this case we allow the self._step to do input processing
-                    return self._step(
-                        inputs=inputs, _run_hooks=False
-                    )  # Skip hooks as we already ran all of them/will run all of them in this function's finally
-                # In this case we want to process inputs because we run the function directly
-                action_inputs = self._process_inputs(inputs, next_action)
-                if next_action.single_step:
+                    # The action is synchronous -- running it here will block the event loop,
+                    # but that's safer than assuming it's OK to launch a thread for what is
+                    # supposed to be a pure function. We still drive it through this async
+                    # method so the async lifecycle hooks fire and inputs are processed once.
+                    if next_action.single_step:
+                        result, new_state = _run_single_step_action(
+                            next_action, self._state, action_inputs
+                        )
+                    else:
+                        result = _run_function(
+                            next_action, self._state, action_inputs, name=next_action.name
+                        )
+                        new_state = _run_reducer(next_action, self._state, result, next_action.name)
+                elif next_action.single_step:
                     result, new_state = await _arun_single_step_action(
                         next_action, self._state, inputs=action_inputs
                     )
@@ -1135,9 +1166,29 @@ class Application(Generic[ApplicationStateType]):
                 new_state = self._update_internal_state_value(new_state, next_action)
                 self._set_state(new_state)
             except Exception as e:
-                exc = e
-                logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
-                raise e
+                # Resolve the effective error handler: per-action takes precedence
+                # over the builder-level global handler.
+                handler = next_action.on_error or self._global_error_handler
+                if handler is not None:
+                    # The handler writes the captured record via state.update, bypassing
+                    # the normal reducer -- so it is NOT subject to writes-validation.
+                    # The handler itself must never mask the original exception: if it
+                    # raises, surface the original exception with the handler failure as
+                    # its cause rather than silently swapping which error propagates.
+                    try:
+                        new_state = handler(self._state, e)
+                    except Exception as handler_exc:
+                        logger.exception(f"Error handler for {next_action.name} failed")
+                        raise e from handler_exc
+                    new_state = self._update_internal_state_value(new_state, next_action)
+                    self._set_state(new_state)
+                    result = None
+                    exc = e  # keep for post_run_step hook observability
+                    # DO NOT re-raise; flow continues. get_next_node routes via the captured state field.
+                else:
+                    exc = e
+                    logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
+                    raise e
             finally:
                 if _run_hooks:
                     await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
@@ -2222,6 +2273,7 @@ class ApplicationBuilder(Generic[StateType]):
         self.parallel_executor_factory = None
         self.state_persister = None
         self._is_async: bool = False
+        self._error_handler: Optional[Callable[[State, Exception], State]] = None
 
     def with_identifiers(
         self, app_id: str = None, partition_key: str = None, sequence_id: int = None
@@ -2417,6 +2469,26 @@ class ApplicationBuilder(Generic[StateType]):
         :return: The application builder for future chaining.
         """
         self.lifecycle_adapters.extend(adapters)
+        return self
+
+    def with_error_handling(
+        self, handler: Callable[[State, Exception], State]
+    ) -> "ApplicationBuilder[StateType]":
+        """Sets a global error handler for the application. This is any callable
+        ``(State, Exception) -> State``. If an action raises and does not have its own
+        per-action ``on_error`` handler, this global handler is invoked: the exception
+        is suppressed and the returned state is used instead. Per-action ``on_error``
+        takes precedence over this global handler.
+
+        See :py:func:`capture_as <burr.core.action.capture_as>` for a built-in handler
+        that records a JSON-serializable summary of the exception into a state field,
+        which you can then route on via a wildcard transition, e.g.
+        ``("*", "handler", expr("error is not None"))``.
+
+        :param handler: Error handler callable ``(State, Exception) -> State``
+        :return: The application builder for future chaining.
+        """
+        self._error_handler = handler
         return self
 
     def with_tracker(
@@ -2782,6 +2854,7 @@ class ApplicationBuilder(Generic[StateType]):
             parallel_executor_factory=self.parallel_executor_factory,
             state_persister=self.state_persister,
             state_initializer=self.state_initializer,
+            global_error_handler=self._error_handler,
         )
 
     def build(self) -> Application[StateType]:
