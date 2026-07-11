@@ -242,7 +242,9 @@ def main() -> None:
         _log("Checking UI is served at GET /...")
         with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
             if resp.status != 200:
-                _fail(f"GET / returned HTTP {resp.status}, expected 200 — UI may be missing from wheel")
+                _fail(
+                    f"GET / returned HTTP {resp.status}, expected 200 — UI may be missing from wheel"
+                )
         _log("UI served correctly")
 
         # 6. Run a tracked Burr app as a separate process using the venv.
@@ -284,9 +286,7 @@ print(f"count={{app.state['count']}} app_id={{app.uid}}")
         # writes its data. Polling is preferable to a fixed sleep: it succeeds as soon
         # as the data appears and gives a clear failure message on timeout.
         _log("Waiting for server to report project 'ci-smoke-test'...")
-        if not _poll_projects(
-            base_url, "ci-smoke-test", timeout_s=30, server_proc=server_proc
-        ):
+        if not _poll_projects(base_url, "ci-smoke-test", timeout_s=30, server_proc=server_proc):
             if server_proc.poll() is not None:
                 _log(f"Server process exited with code {server_proc.returncode}")
             _log("--- server log ---")

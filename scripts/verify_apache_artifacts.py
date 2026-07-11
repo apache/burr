@@ -754,7 +754,9 @@ def verify_licenses(
         summary.fail("Apache RAT", "no tar.gz or .whl artifacts found")
         return False
 
-    print(f"Found {len(rat_artifacts)} artifact(s) to check ({len(tar_artifacts)} tarball(s), {len(wheel_artifacts)} wheel(s)):\n")
+    print(
+        f"Found {len(rat_artifacts)} artifact(s) to check ({len(tar_artifacts)} tarball(s), {len(wheel_artifacts)} wheel(s)):\n"
+    )
 
     all_valid = True
     for artifact_name in rat_artifacts:

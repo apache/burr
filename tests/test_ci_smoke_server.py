@@ -107,6 +107,7 @@ def test_poll_projects_returns_true_when_project_found(monkeypatch):
 
             def read(self):
                 import json
+
                 return json.dumps([{"name": "ci-smoke-test"}, {"name": "other"}]).encode()
 
             def __enter__(self):
@@ -144,7 +145,11 @@ def test_poll_projects_returns_false_when_server_proc_exits(monkeypatch):
         def poll(self):
             return 1  # non-None → process is dead
 
-    monkeypatch.setattr(smoke.urllib.request, "urlopen", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not reach urlopen")))
+    monkeypatch.setattr(
+        smoke.urllib.request,
+        "urlopen",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not reach urlopen")),
+    )
 
     result = smoke._poll_projects(
         "http://127.0.0.1:9999", "ci-smoke-test", timeout_s=5, server_proc=FakeProc()
@@ -155,6 +160,7 @@ def test_poll_projects_returns_false_when_server_proc_exits(monkeypatch):
 def test_poll_projects_keeps_trying_until_project_appears(monkeypatch):
     """Retries when project is absent, then succeeds once it appears."""
     import json
+
     responses = [
         json.dumps([]).encode(),
         json.dumps([{"name": "other"}]).encode(),

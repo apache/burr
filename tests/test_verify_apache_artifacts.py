@@ -267,6 +267,7 @@ def test_artifact_files_ignores_rat_reports():
 def test_wheel_content_hashes_returns_sha256_per_file(tmp_path):
     """Returns a dict mapping each member path to its SHA256 hex digest."""
     import hashlib
+
     wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
     content = b"hello burr"
     _write_wheel(wheel_path, {"burr/__init__.py": content})
@@ -280,10 +281,13 @@ def test_wheel_content_hashes_excludes_record_file(tmp_path):
     """RECORD (the manifest) is excluded — it lists other files' hashes and
     will legitimately differ between two wheels built from identical source."""
     wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
-    _write_wheel(wheel_path, {
-        "burr/__init__.py": b"code",
-        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=abc,4\n",
-    })
+    _write_wheel(
+        wheel_path,
+        {
+            "burr/__init__.py": b"code",
+            "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=abc,4\n",
+        },
+    )
 
     hashes = verify._wheel_content_hashes(str(wheel_path))
 
@@ -294,10 +298,13 @@ def test_wheel_content_hashes_excludes_record_file(tmp_path):
 def test_wheel_content_hashes_excludes_directory_entries(tmp_path):
     """Directory entries (zip members whose name ends with /) have no content."""
     wheel_path = tmp_path / "test-1.0-py3-none-any.whl"
-    _write_wheel(wheel_path, {
-        "burr/": b"",
-        "burr/__init__.py": b"code",
-    })
+    _write_wheel(
+        wheel_path,
+        {
+            "burr/": b"",
+            "burr/__init__.py": b"code",
+        },
+    )
 
     hashes = verify._wheel_content_hashes(str(wheel_path))
 
@@ -323,14 +330,20 @@ def test_compare_wheel_contents_ignores_record_differences(tmp_path):
     """RECORD files that differ between wheels are not reported as differences."""
     wheel_a = tmp_path / "a.whl"
     wheel_b = tmp_path / "b.whl"
-    _write_wheel(wheel_a, {
-        "burr/__init__.py": b"code",
-        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=aaa,4\n",
-    })
-    _write_wheel(wheel_b, {
-        "burr/__init__.py": b"code",
-        "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=bbb,4\n",
-    })
+    _write_wheel(
+        wheel_a,
+        {
+            "burr/__init__.py": b"code",
+            "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=aaa,4\n",
+        },
+    )
+    _write_wheel(
+        wheel_b,
+        {
+            "burr/__init__.py": b"code",
+            "burr-1.0.dist-info/RECORD": b"burr/__init__.py,sha256=bbb,4\n",
+        },
+    )
 
     match, diffs = verify._compare_wheel_contents(str(wheel_a), str(wheel_b))
 
