@@ -19,8 +19,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 
 def _load_module():
     module_path = Path(__file__).resolve().parent.parent / "scripts" / "check_asf_headers.py"
