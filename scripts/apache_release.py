@@ -918,6 +918,16 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
         wheel_path = wheel_files[0]
         print(f"    ✓ Wheel created: {os.path.basename(wheel_path)}")
 
+        # flit build always writes to dist/. If the caller asked for a
+        # different output_dir (e.g. Release Validation's
+        # sdist-wheel-equivalence job builds from an extracted sdist and
+        # collects the wheel in /tmp/sdist-wheel), move it there.
+        if os.path.abspath(output_dir) != os.path.abspath("dist"):
+            os.makedirs(output_dir, exist_ok=True)
+            dest_path = os.path.join(output_dir, os.path.basename(wheel_path))
+            shutil.move(wheel_path, dest_path)
+            wheel_path = dest_path
+
         return wheel_path
 
     finally:
