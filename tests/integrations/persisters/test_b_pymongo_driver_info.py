@@ -21,11 +21,7 @@ from unittest.mock import MagicMock, patch
 
 from pymongo.driver_info import DriverInfo
 
-from burr.integrations.persisters.b_pymongo import (
-    _DRIVER_INFO,
-    _VERSION,
-    MongoDBBasePersister,
-)
+from burr.integrations.persisters.b_pymongo import _DRIVER_INFO, _VERSION, MongoDBBasePersister
 
 
 def test_driver_info_name():

@@ -21,9 +21,7 @@ import logging
 
 from pymongo import MongoClient
 
-from burr.integrations.persisters.b_pymongo import (
-    _DRIVER_INFO,
-)
+from burr.integrations.persisters.b_pymongo import _DRIVER_INFO
 from burr.integrations.persisters.b_pymongo import MongoDBBasePersister as PymongoPersister
 
 logger = logging.getLogger(__name__)
