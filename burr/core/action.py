@@ -1500,6 +1500,12 @@ class action:
         return fn
 
 
+# Accepts a BaseModel subclass, dict, or a union of those (Model1 | Model2 / Union[...]).
+# Union expressions have no precise static type, so this is deliberately wide; the real
+# constraint is enforced at decoration time by the pydantic integration.
+StreamType = Union[Type["BaseModel"], Type[dict], object]
+
+
 class streaming_action:
     @staticmethod
     def pydantic(
@@ -1507,7 +1513,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict], object],
+        stream_type: StreamType,
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
