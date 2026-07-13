@@ -396,3 +396,72 @@ def test_streaming_action_union_execution_three_types():
     assert isinstance(results[2][0], StructuredResult)
     assert all(item[1] is None for item in results[:-1])
     assert isinstance(results[2][1], State)
+
+
+# ============================================================================
+# Invalid stream_type Rejection Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "bad_stream_type",
+    [
+        int,  # plain non-model type
+        str,
+        Union[TextChunk, int],  # union with an invalid member
+        Union[int, str],  # union with no valid members
+        List[TextChunk],  # non-union generic
+        "TextChunk",  # not a type at all
+    ],
+)
+def test_streaming_action_rejects_invalid_stream_type(bad_stream_type):
+    """Test that invalid stream_type values are rejected at decoration time."""
+    with pytest.raises(ValueError, match="stream_type must be"):
+
+        @streaming_action.pydantic(
+            reads=["prompt"],
+            writes=["result"],
+            state_input_type=StreamingInputState,
+            state_output_type=StreamingOutputState,
+            stream_type=bad_stream_type,
+        )
+        def act(
+            state: State,
+        ) -> Generator[Tuple[TextChunk, Optional[StreamingOutputState]], None, None]:
+            yield TextChunk(text="Hello", chunk_id=1), None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="requires python3.10+")
+def test_streaming_action_rejects_invalid_pipe_union():
+    """Test that Model | int pipe syntax with an invalid member is rejected (Python 3.10+)."""
+    bad_stream_type = TextChunk | int
+    with pytest.raises(ValueError, match="stream_type must be"):
+
+        @streaming_action.pydantic(
+            reads=["prompt"],
+            writes=["result"],
+            state_input_type=StreamingInputState,
+            state_output_type=StreamingOutputState,
+            stream_type=bad_stream_type,
+        )
+        def act(
+            state: State,
+        ) -> Generator[Tuple[TextChunk, Optional[StreamingOutputState]], None, None]:
+            yield TextChunk(text="Hello", chunk_id=1), None
+
+
+def test_streaming_action_rejects_missing_stream_type():
+    """Test that stream_type=None still raises the pre-existing 'required' error."""
+    with pytest.raises(ValueError, match="stream_type is required"):
+
+        @streaming_action.pydantic(
+            reads=["prompt"],
+            writes=["result"],
+            state_input_type=StreamingInputState,
+            state_output_type=StreamingOutputState,
+            stream_type=None,
+        )
+        def act(
+            state: State,
+        ) -> Generator[Tuple[TextChunk, Optional[StreamingOutputState]], None, None]:
+            yield TextChunk(text="Hello", chunk_id=1), None
