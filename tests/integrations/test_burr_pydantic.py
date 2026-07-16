@@ -450,9 +450,7 @@ def test_streaming_pydantic_action_same_io():
     assert final_state.data.times_called == 1
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="PEP 604 union syntax requires Python 3.10+"
-)
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="PEP 604 union syntax requires Python 3.10+")
 def test_streaming_pydantic_action_union_stream_type():
     class IntermediateUnionModelOne(BaseModel):
         result: int

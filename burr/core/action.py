@@ -30,10 +30,13 @@ import typing
 # type that keeps Union annotations well-formed. No PEP 604 union can ever
 # exist on 3.9, so isinstance() checks against it simply never match.
 if sys.version_info >= (3, 10):
-    _UnionType = types.UnionType
+    UnionType = types.UnionType
 else:  # pragma: no cover - exercised on Python 3.9 CI only
-    class _UnionType:  # type: ignore[no-redef]
+
+    class UnionType:  # type: ignore[no-redef]
         """Placeholder for ``types.UnionType`` on Python < 3.10."""
+
+
 from collections.abc import AsyncIterator
 from typing import (
     TYPE_CHECKING,
@@ -1521,7 +1524,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict], _UnionType],
+        stream_type: Union[Type["BaseModel"], Type[dict], UnionType],
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
