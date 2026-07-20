@@ -436,8 +436,10 @@ class State(Mapping, Generic[StateType]):
             )
         if delete is not None:
             fields_to_delete = delete
-        else:
+        elif keep is not None:
             fields_to_delete = [key for key in self._state if key not in keep]
+        else:
+            fields_to_delete = list(self._state)
         return self.apply_operation(DeleteField(fields_to_delete))
 
     def merge(self, other: "State") -> "State[StateType]":
