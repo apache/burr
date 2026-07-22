@@ -17,6 +17,7 @@
 
 import json
 import logging
+from collections import abc
 from typing import Any, Dict, Optional
 
 from burr.integrations.base import require_plugin
@@ -44,7 +45,7 @@ except ImportError:
     is_default_export_span = None
 
 from burr.core import Action, State, serde
-from burr.integrations.opentelemetry import OpenTelemetryBridge, convert_to_otel_attribute
+from burr.integrations.opentelemetry import OpenTelemetryBridge
 from burr.lifecycle.base import ExecuteMethod
 from burr.visibility import ActionSpan
 
@@ -93,6 +94,25 @@ def _serialize_for_langfuse(value: Any) -> str:
     except Exception as e:
         logger.warning(f"Failed to serialize value for Langfuse: {e}")
         return str(value)
+
+
+_OTEL_ATTRIBUTE_PRIMITIVES = (str, bool, int, float)
+
+
+def _convert_attribute(value: Any) -> Any:
+    """
+    Converts a logged attribute value to a valid OpenTelemetry attribute value.
+    OTel attributes only accept primitives and flat sequences of primitives, so
+    anything else (dicts, lists of dicts, ...) is JSON-serialized -- Langfuse
+    renders JSON strings in metadata.
+    """
+    if isinstance(value, _OTEL_ATTRIBUTE_PRIMITIVES):
+        return value
+    if isinstance(value, abc.Sequence) and all(
+        isinstance(item, _OTEL_ATTRIBUTE_PRIMITIVES) for item in value
+    ):
+        return list(value)
+    return _serialize_for_langfuse(value)
 
 
 class LangfuseBridge(OpenTelemetryBridge):
@@ -323,7 +343,7 @@ class LangfuseBridge(OpenTelemetryBridge):
                     key
                     if key.startswith(_PASSTHROUGH_ATTRIBUTE_PREFIXES)
                     else _LANGFUSE_OBSERVATION_METADATA_PREFIX + key
-                ): convert_to_otel_attribute(value)
+                ): _convert_attribute(value)
                 for key, value in attributes.items()
             }
         )

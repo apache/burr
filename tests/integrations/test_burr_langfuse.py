@@ -33,7 +33,10 @@ from burr.visibility import TracerFactory
 @action(reads=[], writes=["count"])
 def counter_action(state: State, increment: int, __tracer: TracerFactory) -> Tuple[dict, State]:
     with __tracer("inner_work"):
-        __tracer.log_attributes(custom_attr="custom_value")
+        __tracer.log_attributes(
+            custom_attr="custom_value",
+            complex_attr=[{"role": "user", "content": "hi"}],
+        )
         result = {"count": state.get("count", 0) + increment}
     return result, state.update(**result)
 
@@ -111,6 +114,11 @@ def test_langfuse_bridge_span_structure_and_attributes(span_capture):
     # attributes logged via __tracer land in Langfuse observation metadata
     inner = spans_by_name["inner_work"]
     assert inner.attributes["langfuse.observation.metadata.custom_attr"] == "custom_value"
+    # complex values (e.g. lists of dicts) are JSON-serialized, since OTel
+    # attributes only accept primitives and flat sequences of primitives
+    assert json.loads(inner.attributes["langfuse.observation.metadata.complex_attr"]) == [
+        {"role": "user", "content": "hi"}
+    ]
 
 
 def test_langfuse_bridge_capture_state_false(span_capture):
