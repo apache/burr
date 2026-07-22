@@ -100,6 +100,7 @@ tests = [
   "apache-burr[pymongo]",
   "apache-burr[redis]",
   "apache-burr[opentelemetry]",
+  "apache-burr[langfuse]",
   "apache-burr[haystack]",
   "apache-burr[ray]"
 ]
@@ -220,6 +221,11 @@ developer = [
 opentelemetry = [
   "opentelemetry-api",
   "opentelemetry-sdk",
+]
+
+langfuse = [
+  "langfuse>=3.0.0",
+  "apache-burr[opentelemetry]",
 ]
 
 ray = [
