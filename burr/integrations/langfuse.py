@@ -26,7 +26,7 @@ from burr.integrations.base import require_plugin
 logger = logging.getLogger(__name__)
 
 try:
-    from langfuse import Langfuse, propagate_attributes
+    from langfuse import Langfuse
     from opentelemetry import trace
     from opentelemetry.sdk.trace import ReadableSpan
     from opentelemetry.trace import get_current_span
@@ -35,6 +35,13 @@ except ImportError as e:
         e,
         "langfuse",
     )
+
+try:
+    # propagate_attributes copies session/user attributes onto all child spans, including spans from third-party OTel instrumentation.
+    # available on langfuse>=3.9; on older versions we fall back to setting the attributes on Burr's own spans only (see _set_trace_attributes).
+    from langfuse import propagate_attributes
+except ImportError:
+    propagate_attributes = None
 
 try:
     # Available on langfuse>=4 -- v4 only exports LLM-relevant spans by default,
@@ -250,6 +257,8 @@ class LangfuseBridge(OpenTelemetryBridge):
             span.set_attribute(_LANGFUSE_USER_ID, user_id)
 
     def _enter_trace_attribute_context(self, app_id: str, partition_key: Optional[str]) -> None:
+        if propagate_attributes is None:  # langfuse < 3.9
+            return
         session_id, user_id = self._trace_attributes(app_id, partition_key)
         propagation_context = propagate_attributes(session_id=session_id, user_id=user_id)
         propagation_context.__enter__()
@@ -258,6 +267,8 @@ class LangfuseBridge(OpenTelemetryBridge):
         self._propagation_context_stack.set(stack)
 
     def _exit_trace_attribute_context(self) -> None:
+        if propagate_attributes is None:  # nothing was entered
+            return
         stack = (self._propagation_context_stack.get() or [])[:]
         if not stack:
             logger.warning("No Langfuse trace attribute context to exit")

@@ -235,6 +235,20 @@ def test_langfuse_bridge_uses_custom_provider_and_propagates_trace_attributes(mo
     assert propagation_attributes.get() is None
 
 
+def test_langfuse_bridge_falls_back_without_propagate_attributes(span_capture, monkeypatch):
+    # langfuse < 3.9 has no propagate_attributes, and the bridge should still work with session/user set on Burr's own spans
+    exporter, tracer = span_capture
+    monkeypatch.setattr("burr.integrations.langfuse.propagate_attributes", None)
+    bridge = LangfuseBridge(langfuse_client=Mock(), tracer=tracer)
+    app = _build_app(bridge)
+    app.run(halt_after=["finish_action"], inputs={"increment": 2})
+
+    spans_by_name = {span.name: span for span in exporter.get_finished_spans()}
+    assert set(spans_by_name) == {"run", "counter_action", "finish_action", "inner_work"}
+    assert spans_by_name["run"].attributes["langfuse.session.id"] == "test-app-id"
+    assert spans_by_name["run"].attributes["langfuse.user.id"] == "test-user"
+
+
 def test_langfuse_bridge_rejects_tracer_and_provider(span_capture):
     _, tracer = span_capture
     with pytest.raises(ValueError):
