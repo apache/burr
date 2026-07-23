@@ -445,8 +445,8 @@ $<span class="w"> </span>npm<span class="w"> </span>run<span class="w"> </span>s
 </pre></div>
 </div>
 <p>This will start the UI on port 3000. You can then navigate to <code class="docutils literal notranslate"><span class="pre">http://localhost:3000</span></code> to see the UI.
-It currently assumes that the tracking server is running on port 7241. The proxy is set up in the
-<code class="docutils literal notranslate"><span class="pre">package.json</span></code> file.</p>
+It currently assumes that the tracking server is running on port 7241. The proxy is configured in
+<code class="docutils literal notranslate"><span class="pre">vite.config.ts</span></code>.</p>
 <p>Note that if you want to just develop off the server you’ll first have to build the UI and symlink the
 <code class="docutils literal notranslate"><span class="pre">tracking/server/build</span></code> directory to the <code class="docutils literal notranslate"><span class="pre">telemetry/ui/build</span></code> directory. We have this structure to
 enable easy inclusion of package data in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p>

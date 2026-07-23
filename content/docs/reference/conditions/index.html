@@ -502,13 +502,34 @@ that is the OR of the two conditions.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="burr.core.action.Condition.expr">
 <em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.action.Condition" title="burr.core.action.Condition"><span class="pre">Condition</span></a></span></span><a class="headerlink" href="#burr.core.action.Condition.expr" title="Link to this definition">¶</a></dt>
-<dd><p>Returns a condition that evaluates the given expression. Expression must use
-only state variables and Python operators. Do not trust that anything else will work.</p>
-<p>Do not accept expressions generated from user-inputted text, this has the potential to be unsafe.</p>
+<dd><p>Returns a condition that evaluates the given expression against state.</p>
+<p>Do not accept expressions generated from user-inputted text, this has the potential to be unsafe.
+Internally this uses <code class="xref py py-func docutils literal notranslate"><span class="pre">eval()</span></code>, so the expression can execute arbitrary Python and should only
+be used with developer-authored strings. If you need to accept expressions from less-trusted
+sources (dashboards, YAML, user input), use <a class="reference internal" href="#burr.core.action.Condition.safe_expr" title="burr.core.action.Condition.safe_expr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Condition.safe_expr()</span></code></a> which restricts
+evaluation to a small allowlisted AST grammar interpreted directly (no <code class="xref py py-func docutils literal notranslate"><span class="pre">eval()</span></code>).</p>
 <p>You can also refer to this as <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">burr.core</span> <span class="pre">import</span> <span class="pre">expr</span></code> in the API.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><code class="docutils literal notranslate"><span class="pre">Condition.expr</span></code> runs the supplied string under a full Python <code class="docutils literal notranslate"><span class="pre">eval</span></code>.
+Passing user-supplied or otherwise attacker-controllable strings to this
+function is equivalent to arbitrary code execution inside the application
+process. For example, an attacker who controls the expression string can
+execute <code class="docutils literal notranslate"><span class="pre">__import__(&quot;os&quot;).system(&quot;...&quot;)</span></code> or
+<code class="docutils literal notranslate"><span class="pre">__import__(&quot;subprocess&quot;).check_output([...])</span></code> and reach anything the
+host process can reach.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">globals=None</span></code> argument to <code class="docutils literal notranslate"><span class="pre">eval</span></code> below is <strong>not</strong> a sandbox:
+CPython auto-injects <code class="docutils literal notranslate"><span class="pre">__builtins__</span></code> when globals is empty or <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+which is in fact relied upon here so that expressions like <code class="docutils literal notranslate"><span class="pre">len(x)</span></code> work.
+No part of this function attempts to sandbox the evaluation.</p>
+<p>If you need to accept untrusted expressions, do not use <code class="docutils literal notranslate"><span class="pre">expr</span></code>. Track
+<code class="docutils literal notranslate"><span class="pre">apache/burr#817</span></code> for the opt-in safe-AST evaluator intended for that
+use case.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>expr</strong> – Expression to evaluate</p>
+<dd class="field-odd"><p><strong>expr</strong> – Expression to evaluate. Must be a developer-authored Python
+expression over state variables and standard operators/builtins.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>A condition that evaluates the given expression</p>
@@ -567,6 +588,57 @@ The result is just a key/value dictionary.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Result of the function</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.core.action.Condition.safe_expr">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">safe_expr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.action.Condition" title="burr.core.action.Condition"><span class="pre">Condition</span></a></span></span><a class="headerlink" href="#burr.core.action.Condition.safe_expr" title="Link to this definition">¶</a></dt>
+<dd><p>Returns a condition that evaluates <code class="docutils literal notranslate"><span class="pre">expr</span></code> under a restricted, allowlisted AST grammar.</p>
+<p>This is the opt-in safe sibling of <a class="reference internal" href="#burr.core.action.Condition.expr" title="burr.core.action.Condition.expr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Condition.expr()</span></code></a>. Whereas <code class="docutils literal notranslate"><span class="pre">expr()</span></code> uses
+<code class="xref py py-func docutils literal notranslate"><span class="pre">eval()</span></code> and therefore accepts the full Python expression grammar (and is unsafe
+for untrusted input), <code class="docutils literal notranslate"><span class="pre">safe_expr()</span></code> parses the expression, validates every node
+against an allowlist at call time, and then <em>interprets</em> the validated tree directly.
+<code class="xref py py-func docutils literal notranslate"><span class="pre">eval()</span></code> is never invoked on the parsed tree.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">safe_expr</span></code> when the expression string comes from a less-trusted source –
+for example a dashboard rule editor, a YAML-driven graph definition, or any user
+input. Use <code class="docutils literal notranslate"><span class="pre">expr</span></code> when the expression is authored by a developer and checked in.</p>
+<p>The allowed grammar is intentionally small:</p>
+<ul class="simple">
+<li><p>Constants: <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>, <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Name</span></code> lookups, resolved against the state via <code class="xref py py-meth docutils literal notranslate"><span class="pre">State.get_all()</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Attribute</span></code> access on names / other attributes. Any attribute whose name
+starts with <code class="docutils literal notranslate"><span class="pre">__</span></code> (dunder) is rejected – this closes the standard
+<code class="docutils literal notranslate"><span class="pre">().__class__.__bases__[0].__subclasses__()</span></code> sandbox-escape pattern.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Subscript</span></code> (<code class="docutils literal notranslate"><span class="pre">state[&quot;foo&quot;]</span></code>, <code class="docutils literal notranslate"><span class="pre">items[0]</span></code>, slices).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Compare</span></code>: <code class="docutils literal notranslate"><span class="pre">==</span></code>, <code class="docutils literal notranslate"><span class="pre">!=</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;=</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;=</span></code>, <code class="docutils literal notranslate"><span class="pre">in</span></code>, <code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">in</span></code>,
+<code class="docutils literal notranslate"><span class="pre">is</span></code>, <code class="docutils literal notranslate"><span class="pre">is</span> <span class="pre">not</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BoolOp</span></code>: <code class="docutils literal notranslate"><span class="pre">and</span></code>, <code class="docutils literal notranslate"><span class="pre">or</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">UnaryOp</span></code>: <code class="docutils literal notranslate"><span class="pre">not</span></code>, unary <code class="docutils literal notranslate"><span class="pre">-</span></code>, unary <code class="docutils literal notranslate"><span class="pre">+</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BinOp</span></code> arithmetic: <code class="docutils literal notranslate"><span class="pre">+</span></code>, <code class="docutils literal notranslate"><span class="pre">-</span></code>, <code class="docutils literal notranslate"><span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">/</span></code>, <code class="docutils literal notranslate"><span class="pre">//</span></code>, <code class="docutils literal notranslate"><span class="pre">%</span></code>, <code class="docutils literal notranslate"><span class="pre">**</span></code>.</p></li>
+<li><p>Literal containers: tuple, list, set, dict.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Call</span></code> only to a tight allowlist of safe builtins by name:
+<code class="docutils literal notranslate"><span class="pre">len</span></code>, <code class="docutils literal notranslate"><span class="pre">abs</span></code>, <code class="docutils literal notranslate"><span class="pre">min</span></code>, <code class="docutils literal notranslate"><span class="pre">max</span></code>, <code class="docutils literal notranslate"><span class="pre">sum</span></code>, <code class="docutils literal notranslate"><span class="pre">all</span></code>, <code class="docutils literal notranslate"><span class="pre">any</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>,
+<code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>. All other calls are rejected.</p></li>
+</ul>
+<p>Everything else is rejected at <code class="docutils literal notranslate"><span class="pre">safe_expr()</span></code> call time (not at run time),
+including: lambdas, conditional expressions (<code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">if</span> <span class="pre">b</span> <span class="pre">else</span> <span class="pre">c</span></code>),
+comprehensions and generator expressions, the walrus operator,
+<code class="docutils literal notranslate"><span class="pre">await</span></code>, <code class="docutils literal notranslate"><span class="pre">yield</span></code>, imports, and any <code class="docutils literal notranslate"><span class="pre">Call</span></code> not on the builtin allowlist.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>expr</strong> – Expression to evaluate</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A condition that evaluates the given expression</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – if the expression contains any disallowed construct
+(raised at call time – the condition is rejected before it ever runs).</p></li>
+<li><p><strong>SyntaxError</strong> – if the expression is not syntactically valid Python.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -696,6 +768,7 @@ The result is just a key/value dictionary.</p>
 <li><a class="reference internal" href="#burr.core.action.Condition.lmda"><code class="docutils literal notranslate"><span class="pre">Condition.lmda()</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.action.Condition.reads"><code class="docutils literal notranslate"><span class="pre">Condition.reads</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.action.Condition.run"><code class="docutils literal notranslate"><span class="pre">Condition.run()</span></code></a></li>
+<li><a class="reference internal" href="#burr.core.action.Condition.safe_expr"><code class="docutils literal notranslate"><span class="pre">Condition.safe_expr()</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.action.Condition.when"><code class="docutils literal notranslate"><span class="pre">Condition.when()</span></code></a></li>
 </ul>
 </li>
