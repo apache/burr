@@ -18,14 +18,15 @@
 import json
 import logging
 from collections import abc
-from typing import Any, Dict, Optional
+from contextvars import ContextVar
+from typing import Any, Dict, List, Optional, Tuple
 
 from burr.integrations.base import require_plugin
 
 logger = logging.getLogger(__name__)
 
 try:
-    from langfuse import Langfuse
+    from langfuse import Langfuse, propagate_attributes
     from opentelemetry import trace
     from opentelemetry.sdk.trace import ReadableSpan
     from opentelemetry.trace import get_current_span
@@ -108,10 +109,12 @@ def _convert_attribute(value: Any) -> Any:
     """
     if isinstance(value, _OTEL_ATTRIBUTE_PRIMITIVES):
         return value
-    if isinstance(value, abc.Sequence) and all(
-        isinstance(item, _OTEL_ATTRIBUTE_PRIMITIVES) for item in value
-    ):
-        return list(value)
+    if isinstance(value, abc.Sequence):
+        primitive_types = {type(item) for item in value}
+        if len(primitive_types) <= 1 and all(
+            isinstance(item, _OTEL_ATTRIBUTE_PRIMITIVES) for item in value
+        ):
+            return list(value)
     return _serialize_for_langfuse(value)
 
 
@@ -176,6 +179,7 @@ class LangfuseBridge(OpenTelemetryBridge):
         user_id: Optional[str] = None,
         capture_state: bool = True,
         tracer: Optional["trace.Tracer"] = None,
+        tracer_provider: Optional["trace.TracerProvider"] = None,
         **langfuse_kwargs: Any,
     ):
         """
@@ -193,10 +197,15 @@ class LangfuseBridge(OpenTelemetryBridge):
             sent to Langfuse.
         :param tracer: OpenTelemetry tracer to use -- for testing/advanced use. Defaults
             to a tracer named ``burr.integrations.langfuse`` from the global provider.
+        :param tracer_provider: OpenTelemetry tracer provider to use for both the
+            Langfuse client and Burr spans. When passing a pre-constructed client that
+            uses a custom provider, pass the same provider here.
         :param langfuse_kwargs: Keyword arguments forwarded to the
             :py:class:`Langfuse <langfuse.Langfuse>` constructor (e.g. ``public_key``,
             ``secret_key``, ``host``). Only valid if ``langfuse_client`` is not passed.
         """
+        if tracer is not None and tracer_provider is not None:
+            raise ValueError("Only pass one of tracer or tracer_provider, not both.")
         if langfuse_client is not None and langfuse_kwargs:
             raise ValueError(
                 f"Only pass one of langfuse_client or langfuse constructor kwargs, not both. "
@@ -205,25 +214,57 @@ class LangfuseBridge(OpenTelemetryBridge):
         if langfuse_client is None:
             if is_default_export_span is not None:
                 langfuse_kwargs.setdefault("should_export_span", burr_span_export_filter)
+            if tracer_provider is not None:
+                langfuse_kwargs["tracer_provider"] = tracer_provider
             langfuse_client = Langfuse(**langfuse_kwargs)
         self.langfuse_client = langfuse_client
         self.session_id = session_id
         self.user_id = user_id
         self.capture_state = capture_state
+        self._propagation_context_stack: ContextVar[Optional[List[Any]]] = ContextVar(
+            f"langfuse_propagation_context_stack_{id(self)}", default=None
+        )
         # Note: the Langfuse client registers its span processor on the global
         # tracer provider on construction, so we grab the tracer afterwards.
-        super().__init__(
-            tracer=tracer if tracer is not None else trace.get_tracer(BURR_TRACER_NAME)
-        )
+        if tracer is None:
+            tracer = (
+                tracer_provider.get_tracer(BURR_TRACER_NAME)
+                if tracer_provider is not None
+                else trace.get_tracer(BURR_TRACER_NAME)
+            )
+        super().__init__(tracer=tracer)
+
+    def _trace_attributes(
+        self, app_id: str, partition_key: Optional[str]
+    ) -> Tuple[Optional[str], Optional[str]]:
+        session_id = self.session_id if self.session_id is not None else app_id
+        user_id = self.user_id if self.user_id is not None else partition_key
+        return session_id, user_id
 
     def _set_trace_attributes(self, span: "trace.Span", app_id: str, partition_key: Optional[str]):
         # sets Langfuse trace-level attributes (session/user) on a span
-        session_id = self.session_id if self.session_id is not None else app_id
-        user_id = self.user_id if self.user_id is not None else partition_key
+        session_id, user_id = self._trace_attributes(app_id, partition_key)
         if session_id is not None:
             span.set_attribute(_LANGFUSE_SESSION_ID, session_id)
         if user_id is not None:
             span.set_attribute(_LANGFUSE_USER_ID, user_id)
+
+    def _enter_trace_attribute_context(self, app_id: str, partition_key: Optional[str]) -> None:
+        session_id, user_id = self._trace_attributes(app_id, partition_key)
+        propagation_context = propagate_attributes(session_id=session_id, user_id=user_id)
+        propagation_context.__enter__()
+        stack = (self._propagation_context_stack.get() or [])[:]
+        stack.append(propagation_context)
+        self._propagation_context_stack.set(stack)
+
+    def _exit_trace_attribute_context(self) -> None:
+        stack = (self._propagation_context_stack.get() or [])[:]
+        if not stack:
+            logger.warning("No Langfuse trace attribute context to exit")
+            return
+        propagation_context = stack.pop()
+        self._propagation_context_stack.set(stack)
+        propagation_context.__exit__(None, None, None)
 
     def pre_run_execute_call(
         self,
@@ -247,6 +288,9 @@ class LangfuseBridge(OpenTelemetryBridge):
             span.set_attribute(
                 _LANGFUSE_OBSERVATION_INPUT, _serialize_for_langfuse(state.get_all())
             )
+        # Langfuse's propagation context copies session/user attributes to all child
+        # spans, including spans emitted by third-party OpenTelemetry instrumentation.
+        self._enter_trace_attribute_context(app_id, partition_key)
 
     def post_run_execute_call(
         self,
@@ -255,12 +299,17 @@ class LangfuseBridge(OpenTelemetryBridge):
         exception: Optional[Exception],
         **future_kwargs: Any,
     ):
-        if self.capture_state and exception is None:
-            span = get_current_span()
-            span.set_attribute(
-                _LANGFUSE_OBSERVATION_OUTPUT, _serialize_for_langfuse(state.get_all())
-            )
-        super().post_run_execute_call(exception=exception, **future_kwargs)
+        try:
+            if self.capture_state and exception is None:
+                span = get_current_span()
+                span.set_attribute(
+                    _LANGFUSE_OBSERVATION_OUTPUT, _serialize_for_langfuse(state.get_all())
+                )
+        finally:
+            try:
+                self._exit_trace_attribute_context()
+            finally:
+                super().post_run_execute_call(exception=exception, **future_kwargs)
 
     def pre_run_step(
         self,

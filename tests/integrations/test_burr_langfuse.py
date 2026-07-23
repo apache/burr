@@ -16,6 +16,8 @@
 # under the License.
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Tuple
 from unittest.mock import Mock
 
@@ -36,6 +38,7 @@ def counter_action(state: State, increment: int, __tracer: TracerFactory) -> Tup
         __tracer.log_attributes(
             custom_attr="custom_value",
             complex_attr=[{"role": "user", "content": "hi"}],
+            mixed_attr=[1, "two"],
         )
         result = {"count": state.get("count", 0) + increment}
     return result, state.update(**result)
@@ -119,6 +122,7 @@ def test_langfuse_bridge_span_structure_and_attributes(span_capture):
     assert json.loads(inner.attributes["langfuse.observation.metadata.complex_attr"]) == [
         {"role": "user", "content": "hi"}
     ]
+    assert json.loads(inner.attributes["langfuse.observation.metadata.mixed_attr"]) == [1, "two"]
 
 
 def test_langfuse_bridge_capture_state_false(span_capture):
@@ -176,6 +180,69 @@ def test_langfuse_bridge_records_exceptions(span_capture):
 def test_langfuse_bridge_rejects_client_and_kwargs():
     with pytest.raises(ValueError):
         LangfuseBridge(langfuse_client=Mock(), public_key="pk-lf-123")
+
+
+def test_langfuse_bridge_uses_custom_provider_and_propagates_trace_attributes(monkeypatch):
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    propagation_attributes = ContextVar("propagation_attributes", default=None)
+    langfuse_constructor = Mock(return_value=Mock())
+
+    @contextmanager
+    def capture_propagation_attributes(**attributes):
+        token = propagation_attributes.set(attributes)
+        try:
+            yield
+        finally:
+            propagation_attributes.reset(token)
+
+    monkeypatch.setattr(
+        "burr.integrations.langfuse.propagate_attributes", capture_propagation_attributes
+    )
+    monkeypatch.setattr("burr.integrations.langfuse.Langfuse", langfuse_constructor)
+
+    @action(reads=[], writes=["propagation"])
+    def propagated_action(state: State) -> Tuple[dict, State]:
+        result = {"propagation": propagation_attributes.get()}
+        return result, state.update(**result)
+
+    bridge = LangfuseBridge(
+        tracer_provider=provider,
+        public_key="pk-lf-test",
+        secret_key="sk-lf-test",
+    )
+    app = (
+        ApplicationBuilder()
+        .with_actions(propagated_action)
+        .with_transitions()
+        .with_entrypoint("propagated_action")
+        .with_identifiers(app_id="test-app-id", partition_key="test-user")
+        .with_hooks(bridge)
+        .build()
+    )
+    _, result, _ = app.run(halt_after=["propagated_action"])
+
+    assert {span.name for span in exporter.get_finished_spans()} == {
+        "run",
+        "propagated_action",
+    }
+    assert result["propagation"] == {
+        "session_id": "test-app-id",
+        "user_id": "test-user",
+    }
+    assert langfuse_constructor.call_args.kwargs["tracer_provider"] is provider
+    assert propagation_attributes.get() is None
+
+
+def test_langfuse_bridge_rejects_tracer_and_provider(span_capture):
+    _, tracer = span_capture
+    with pytest.raises(ValueError):
+        LangfuseBridge(
+            langfuse_client=Mock(),
+            tracer=tracer,
+            tracer_provider=TracerProvider(),
+        )
 
 
 def _make_readable_span(scope_name, attributes=None) -> ReadableSpan:
