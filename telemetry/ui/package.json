@@ -6,21 +6,15 @@
     "@headlessui/react": "^2.1.9",
     "@heroicons/react": "^2.1.1",
     "@microsoft/fetch-event-source": "^2.0.1",
-    "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
     "@tisoap/react-flow-smart-edge": "^3.0.0",
-    "@types/fuse": "^2.6.0",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.82",
+    "@types/node": "^20.0.0",
     "@types/react": "^18.2.56",
     "@types/react-dom": "^18.2.19",
-    "@types/react-select": "^5.0.1",
     "@types/react-syntax-highlighter": "^15.5.11",
     "@uiw/react-json-view": "^2.0.0-alpha.12",
     "clsx": "^2.1.0",
     "dagre": "^0.8.5",
-    "es-abstract": "^1.22.4",
     "fuse.js": "^7.0.0",
     "heroicons": "^2.1.1",
     "react": "^18.2.0",
@@ -29,62 +23,46 @@
     "react-markdown": "^9.0.1",
     "react-query": "^3.39.3",
     "react-router-dom": "^6.22.1",
-    "react-scripts": "5.0.1",
     "react-select": "^5.8.1",
     "react-syntax-highlighter": "^15.5.0",
     "reactflow": "^11.10.4",
     "remark-gfm": "^4.0.0",
-    "string.prototype.matchall": "^4.0.10",
     "tailwindcss-question-mark": "^0.4.0",
-    "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
+    "typescript": "~6.0.2"
   },
   "scripts": {
-    "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
-    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
+    "start": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest",
+    "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix --max-warnings=0 --config ./.eslintrc.js --ignore-path ./.eslintignore",
     "format:fix": "prettier --write ./**/*.{ts,tsx,css,md,json} --config ./.prettierrc.json --ignore-path ./.prettierignore",
     "precommit": "npm run lint:fix && npm run format",
     "prepush": "npm run lint"
   },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
   "devDependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
     "@types/dagre": "^0.7.52",
     "@typescript-eslint/eslint-plugin": "^7.0.2",
     "@typescript-eslint/parser": "^7.0.2",
+    "@vitejs/plugin-react": "^4.5.0",
+    "autoprefixer": "^10.5.0",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "husky": "^9.0.11",
+    "jsdom": "^26.1.0",
     "lint-staged": "^15.5.2",
     "openapi-typescript-codegen": "^0.27.0",
     "prettier": "^3.2.5",
     "react-json-tree": "^0.18.0",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.4.1",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4"
   },
-  "proxy": "http://localhost:7241",
   "husky": {
     "hooks": {
       "pre-commit": "lint-staged"

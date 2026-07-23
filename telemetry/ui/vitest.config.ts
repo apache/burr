@@ -17,8 +17,14 @@
  * under the License.
  */
 
-/// <reference types="react-scripts" />
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 
-interface Window {
-  __BURR_BASE_PATH__?: string;
-}
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts']
+  }
+});

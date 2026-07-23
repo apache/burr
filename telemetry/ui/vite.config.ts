@@ -17,14 +17,18 @@
  * under the License.
  */
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': 'http://localhost:7241'
+    }
+  },
+  build: {
+    outDir: 'build'
+  }
+});

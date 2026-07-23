@@ -102,9 +102,7 @@ export const Counter = () => {
           projectId={currentProject}
           currentApp={currentApp}
           setCurrentApp={setCurrentApp}
-          createNewApp={
-            DefaultService.createNewApplicationApiV0CounterCreateProjectIdAppIdPost
-          }
+          createNewApp={DefaultService.createNewApplicationApiV0CounterCreateProjectIdAppIdPost}
         />
       }
       mode={'third'}

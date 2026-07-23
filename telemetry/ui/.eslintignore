@@ -17,5 +17,8 @@
 
 build/*
 tailwind.config.js
+postcss.config.js
+vite.config.ts
+vitest.config.ts
 .eslintrc.js
 src/api # generated code

@@ -17,18 +17,8 @@
  * under the License.
  */
 
-import { ReportHandler } from 'web-vitals';
+/// <reference types="vite/client" />
 
-const reportWebVitals = (onPerfEntry?: ReportHandler) => {
-  if (onPerfEntry && onPerfEntry instanceof Function) {
-    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
-      getCLS(onPerfEntry);
-      getFID(onPerfEntry);
-      getFCP(onPerfEntry);
-      getLCP(onPerfEntry);
-      getTTFB(onPerfEntry);
-    });
-  }
-};
-
-export default reportWebVitals;
+interface Window {
+  __BURR_BASE_PATH__?: string;
+}

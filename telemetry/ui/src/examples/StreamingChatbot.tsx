@@ -95,7 +95,8 @@ const ChatMessage = (props: { message: ChatItem; id?: string }) => {
               a: ({ ...props }) => <a className="text-dwlightblue hover:underline" {...props} />
             }}
             remarkPlugins={[remarkGfm]}
-            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}>
+            className={`whitespace-pre-wrap break-lines max-w-full ${props.message.type === ChatItem.type.ERROR ? 'bg-dwred/10' : ''} p-0.5`}
+          >
             {props.message.content}
           </Markdown>
         ) : (
@@ -292,7 +293,8 @@ export const StreamingChatbot = (props: { projectId: string; appId: string | und
           disabled={isChatWaiting || props.appId === undefined}
           onClick={() => {
             submitPrompt();
-          }}>
+          }}
+        >
           Send
         </Button>
       </div>
@@ -317,6 +319,7 @@ export const StreamingChatbotWithTelemetry = () => {
           }
         />
       }
-      mode={'third'}></TwoColumnLayout>
+      mode={'third'}
+    ></TwoColumnLayout>
   );
 };

@@ -216,7 +216,7 @@ def main() -> None:
         env = os.environ.copy()
         env["burr_path"] = str(burr_data_dir)
         env["PYTHONUNBUFFERED"] = "1"
-        with open(server_log, "w") as log_fh:
+        with open(server_log, "w", encoding="utf-8") as log_fh:
             server_proc = subprocess.Popen(
                 [str(venv_burr), "--port", str(port), "--no-open"],
                 cwd=str(work_dir),
@@ -232,7 +232,7 @@ def main() -> None:
             if server_proc.poll() is not None:
                 _log(f"Server process exited with code {server_proc.returncode}")
             _log("--- server log ---")
-            print(server_log.read_text(), flush=True)
+            print(server_log.read_text(encoding="utf-8"), flush=True)
             _log("--- end server log ---")
             _fail("Server did not become ready")
         _log("Server is up")
@@ -277,7 +277,8 @@ for _ in range(3):
     app.step()
 
 print(f"count={{app.state['count']}} app_id={{app.uid}}")
-"""
+""",
+            encoding="utf-8",
         )
         subprocess.run([str(venv_py), str(app_script)], check=True, cwd=str(work_dir), env=env)
 

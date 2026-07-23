@@ -363,15 +363,15 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
 
     if serve_static:
         base_asset_directory = str(files("burr").joinpath("tracking/server/build"))
-        static_directory = os.path.join(base_asset_directory, "static")
+        assets_directory = os.path.join(base_asset_directory, "assets")
 
         ui_app.mount(
-            "/static",
-            StaticFiles(directory=static_directory),
-            "/static",
+            "/assets",
+            StaticFiles(directory=assets_directory),
+            "/assets",
         )
-        # public assets in create react app don't get put under build/static,
-        # we need to route them over
+        # public assets (favicon, manifest, logo, etc.) are in the build root,
+        # routed under /public for the UI to reference
         ui_app.mount("/public", StaticFiles(directory=base_asset_directory, html=True), "/public")
 
         # Read index.html once at startup
@@ -392,8 +392,8 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
         async def react_app(req: Request, rest_of_path: str):
             """Serves the React app, rewriting asset paths to respect the mount prefix.
 
-            When mounted as a sub-app (e.g. under /burr), the CRA build's hardcoded
-            absolute paths (/static/js/..., /api/v0/...) need to be prefixed with the
+            When mounted as a sub-app (e.g. under /burr), the build's hardcoded
+            absolute paths (/assets/..., /api/v0/...) need to be prefixed with the
             mount path so the browser fetches them from the correct location.
 
             This rewrites both the HTML (href/src attributes) and injects a script that
@@ -404,7 +404,7 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
 
             root_path = req.scope.get("root_path", "")
             if root_path:
-                # Rewrite CRA's absolute paths to include the mount prefix
+                # Rewrite absolute paths to include the mount prefix
                 html = _index_html_template.replace('href="/', f'href="{root_path}/')
                 html = html.replace('src="/', f'src="{root_path}/')
                 # Inject a script before </head> that patches the OpenAPI BASE config

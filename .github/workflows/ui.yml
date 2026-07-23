@@ -37,7 +37,7 @@ jobs:
         working-directory: telemetry/ui
     strategy:
       matrix:
-        node-version: [16.x]
+        node-version: [22.x]
     steps:
     - uses: actions/checkout@v3
     - name: Use Node.js ${{ matrix.node-version }}

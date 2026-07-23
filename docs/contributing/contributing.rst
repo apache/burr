@@ -92,7 +92,7 @@ Not part of the CLI (yet), but running just the UI is simple:
 
 .. code-block:: bash
 
-        $ cd burr/ui
+        $ cd telemetry/ui
         $ npm run start
 
 Package data
