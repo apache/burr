@@ -98,6 +98,8 @@ def test_langfuse_bridge_span_structure_and_attributes(span_capture):
     for name in ["run", "counter_action", "finish_action"]:
         assert spans_by_name[name].attributes["langfuse.session.id"] == "test-app-id"
         assert spans_by_name[name].attributes["langfuse.user.id"] == "test-user"
+        assert spans_by_name[name].attributes["session.id"] == "test-app-id"
+        assert spans_by_name[name].attributes["user.id"] == "test-user"
 
     # step observation input/output
     step_input = json.loads(

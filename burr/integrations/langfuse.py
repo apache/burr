@@ -66,6 +66,9 @@ _LANGFUSE_OBSERVATION_OUTPUT = "langfuse.observation.output"
 _LANGFUSE_OBSERVATION_METADATA_PREFIX = "langfuse.observation.metadata."
 _LANGFUSE_SESSION_ID = "langfuse.session.id"
 _LANGFUSE_USER_ID = "langfuse.user.id"
+# Langfuse v3 uses the OpenTelemetry semantic convention attribute names.
+_LANGFUSE_V3_SESSION_ID = "session.id"
+_LANGFUSE_V3_USER_ID = "user.id"
 
 # Attribute namespaces we pass through unprefixed so users can deliberately log Langfuse-mapped or GenAI semantic convention attributes.
 _PASSTHROUGH_ATTRIBUTE_PREFIXES = ("langfuse.", "gen_ai.")
@@ -253,8 +256,10 @@ class LangfuseBridge(OpenTelemetryBridge):
         session_id, user_id = self._trace_attributes(app_id, partition_key)
         if session_id is not None:
             span.set_attribute(_LANGFUSE_SESSION_ID, session_id)
+            span.set_attribute(_LANGFUSE_V3_SESSION_ID, session_id)
         if user_id is not None:
             span.set_attribute(_LANGFUSE_USER_ID, user_id)
+            span.set_attribute(_LANGFUSE_V3_USER_ID, user_id)
 
     def _enter_trace_attribute_context(self, app_id: str, partition_key: Optional[str]) -> None:
         if propagate_attributes is None:  # langfuse < 3.9
