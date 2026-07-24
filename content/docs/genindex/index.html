@@ -338,6 +338,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/streamlit/">Streamlit</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/opentelemetry/">OpenTelemetry</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/traceloop/">Traceloop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference/integrations/langfuse/">Langfuse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/langchain/">Langchain</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/pydantic/">Pydantic</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../reference/integrations/haystack/">Haystack</a></li>
@@ -449,6 +450,8 @@ s=d.getElementsByTagName('script')[0];
           <li><a href="../reference/state/#burr.core.state.State.__init__">(burr.core.state.State method)</a>
 </li>
           <li><a href="../reference/typing/#burr.core.typing.TypingSystem.__init__">(burr.core.typing.TypingSystem method)</a>
+</li>
+          <li><a href="../reference/integrations/langfuse/#burr.integrations.langfuse.LangfuseBridge.__init__">(burr.integrations.langfuse.LangfuseBridge method)</a>
 </li>
           <li><a href="../reference/persister/#burr.integrations.persisters.b_aiosqlite.AsyncSQLitePersister.__init__">(burr.integrations.persisters.b_aiosqlite.AsyncSQLitePersister method)</a>
 </li>
@@ -577,8 +580,6 @@ s=d.getElementsByTagName('script')[0];
         </ul></li>
         <li><a href="../reference/application/#burr.core.application.Application.builder">builder (burr.core.application.Application property)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     burr.core.serde
 
@@ -586,6 +587,8 @@ s=d.getElementsByTagName('script')[0];
           <li><a href="../reference/serde/#module-burr.core.serde">module</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     burr.integrations.serde.langchain
 
@@ -614,6 +617,8 @@ s=d.getElementsByTagName('script')[0];
           <li><a href="../reference/serde/#module-burr.integrations.serde.pydantic">module</a>
 </li>
         </ul></li>
+        <li><a href="../reference/integrations/langfuse/#burr.integrations.langfuse.burr_span_export_filter">burr_span_export_filter() (in module burr.integrations.langfuse)</a>
+</li>
     </ul></td>
   </tr></table>
 </section>
@@ -924,6 +929,8 @@ s=d.getElementsByTagName('script')[0];
   <h2>L</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="../reference/integrations/langfuse/#burr.integrations.langfuse.LangfuseBridge">LangfuseBridge (class in burr.integrations.langfuse)</a>
+</li>
         <li><a href="../reference/persister/#burr.core.persistence.AsyncBaseStateLoader.list_app_ids">list_app_ids() (burr.core.persistence.AsyncBaseStateLoader method)</a>
 
         <ul>
@@ -1079,9 +1086,11 @@ s=d.getElementsByTagName('script')[0];
           <li><a href="../reference/tracking/#burr.tracking.LocalTrackingClient.post_application_create">(burr.tracking.LocalTrackingClient method)</a>
 </li>
         </ul></li>
-        <li><a href="../reference/integrations/opentelemetry/#burr.integrations.opentelemetry.OpenTelemetryBridge.post_run_step">post_run_step() (burr.integrations.opentelemetry.OpenTelemetryBridge method)</a>
+        <li><a href="../reference/integrations/langfuse/#burr.integrations.langfuse.LangfuseBridge.post_run_step">post_run_step() (burr.integrations.langfuse.LangfuseBridge method)</a>
 
         <ul>
+          <li><a href="../reference/integrations/opentelemetry/#burr.integrations.opentelemetry.OpenTelemetryBridge.post_run_step">(burr.integrations.opentelemetry.OpenTelemetryBridge method)</a>
+</li>
           <li><a href="../reference/lifecycle/#burr.lifecycle.base.PostRunStepHook.post_run_step">(burr.lifecycle.base.PostRunStepHook method)</a>
 </li>
           <li><a href="../reference/lifecycle/#burr.lifecycle.base.PostRunStepHookAsync.post_run_step">(burr.lifecycle.base.PostRunStepHookAsync method)</a>
@@ -1107,9 +1116,11 @@ s=d.getElementsByTagName('script')[0];
 </li>
         <li><a href="../reference/lifecycle/#burr.lifecycle.base.PostRunStepHookAsync">PostRunStepHookAsync (class in burr.lifecycle.base)</a>
 </li>
-        <li><a href="../reference/integrations/opentelemetry/#burr.integrations.opentelemetry.OpenTelemetryBridge.pre_run_step">pre_run_step() (burr.integrations.opentelemetry.OpenTelemetryBridge method)</a>
+        <li><a href="../reference/integrations/langfuse/#burr.integrations.langfuse.LangfuseBridge.pre_run_step">pre_run_step() (burr.integrations.langfuse.LangfuseBridge method)</a>
 
         <ul>
+          <li><a href="../reference/integrations/opentelemetry/#burr.integrations.opentelemetry.OpenTelemetryBridge.pre_run_step">(burr.integrations.opentelemetry.OpenTelemetryBridge method)</a>
+</li>
           <li><a href="../reference/lifecycle/#burr.lifecycle.base.PreRunStepHook.pre_run_step">(burr.lifecycle.base.PreRunStepHook method)</a>
 </li>
           <li><a href="../reference/lifecycle/#burr.lifecycle.base.PreRunStepHookAsync.pre_run_step">(burr.lifecycle.base.PreRunStepHookAsync method)</a>

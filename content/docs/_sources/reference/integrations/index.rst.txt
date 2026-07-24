@@ -30,6 +30,7 @@ Integrations -- we will be adding more
    streamlit
    opentelemetry
    traceloop
+   langfuse
    langchain
    pydantic
    haystack

@@ -22,12 +22,12 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../../genindex/"><link rel="search" title="Search" href="../../../search/"><link rel="next" title="Haystack" href="../haystack/"><link rel="prev" title="Langchain" href="../langchain/">
-        <link rel="canonical" href="https://burr.apache.org/docs/reference/integrations/pydantic/">
+<link rel="index" title="Index" href="../../../genindex/"><link rel="search" title="Search" href="../../../search/"><link rel="next" title="Langchain" href="../langchain/"><link rel="prev" title="Traceloop" href="../traceloop/">
+        <link rel="canonical" href="https://burr.apache.org/docs/reference/integrations/langfuse/">
         <link rel="prefetch" href="../../../_static/burr_logo.svg" as="image">
 
     <link rel="shortcut icon" href="../../../_static/favicon.ico"><!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Pydantic - Apache Burr</title>
+        <title>Langfuse - Apache Burr</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
@@ -229,7 +229,7 @@ s=d.getElementsByTagName('script')[0];
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
       </label>
     </div>
@@ -340,9 +340,9 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l3"><a class="reference internal" href="../streamlit/">Streamlit</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../opentelemetry/">OpenTelemetry</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../traceloop/">Traceloop</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../langfuse/">Langfuse</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">Langfuse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../langchain/">Langchain</a></li>
-<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">Pydantic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../pydantic/">Pydantic</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../haystack/">Haystack</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../ray/">Ray</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../bedrock/">Amazon Bedrock</a></li>
@@ -406,18 +406,227 @@ s=d.getElementsByTagName('script')[0];
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="pydantic">
-<h1>Pydantic<a class="headerlink" href="#pydantic" title="Link to this heading">¶</a></h1>
-<p><a class="reference external" href="https://www.pydantic.io">Pydantic</a> integrations come in two forms:</p>
+          <section id="langfuse">
+<span id="langfuseintegrationref"></span><h1>Langfuse<a class="headerlink" href="#langfuse" title="Link to this heading">¶</a></h1>
+<p><a class="reference external" href="https://langfuse.com">Langfuse</a> is an open-source LLM engineering platform with
+tracing/observability capabilities. Burr integrates with it through the
+OpenTelemetry-native Langfuse Python SDK, building on the
+<a class="reference internal" href="../opentelemetry/#opentelintegrationref"><span class="std std-ref">opentelemetry integration</span></a>.</p>
+<p>Install the integration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[langfuse]&quot;</span>
+</pre></div>
+</div>
+<p>Then add the bridge as a hook – credentials are read from the standard
+<code class="docutils literal notranslate"><span class="pre">LANGFUSE_PUBLIC_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">LANGFUSE_SECRET_KEY</span></code>, and <code class="docutils literal notranslate"><span class="pre">LANGFUSE_HOST</span></code>
+environment variables:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ApplicationBuilder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">burr.integrations.langfuse</span><span class="w"> </span><span class="kn">import</span> <span class="n">LangfuseBridge</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ApplicationBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">LangfuseBridge</span><span class="p">())</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
+</pre></div>
+</div>
+<p>Each application execution call becomes a Langfuse trace, each step becomes a span
+(with state/inputs/results captured as observation input/output), and spans opened
+through Burr’s <a class="reference internal" href="../../../concepts/additional-visibility/#opentelref"><span class="std std-ref">tracing API</span></a> become nested spans. Any additional
+OpenTelemetry LLM instrumentation (e.g. <code class="docutils literal notranslate"><span class="pre">opentelemetry-instrumentation-openai</span></code>)
+appears nested within the corresponding Burr step.</p>
+<p>See the following resources for more information:</p>
 <ul class="simple">
-<li><p>Serialization/deserialization of state (see <a class="reference internal" href="../../serde/#serderef"><span class="std std-ref">Serialization &amp; Deserialization</span></a> for more information)</p></li>
-<li><p>Type checking of state (see <a class="reference internal" href="../../typing/#statetypingref"><span class="std std-ref">Typing</span></a> for more information)</p></li>
+<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/integrations/langfuse">Example in the repository</a></p></li>
+<li><p><a class="reference external" href="https://langfuse.com/integrations/native/opentelemetry">Langfuse OpenTelemetry docs</a></p></li>
 </ul>
+<p>Reference for the various useful methods:</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="burr.integrations.langfuse.LangfuseBridge">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">burr.integrations.langfuse.</span></span><span class="sig-name descname"><span class="pre">LangfuseBridge</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">langfuse_client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Langfuse</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">session_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">user_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">capture_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tracer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tracer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tracer_provider</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TracerProvider</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">langfuse_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.langfuse.LangfuseBridge" title="Link to this definition">¶</a></dt>
+<dd><p>Adapter to log Burr application execution to <a class="reference external" href="https://langfuse.com">Langfuse</a>.</p>
+<ol class="arabic simple">
+<li><p>Each application execution call (<code class="docutils literal notranslate"><span class="pre">run</span></code>/<code class="docutils literal notranslate"><span class="pre">step</span></code>/<code class="docutils literal notranslate"><span class="pre">iterate</span></code>/<code class="docutils literal notranslate"><span class="pre">stream_result</span></code>/…)
+opens a root span, which defines the Langfuse trace</p></li>
+<li><p>Each step opens a span, capturing the action’s inputs/read state as the
+observation input and its result/written state as the observation output</p></li>
+<li><p>Each span opened through Burr’s tracing API (<code class="docutils literal notranslate"><span class="pre">__tracer</span></code>) opens a span</p></li>
+<li><p>Attributes logged through <code class="docutils literal notranslate"><span class="pre">__tracer.log_attribute(s)</span></code> are captured as
+observation metadata</p></li>
+</ol>
+<p>Burr’s <code class="docutils literal notranslate"><span class="pre">app_id</span></code> maps to the Langfuse session (so multiple execution calls of the
+same application group together), and the <code class="docutils literal notranslate"><span class="pre">partition_key</span></code> maps to the Langfuse
+user - both can be overridden.</p>
+<p>Basic usage - credentials are read from the standard <code class="docutils literal notranslate"><span class="pre">LANGFUSE_PUBLIC_KEY</span></code>,
+<code class="docutils literal notranslate"><span class="pre">LANGFUSE_SECRET_KEY</span></code>, and <code class="docutils literal notranslate"><span class="pre">LANGFUSE_HOST</span></code> environment variables:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.integrations.langfuse</span><span class="w"> </span><span class="kn">import</span> <span class="n">LangfuseBridge</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ApplicationBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">LangfuseBridge</span><span class="p">())</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
+</pre></div>
+</div>
+<p>You can also pass credentials explicitly, or pass a pre-constructed client:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">public_key</span><span class="o">=</span><span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span> <span class="n">secret_key</span><span class="o">=</span><span class="s2">&quot;sk-lf-...&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+<span class="c1"># or, equivalently</span>
+<span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">langfuse_client</span><span class="o">=</span><span class="n">my_langfuse_client</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The underlying client is available as <code class="docutils literal notranslate"><span class="pre">bridge.langfuse_client</span></code> – for example to
+<code class="docutils literal notranslate"><span class="pre">flush()</span></code> in short-lived scripts, or to score traces.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>With langfuse v4+, spans are filtered before export, and only LLM-relevant
+spans are exported by default. If you construct the <code class="docutils literal notranslate"><span class="pre">Langfuse</span></code> client
+yourself, pass <code class="docutils literal notranslate"><span class="pre">should_export_span=burr_span_export_filter</span></code> to its
+constructor so Burr spans are exported (see
+<a class="reference internal" href="#burr.integrations.langfuse.burr_span_export_filter" title="burr.integrations.langfuse.burr_span_export_filter"><code class="xref py py-func docutils literal notranslate"><span class="pre">burr_span_export_filter()</span></code></a>). When <code class="docutils literal notranslate"><span class="pre">LangfuseBridge</span></code> constructs
+the client for you, this is applied automatically.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.langfuse.LangfuseBridge.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">langfuse_client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Langfuse</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">session_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">user_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">capture_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tracer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tracer</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">tracer_provider</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TracerProvider</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">langfuse_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.langfuse.LangfuseBridge.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initializes the Langfuse bridge.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>langfuse_client</strong> – A pre-constructed Langfuse client to use. If not passed,
+one is created from <code class="docutils literal notranslate"><span class="pre">langfuse_kwargs</span></code> (falling back to the standard
+<code class="docutils literal notranslate"><span class="pre">LANGFUSE_*</span></code> environment variables), with the Burr span export filter applied.</p></li>
+<li><p><strong>session_id</strong> – Langfuse session ID to group traces under. Defaults to the
+Burr <code class="docutils literal notranslate"><span class="pre">app_id</span></code>.</p></li>
+<li><p><strong>user_id</strong> – Langfuse user ID to attach to traces. Defaults to the Burr
+<code class="docutils literal notranslate"><span class="pre">partition_key</span></code> (if set).</p></li>
+<li><p><strong>capture_state</strong> – Whether to capture state/inputs/results as observation
+input/output. Set to False if your state contains data you do not want
+sent to Langfuse.</p></li>
+<li><p><strong>tracer</strong> – OpenTelemetry tracer to use – for testing/advanced use. Defaults
+to a tracer named <code class="docutils literal notranslate"><span class="pre">burr.integrations.langfuse</span></code> from the global provider.</p></li>
+<li><p><strong>tracer_provider</strong> – OpenTelemetry tracer provider to use for both the
+Langfuse client and Burr spans. When passing a pre-constructed client that
+uses a custom provider, pass the same provider here.</p></li>
+<li><p><strong>langfuse_kwargs</strong> – Keyword arguments forwarded to the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Langfuse</span></code> constructor (e.g. <code class="docutils literal notranslate"><span class="pre">public_key</span></code>,
+<code class="docutils literal notranslate"><span class="pre">secret_key</span></code>, <code class="docutils literal notranslate"><span class="pre">host</span></code>). Only valid if <code class="docutils literal notranslate"><span class="pre">langfuse_client</span></code> is not passed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.langfuse.LangfuseBridge.post_run_step">
+<span class="sig-name descname"><span class="pre">post_run_step</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../state/#burr.core.state.State" title="burr.core.state.State"><span class="pre">State</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../actions/#burr.core.action.Action" title="burr.core.action.Action"><span class="pre">Action</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exception</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Exception</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">future_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.langfuse.LangfuseBridge.post_run_step" title="Link to this definition">¶</a></dt>
+<dd><p>Run after a step is executed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> – State after step execution</p></li>
+<li><p><strong>action</strong> – Action that was executed</p></li>
+<li><p><strong>result</strong> – Result of the action</p></li>
+<li><p><strong>sequence_id</strong> – Sequence ID of the action</p></li>
+<li><p><strong>exception</strong> – Exception that was raised</p></li>
+<li><p><strong>future_kwargs</strong> – Future keyword arguments</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.langfuse.LangfuseBridge.pre_run_step">
+<span class="sig-name descname"><span class="pre">pre_run_step</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">app_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">sequence_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../state/#burr.core.state.State" title="burr.core.state.State"><span class="pre">State</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../actions/#burr.core.action.Action" title="burr.core.action.Action"><span class="pre">Action</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">future_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.langfuse.LangfuseBridge.pre_run_step" title="Link to this definition">¶</a></dt>
+<dd><p>Run before a step is executed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> – State prior to step execution</p></li>
+<li><p><strong>action</strong> – Action to be executed</p></li>
+<li><p><strong>inputs</strong> – Inputs to the action</p></li>
+<li><p><strong>sequence_id</strong> – Sequence ID of the action</p></li>
+<li><p><strong>future_kwargs</strong> – Future keyword arguments</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="burr.integrations.langfuse.burr_span_export_filter">
+<span class="sig-prename descclassname"><span class="pre">burr.integrations.langfuse.</span></span><span class="sig-name descname"><span class="pre">burr_span_export_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">span</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ReadableSpan</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#burr.integrations.langfuse.burr_span_export_filter" title="Link to this definition">¶</a></dt>
+<dd><p>You only need this if you construct the <code class="xref py py-class docutils literal notranslate"><span class="pre">Langfuse</span></code>
+client yourself – <a class="reference internal" href="#burr.integrations.langfuse.LangfuseBridge" title="burr.integrations.langfuse.LangfuseBridge"><code class="xref py py-class docutils literal notranslate"><span class="pre">LangfuseBridge</span></code></a> applies it automatically when it
+creates the client for you:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">langfuse</span><span class="w"> </span><span class="kn">import</span> <span class="n">Langfuse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">burr.integrations.langfuse</span><span class="w"> </span><span class="kn">import</span> <span class="n">LangfuseBridge</span><span class="p">,</span> <span class="n">burr_span_export_filter</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">Langfuse</span><span class="p">(</span><span class="n">should_export_span</span><span class="o">=</span><span class="n">burr_span_export_filter</span><span class="p">)</span>
+<span class="n">app</span> <span class="o">=</span> <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">langfuse_client</span><span class="o">=</span><span class="n">client</span><span class="p">))</span><span class="o">...</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </section>
 
         </article>
@@ -425,23 +634,23 @@ s=d.getElementsByTagName('script')[0];
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../haystack/">
+          <a class="next-page" href="../langchain/">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Haystack</div>
+                <div class="title">Langchain</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../langchain/">
+          <a class="prev-page" href="../traceloop/">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Langchain</div>
+                <div class="title">Traceloop</div>
                 
               </div>
             </a>
@@ -476,8 +685,33 @@ s=d.getElementsByTagName('script')[0];
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Langfuse</a><ul>
+<li><a class="reference internal" href="#burr.integrations.langfuse.LangfuseBridge"><code class="docutils literal notranslate"><span class="pre">LangfuseBridge</span></code></a><ul>
+<li><a class="reference internal" href="#burr.integrations.langfuse.LangfuseBridge.__init__"><code class="docutils literal notranslate"><span class="pre">LangfuseBridge.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.langfuse.LangfuseBridge.post_run_step"><code class="docutils literal notranslate"><span class="pre">LangfuseBridge.post_run_step()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.langfuse.LangfuseBridge.pre_run_step"><code class="docutils literal notranslate"><span class="pre">LangfuseBridge.pre_run_step()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#burr.integrations.langfuse.burr_span_export_filter"><code class="docutils literal notranslate"><span class="pre">burr_span_export_filter()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>
