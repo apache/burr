@@ -101,8 +101,9 @@ def load_burr_docs(
         files_iter = file_names
     docs = []
     for file in files_iter:
+        doc_path = (burr_docs_dir / Path(file).name).with_suffix(".txt")
         docs += merge_short_docs(
-            docs=(burr_docs_dir / Path(file).name).with_suffix(".txt").read_text().split("\n\n"),
+            docs=doc_path.read_text(encoding="utf-8").split("\n\n"),
             file_name=Path(file).stem,
             doc_thresh=doc_thresh,
         )
