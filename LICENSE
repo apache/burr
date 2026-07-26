@@ -202,7 +202,7 @@
 
 -------------------------------
 
-examples/deep-researcher prompts.py and utils.py are copied from
+examples/deep-researcher prompts.py and deep_researcher_utils.py are copied from
 https://github.com/langchain-ai/local-deep-researcher and are licensed under the MIT License.
 
 MIT License
