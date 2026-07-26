@@ -62,6 +62,7 @@ PROJECT_SHORT_NAME = "burr"
 REQUIRED_TEXT_FILES = ("LICENSE", "NOTICE", "DISCLAIMER")
 WHEEL_LICENSE_FILES = ("LICENSE-wheel",)
 WHEEL_REQUIRED_TEXT_FILES = ("NOTICE", "DISCLAIMER") + WHEEL_LICENSE_FILES
+WHEEL_JS_LICENSE_SUFFIX = ".js.LICENSE.txt"
 PASS = "PASS"
 FAIL = "FAIL"
 SKIP = "SKIP"
@@ -411,6 +412,29 @@ def _verify_required_text_files(
     return all_valid
 
 
+def _verify_bundled_js_license(
+    artifact_name: str,
+    file_bytes: dict[str, bytes],
+    summary: VerificationSummary,
+) -> bool:
+    check_name = f"{artifact_name} contains bundled JavaScript licenses"
+    matches = [
+        path
+        for path in file_bytes
+        if any(part.endswith(".dist-info") for part in PurePosixPath(path).parts)
+        and "/licenses/burr/tracking/server/build/static/js/" in f"/{path}"
+        and path.endswith(WHEEL_JS_LICENSE_SUFFIX)
+    ]
+    if not matches:
+        print("    Missing bundled JavaScript license notices")
+        summary.fail(check_name, "missing")
+        return False
+
+    print(f"    Bundled JavaScript license notices present ({matches[0]})")
+    summary.pass_(check_name, matches[0])
+    return True
+
+
 def verify_artifact_contents(
     artifacts_dir: str, summary: VerificationSummary | None = None
 ) -> bool:
@@ -455,6 +479,8 @@ def verify_artifact_contents(
                 expected_files,
                 summary,
             ):
+                all_valid = False
+            if not _verify_bundled_js_license(artifact_name, file_bytes, summary):
                 all_valid = False
         else:
             print(f"    ⚠️  Skipping unsupported artifact type: {artifact_name}")

@@ -34,7 +34,12 @@ maintainers = [
 ]
 description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
-license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]
+license-files = [
+  "LICENSE-wheel",
+  "NOTICE",
+  "DISCLAIMER",
+  "burr/tracking/server/build/static/js/main.*.js.LICENSE.txt",
+]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
   "Development Status :: 4 - Beta",

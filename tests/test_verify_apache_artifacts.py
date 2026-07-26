@@ -86,6 +86,8 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
                 "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text(
                     "LICENSE-wheel"
                 ),
+                "apache_burr-0.41.0.dist-info/licenses/burr/tracking/server/build/static/js/"
+                "main.abc123.js.LICENSE.txt": b"third-party notices",
             },
         )
 
@@ -115,6 +117,35 @@ def test_verify_artifact_contents_fails_when_wheel_license_file_is_missing():
         assert verify.verify_artifact_contents(str(artifacts_dir), summary) is False
         assert any(
             result.name.endswith("contains LICENSE-wheel") and result.status == verify.FAIL
+            for result in summary.results
+        )
+
+
+def test_verify_artifact_contents_fails_when_bundled_js_license_is_missing():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        artifacts_dir = Path(temp_dir) / "dist"
+        artifacts_dir.mkdir()
+
+        wheel_path = artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl"
+        _write_wheel(
+            wheel_path,
+            {
+                "apache_burr/__init__.py": b"__version__ = '0.41.0'\n",
+                "apache_burr-0.41.0.dist-info/METADATA": b"Metadata-Version: 2.1\n",
+                "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
+                "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
+                "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
+                "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text(
+                    "LICENSE-wheel"
+                ),
+            },
+        )
+
+        summary = verify.VerificationSummary()
+        assert verify.verify_artifact_contents(str(artifacts_dir), summary) is False
+        assert any(
+            result.name.endswith("contains bundled JavaScript licenses")
+            and result.status == verify.FAIL
             for result in summary.results
         )
 
