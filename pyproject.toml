@@ -216,6 +216,7 @@ developer = [
   "build",
   "twine",
   "pre-commit",
+  "tomli; python_version < '3.11'",
 ]
 
 opentelemetry = [

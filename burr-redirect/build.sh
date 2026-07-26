@@ -33,10 +33,18 @@ fi
 VERSION="$1"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Requires an activated virtualenv with the release tooling installed:
+#   pip install -e ".[developer]"   (provides build and twine)
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo "ERROR: no active Python virtualenv detected. Activate the release venv first." >&2
+    exit 1
+fi
+
 echo "Building burr redirect package for version ${VERSION}..."
 
-# Stamp version into pyproject.toml from template
-sed "s/VERSION/${VERSION}/g" "${SCRIPT_DIR}/pyproject.toml.template" > "${SCRIPT_DIR}/pyproject.toml"
+# Generate pyproject.toml from the template, stamping in the version and the
+# extras declared in the repository root pyproject.toml
+python "${SCRIPT_DIR}/generate_pyproject.py" "${VERSION}"
 
 # Clean previous build
 rm -rf "${SCRIPT_DIR}/dist" "${SCRIPT_DIR}/build" "${SCRIPT_DIR}"/*.egg-info
