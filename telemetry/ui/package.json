@@ -24,7 +24,7 @@
     "react-query": "^3.39.3",
     "react-router-dom": "^7.18.1",
     "react-select": "^5.8.1",
-    "react-syntax-highlighter": "^15.5.0",
+    "react-syntax-highlighter": "^16.1.1",
     "reactflow": "^11.10.4",
     "remark-gfm": "^4.0.0",
     "tailwindcss-question-mark": "^0.4.0",
