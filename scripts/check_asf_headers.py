@@ -106,7 +106,7 @@ def main(argv: Optional[list] = None) -> int:
     if not files:
         return 0
 
-    repo_root = _find_repo_root(files[0].parent)
+    repo_root = _find_repo_root(Path(__file__).resolve().parent)
     patterns = _load_rat_exclude_patterns(repo_root)
 
     violations = []
