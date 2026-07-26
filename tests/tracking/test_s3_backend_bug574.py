@@ -24,13 +24,11 @@ These tests use moto (mock S3) and do NOT require real AWS credentials.
 """
 
 import os
-import tempfile
 from unittest.mock import patch
 
 import pytest
 
 try:
-    import moto
     from moto import mock_aws
 
     HAS_MOTO = True
@@ -191,10 +189,9 @@ class TestBug2BatchCapBreak:
         await Tortoise.init(config=tortoise_config)
         await Tortoise.generate_schemas(safe=True)
 
-        from burr.tracking.server.s3.models import Project
-
         # Create a project in the DB
         from burr import system
+        from burr.tracking.server.s3.models import Project
 
         project = await Project.create(
             name="test-project",
@@ -243,7 +240,7 @@ class TestBug2BatchCapBreak:
             keys.append(key)
 
         # Import the function under test
-        from burr.tracking.server.s3.backend import DataFile, SQLiteS3Backend
+        from burr.tracking.server.s3.backend import DataFile
 
         # Simulate: batch cap = 5, so only first 5 files indexed
         max_paths = 5
