@@ -21,7 +21,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "apache-burr"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [] # yes, there are none
 requires-python = ">=3.9"
 authors = [
@@ -31,6 +31,8 @@ authors = [
 maintainers = [
   {name = "Elijah ben Izzy", email = "elijah@apache.org"},
   {name = "Stefan Krawczyk", email = "stefan@apache.org"},
+  {name = "Jernej Frank", email = "jernejfrank@apache.org"},
+  {name = "André Ahlert", email = "andre@aex.partners"},
 ]
 description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
