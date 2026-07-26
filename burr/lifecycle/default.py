@@ -51,7 +51,7 @@ class StateAndResultsFullLogger(PostRunStepHook, PreRunStepHook):
             raise ValueError(f"jsonl_path must end with .jsonl. Got: {jsonl_path}")
         self.jsonl_path = jsonl_path
         open_mode = "a" if mode == "append" else "w"
-        self.f = open(jsonl_path, mode=open_mode)  # open in append mode
+        self.f = open(jsonl_path, mode=open_mode, encoding="utf-8")
         self.tracker = []  # tracker to keep track of timing/whatnot
         self.json_dump = json_dump
 

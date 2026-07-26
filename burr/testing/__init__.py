@@ -26,7 +26,7 @@ import json
 # and then load it for the test.
 def load_test_cases(file_name: str) -> tuple:
     """Load test cases from a json file."""
-    with open(file_name, "r") as f:
+    with open(file_name, "r", encoding="utf-8") as f:
         json_test_cases = json.load(f)
         test_cases = [(tc.get("input_state"), tc.get("expected_state")) for tc in json_test_cases]
         test_ids = [
