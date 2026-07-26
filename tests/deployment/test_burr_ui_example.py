@@ -20,6 +20,7 @@
 Validate structure and security without provisioning real infrastructure.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -83,9 +84,9 @@ class TestApacheLicenseHeaders:
     def test_has_header(self, rel):
         p = EXAMPLE_DIR / rel
         if p.exists():
-            assert "Licensed to the Apache Software Foundation" in p.read_text(encoding="utf-8"), (
-                f"{rel} is missing the Apache license header"
-            )
+            assert "Licensed to the Apache Software Foundation" in p.read_text(
+                encoding="utf-8"
+            ), f"{rel} is missing the Apache license header"
 
 
 class TestBucketParameterization:
@@ -95,7 +96,12 @@ class TestBucketParameterization:
 
     def test_user_data_sets_bucket_env(self):
         ud = (
-            EXAMPLE_DIR / "terraform" / "modules" / "compute" / "templates" / "user_data.sh.tpl"
+            EXAMPLE_DIR
+            / "terraform"
+            / "modules"
+            / "compute"
+            / "templates"
+            / "user_data.sh.tpl"
         ).read_text()
         assert "BURR_S3_BUCKET" in ud
         assert "burr" in ud
@@ -116,27 +122,37 @@ class TestSecurity:
             EXAMPLE_DIR / "terraform" / "modules" / "networking" / "main.tf"
         ).read_text()
         # There should be no aws_security_group_rule with type = "ingress"
-        assert 'type              = "ingress"' not in net_main, (
-            "Security group should have no ingress rules (SSM access only)"
-        )
+        assert (
+            'type              = "ingress"' not in net_main
+        ), "Security group should have no ingress rules (SSM access only)"
 
     def test_iam_read_only(self):
         """IAM policy should only have read actions, no write/delete."""
-        iam_main = (EXAMPLE_DIR / "terraform" / "modules" / "iam" / "main.tf").read_text()
+        iam_main = (
+            EXAMPLE_DIR / "terraform" / "modules" / "iam" / "main.tf"
+        ).read_text()
         assert "s3:GetObject" in iam_main
         assert "s3:PutObject" not in iam_main
         assert "s3:DeleteObject" not in iam_main
 
     def test_ssm_core_policy_attached(self):
         """Instance must have AmazonSSMManagedInstanceCore for SSM access."""
-        iam_main = (EXAMPLE_DIR / "terraform" / "modules" / "iam" / "main.tf").read_text()
+        iam_main = (
+            EXAMPLE_DIR / "terraform" / "modules" / "iam" / "main.tf"
+        ).read_text()
         assert "AmazonSSMManagedInstanceCore" in iam_main
 
 
 class TestTerraformValidate:
     @pytest.fixture(autouse=True)
     def _skip_if_no_terraform(self):
-        if subprocess.run(["terraform", "version"], capture_output=True).returncode != 0:
+        if shutil.which("terraform") is None:
+            pytest.skip("terraform not installed")
+        try:
+            result = subprocess.run(["terraform", "version"], capture_output=True)
+        except FileNotFoundError:
+            pytest.skip("terraform not installed")
+        if result.returncode != 0:
             pytest.skip("terraform not installed")
 
     def test_fmt(self):
