@@ -70,13 +70,18 @@ def test_examples_include_exclude_coverage():
     include_patterns = flit_sdist.get("include", [])
     exclude_patterns = flit_sdist.get("exclude", [])
 
-    # Extract example directories from include patterns
+    # Extract example directories and files from include patterns
     included_examples = set()
+    included_files = set()
     for pattern in include_patterns:
-        if pattern.startswith("examples/") and pattern.endswith("/**"):
-            # Extract directory name from patterns like "examples/email-assistant/**"
-            dir_name = pattern.removeprefix("examples/").removesuffix("/**")
-            included_examples.add(dir_name)
+        if pattern.startswith("examples/"):
+            if pattern.endswith("/**"):
+                # Extract directory name from patterns like "examples/email-assistant/**"
+                dir_name = pattern.removeprefix("examples/").removesuffix("/**")
+                included_examples.add(dir_name)
+            else:
+                # File pattern like "examples/__init__.py"
+                included_files.add(pattern.removeprefix("examples/"))
 
     # Extract example directories from exclude patterns
     excluded_examples = set()
@@ -111,6 +116,10 @@ def test_examples_include_exclude_coverage():
     missing_from_config = actual_dirs - configured_dirs
     extra_in_config = configured_dirs - actual_dirs
 
+    configured_files = included_files | excluded_files
+    files_missing_from_config = actual_files - configured_files
+    extra_files_in_config = configured_files - actual_files
+
     # Build error message if mismatch found
     errors = []
 
@@ -140,15 +149,78 @@ def test_examples_include_exclude_coverage():
             f"\n   To fix: Remove these entries from pyproject.toml [tool.flit.sdist]\n"
         )
 
+    if files_missing_from_config:
+        errors.append(
+            f"\n❌ Top-level files in examples/ that are NOT in pyproject.toml config:\n"
+            f"   {sorted(files_missing_from_config)}\n"
+            f"\n   WHY THIS MATTERS:\n"
+            f"   Loose files directly under examples/ are picked up by flit's package\n"
+            f"   auto-discovery just like the subdirectories, so they ship in the sdist as\n"
+            f"   stray files unless explicitly excluded (this is how\n"
+            f"   examples/fastapi_mount_example.py leaked into a release artifact).\n"
+            f"\n   To fix: Add to pyproject.toml [tool.flit.sdist]:\n"
+            f"   - To INCLUDE in Apache release: add 'examples/<name>' to 'include' list\n"
+            f"   - To EXCLUDE from Apache release: add 'examples/<name>' to 'exclude' list\n"
+        )
+
+    if extra_files_in_config:
+        errors.append(
+            f"\n❌ Files listed in pyproject.toml but NOT in examples/ on disk:\n"
+            f"   {sorted(extra_files_in_config)}\n"
+            f"\n   To fix: Remove these entries from pyproject.toml [tool.flit.sdist]\n"
+        )
+
     # Report what's currently configured (for debugging)
     if errors:
         summary = (
             f"\n📋 Current configuration:\n"
             f"   Included examples ({len(included_examples)}): {sorted(included_examples)}\n"
             f"   Excluded examples ({len(excluded_examples)}): {sorted(excluded_examples)}\n"
+            f"   Included files ({len(included_files)}): {sorted(included_files)}\n"
             f"   Excluded files ({len(excluded_files)}): {sorted(excluded_files)}\n"
             f"   Actual directories ({len(actual_dirs)}): {sorted(actual_dirs)}\n"
+            f"   Actual files ({len(actual_files)}): {sorted(actual_files)}\n"
         )
         errors.append(summary)
 
     assert not errors, "\n".join(errors)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib requires Python 3.11+")
+def test_non_source_trees_excluded_from_sdist():
+    """
+    Verify that top-level trees which are not "source used to build" are excluded from
+    the sdist.
+
+    WHY THIS TEST EXISTS:
+    scripts/README.md defines the policy table for what belongs in each artifact. The
+    docs/ and website/ trees are included in the git archive (tar.gz) for voters to
+    review, but must NOT appear in the sdist or the wheel since they are not needed to
+    build or use the package. website/ previously shipped in the sdist because it had no
+    exclude entry.
+
+    If this test fails, add the missing pattern to [tool.flit.sdist] exclude.
+    """
+    project_root = Path(__file__).parent.parent
+    pyproject_path = project_root / "pyproject.toml"
+
+    with open(pyproject_path, "rb") as f:
+        config = tomllib.load(f)
+
+    exclude_patterns = set(config["tool"]["flit"]["sdist"]["exclude"])
+
+    # Trees that exist in the repo but must never be part of the sdist.
+    non_source_trees = ["docs", "website", "burr-redirect"]
+
+    missing = [
+        f"{tree}/**"
+        for tree in non_source_trees
+        if (project_root / tree).is_dir() and f"{tree}/**" not in exclude_patterns
+    ]
+
+    assert not missing, (
+        f"\n❌ Non-source trees missing from [tool.flit.sdist] exclude: {missing}\n"
+        f"\n   These directories are not source needed to build or use the package (see\n"
+        f"   the policy table in scripts/README.md) and would otherwise ship in the sdist.\n"
+        f"\n   To fix: add the listed pattern(s) to pyproject.toml [tool.flit.sdist] exclude.\n"
+    )
