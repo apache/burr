@@ -32,7 +32,6 @@ To run Burr in a FastAPI server, see the following examples:
 - `Use typed state with Pydantic + FastAPI <https://github.com/apache/burr/tree/main/examples/typed-state>`_
 - `Burr + FastAPI + docker <https://github.com/mdrideout/burr-fastapi-docker-compose>`_ by `Matthew Rideout <https://github.com/mdrideout>`_. This contains a sample web server API + UI + tracking server all bundled in one!
 - `Docker compose + nginx proxy <https://github.com/apache/burr/tree/main/examples/email-assistant#running-the-ui-with-email-server-backend-in-a-docker-container>`_ by `Aditha Kaushik <https://github.com/97k>`_ for the email assistant example, demonstrates running the docker image with the tracking server.
-- `BentoML + Burr <https://github.com/apache/burr/tree/main/examples/deployment/aws/bentoml>`_ for deploying Burr with BentoML as a web-service.
 
 Connecting to a database
 ------------------------
