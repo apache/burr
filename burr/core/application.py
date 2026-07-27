@@ -2002,21 +2002,21 @@ class Application(Generic[ApplicationStateType]):
         include_conditions: bool = False,
         include_state: bool = False,
         view: bool = False,
-        engine: Literal["graphviz"] = "graphviz",
+        engine: Literal["graphviz", "mermaid"] = "graphviz",
         write_dot: bool = False,
         **engine_kwargs: Any,
-    ) -> Optional["graphviz.Digraph"]:  # noqa: F821
-        """Visualizes the application graph using graphviz. This will render the graph.
+    ) -> Union["graphviz.Digraph", str, None]:  # noqa: F821
+        """Visualizes the application graph using Graphviz or Mermaid.
 
         :param output_file_path: The path to save this to, None if you don't want to save. Do not pass an extension
             for graphviz, instead pass `format` in `engine_kwargs` (e.g. `format="png"`)
         :param include_conditions: Whether to include condition strings on the edges (this can get noisy)
         :param include_state: Whether to indicate the action "signature" (reads/writes) on the nodes
         :param view: Whether to bring up a view
-        :param engine: The engine to use -- only graphviz is supported for now
+        :param engine: ``graphviz`` (default) or dependency-free Mermaid text
         :param write_dot: If True, produce a graphviz dot file
         :param engine_kwargs: Additional kwargs to pass to the engine
-        :return: The graphviz object
+        :return: A Graphviz object or Mermaid flowchart text
         """
         return self.graph.visualize(
             output_file_path=output_file_path,

@@ -110,6 +110,63 @@ def _render_graphviz(
         pathlib.Path(f"{path_without_suffix}.{fmt}").write_bytes(graphviz_obj.pipe(format=fmt))
 
 
+def _escape_mermaid_label(value: str) -> str:
+    """Escape text embedded in a Mermaid quoted node or edge label."""
+    return (
+        value.replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\n", "<br/>")
+    )
+
+
+def _render_mermaid(
+    actions: List[Action],
+    transitions: List[Transition],
+    include_conditions: bool,
+    include_state: bool,
+    direction: str = "TD",
+) -> str:
+    """Render a Burr graph as dependency-free Mermaid flowchart text."""
+    valid_directions = {"TB", "TD", "BT", "RL", "LR"}
+    if direction not in valid_directions:
+        raise ValueError(
+            f"Invalid Mermaid direction {direction!r}. Expected one of {sorted(valid_directions)}"
+        )
+
+    action_ids = {action.name: f"action_{index}" for index, action in enumerate(actions)}
+    input_ids = {}
+    lines = [f"flowchart {direction}"]
+    for action in actions:
+        label = (
+            action.name
+            if not include_state
+            else f"{action.name}({', '.join(action.reads)}): {', '.join(action.writes)}"
+        )
+        lines.append(f'    {action_ids[action.name]}["{_escape_mermaid_label(label)}"]')
+        required_inputs, optional_inputs = action.optional_and_required_inputs
+        for input_ in sorted(required_inputs | optional_inputs):
+            if input_.startswith("__"):
+                continue
+            if input_ not in input_ids:
+                input_ids[input_] = f"input_{len(input_ids)}"
+                lines.append(f'    {input_ids[input_]}["input: {_escape_mermaid_label(input_)}"]')
+            lines.append(f"    {input_ids[input_]} -.-> {action_ids[action.name]}")
+
+    for transition in transitions:
+        source = action_ids[transition.from_.name]
+        target = action_ids[transition.to.name]
+        if include_conditions and transition.condition is not default:
+            label = _escape_mermaid_label(transition.condition.name)
+            lines.append(f'    {source} -. "{label}" .-> {target}')
+        elif transition.condition is not default:
+            lines.append(f"    {source} -.-> {target}")
+        else:
+            lines.append(f"    {source} --> {target}")
+    return "\n".join(lines) + "\n"
+
+
 @dataclasses.dataclass
 class Graph:
     """Graph class allows you to specify actions and transitions between them.
@@ -183,24 +240,40 @@ class Graph:
         include_conditions: bool = False,
         include_state: bool = False,
         view: bool = False,
-        engine: Literal["graphviz"] = "graphviz",
+        engine: Literal["graphviz", "mermaid"] = "graphviz",
         write_dot: bool = False,
         **engine_kwargs: Any,
-    ) -> Optional["graphviz.Digraph"]:  # noqa: F821
-        """Visualizes the graph using graphviz. This will render the graph.
+    ) -> Union["graphviz.Digraph", str, None]:  # noqa: F821
+        """Visualizes the graph using Graphviz or Mermaid.
 
         :param output_file_path: The path to save this to, None if you don't want to save. Do not pass an extension
             for graphviz, instead pass `format` in `engine_kwargs` (e.g. `format="png"`)
         :param include_conditions: Whether to include condition strings on the edges (this can get noisy)
         :param include_state: Whether to indicate the action "signature" (reads/writes) on the nodes
         :param view: Whether to bring up a view
-        :param engine: The engine to use -- only graphviz is supported for now
+        :param engine: ``graphviz`` (default) or dependency-free Mermaid text
         :param write_dot: If True, produce a graphviz dot file
         :param engine_kwargs: Additional kwargs to pass to the engine
-        :return: The graphviz object
+        :return: A Graphviz object or Mermaid flowchart text
         """
+        if engine == "mermaid":
+            if view or write_dot:
+                raise ValueError("Mermaid does not support view or write_dot")
+            direction = engine_kwargs.pop("direction", "TD")
+            if engine_kwargs:
+                raise ValueError(f"Unsupported Mermaid options: {', '.join(sorted(engine_kwargs))}")
+            diagram = _render_mermaid(
+                self.actions,
+                self.transitions,
+                include_conditions,
+                include_state,
+                direction,
+            )
+            if output_file_path:
+                pathlib.Path(output_file_path).write_text(diagram, encoding="utf-8")
+            return diagram
         if engine != "graphviz":
-            raise ValueError(f"Only graphviz is supported for now, not {engine}")
+            raise ValueError(f"Unsupported visualization engine: {engine}")
         try:
             import graphviz  # noqa: F401
         except ModuleNotFoundError:
