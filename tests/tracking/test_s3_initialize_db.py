@@ -18,6 +18,9 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+import pytest
+
+pytest.importorskip("tortoise")
 from burr.tracking.server.s3 import initialize_db, settings
 
 
