@@ -36,9 +36,9 @@ description = "Apache Burr (incubating) makes it easy to develop applications th
 readme = "README.md"
 license-files = [
   "LICENSE-wheel",
+  "LICENSE-bundled-js",
   "NOTICE",
   "DISCLAIMER",
-  "burr/tracking/server/build/static/js/main.*.js.LICENSE.txt",
 ]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
@@ -272,6 +272,7 @@ include = [
   "NOTICE",
   "DISCLAIMER",
   "LICENSE-wheel",
+  "LICENSE-bundled-js",
   "scripts/**",
   "telemetry/ui/**",
   "examples/__init__.py",

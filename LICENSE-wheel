@@ -230,5 +230,4 @@ SOFTWARE.
 -------------------------------
 
 Third-party JavaScript license notices for the bundled Burr UI are included
-under the wheel's .dist-info/licenses/burr/tracking/server/build/static/js/
-directory.
+in ``LICENSE-bundled-js``.
