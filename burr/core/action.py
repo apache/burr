@@ -1507,7 +1507,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict], Any],
+        stream_type: Union[Type["BaseModel"], Type[dict], "types.UnionType"],
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
