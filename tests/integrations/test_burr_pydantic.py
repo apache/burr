@@ -890,3 +890,135 @@ def test_streaming_action_pydantic_decorator_accepts_union_stream_type():
     assert hasattr(act, "bind")
     assert getattr(act, FunctionBasedAction.ACTION_FUNCTION, None) is not None
 
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Union type syntax with | requires Python 3.10+",
+)
+def test_pydantic_streaming_action_accepts_pep604_union_stream_type():
+    """A PEP 604 union (ModelA | ModelB) of BaseModel subclasses is accepted."""
+
+    class ResultA(BaseModel):
+        value: int
+
+    class ResultB(BaseModel):
+        label: str
+
+    @pydantic_streaming_action(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=ResultA | ResultB,
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel,
+    ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+        state.count += 1
+        yield ResultA(value=state.count), state
+
+    assert getattr(act, FunctionBasedAction.ACTION_FUNCTION, None) is not None
+
+
+def test_pydantic_streaming_action_accepts_typing_union_stream_type():
+    """A typing.Union[ModelA, ModelB] stream_type is accepted (works on Python 3.9+)."""
+    from typing import Union as TypingUnion
+
+    class ResultA(BaseModel):
+        value: int
+
+    class ResultB(BaseModel):
+        label: str
+
+    @pydantic_streaming_action(
+        reads=["count", "times_called"],
+        writes=["count", "times_called"],
+        stream_type=TypingUnion[ResultA, ResultB],
+        state_input_type=AppStateModel,
+        state_output_type=AppStateModel,
+    )
+    def act(
+        state: AppStateModel,
+    ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+        state.count += 1
+        yield ResultA(value=state.count), state
+
+    assert getattr(act, FunctionBasedAction.ACTION_FUNCTION, None) is not None
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Union type syntax with | requires Python 3.10+",
+)
+def test_pydantic_streaming_action_rejects_union_with_invalid_member():
+    """A union with a non-model, non-dict member must be rejected at decoration time.
+
+    This guards the fix: on unmodified main no stream_type validation happens, so
+    this invalid union is silently accepted there and this test fails without the fix.
+    """
+
+    class ResultA(BaseModel):
+        value: int
+
+    with pytest.raises(ValueError):
+
+        @pydantic_streaming_action(
+            reads=["count", "times_called"],
+            writes=["count", "times_called"],
+            stream_type=ResultA | int,
+            state_input_type=AppStateModel,
+            state_output_type=AppStateModel,
+        )
+        def act(
+            state: AppStateModel,
+        ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+            state.count += 1
+            yield ResultA(value=state.count), state
+
+
+def test_pydantic_streaming_action_rejects_typing_union_with_invalid_member():
+    """typing.Union with an invalid member must also be rejected at decoration time."""
+    from typing import Union as TypingUnion
+
+    class ResultA(BaseModel):
+        value: int
+
+    with pytest.raises(ValueError):
+
+        @pydantic_streaming_action(
+            reads=["count", "times_called"],
+            writes=["count", "times_called"],
+            stream_type=TypingUnion[ResultA, int],
+            state_input_type=AppStateModel,
+            state_output_type=AppStateModel,
+        )
+        def act(
+            state: AppStateModel,
+        ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+            state.count += 1
+            yield ResultA(value=state.count), state
+
+
+def test_pydantic_streaming_action_rejects_non_model_stream_type():
+    """A scalar / non-model, non-dict stream_type must be rejected at decoration time.
+
+    Guards the fix: on unmodified main this is silently accepted.
+    """
+
+    class ResultA(BaseModel):
+        value: int
+
+    with pytest.raises(ValueError):
+
+        @pydantic_streaming_action(
+            reads=["count", "times_called"],
+            writes=["count", "times_called"],
+            stream_type=int,
+            state_input_type=AppStateModel,
+            state_output_type=AppStateModel,
+        )
+        def act(
+            state: AppStateModel,
+        ) -> Generator[Tuple[ResultA, Optional[AppStateModel]], None, None]:
+            state.count += 1
+            yield ResultA(value=state.count), state
