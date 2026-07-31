@@ -114,8 +114,7 @@ const Cost: React.FC<CostProps> = ({ currency = 'USD', totalCost, costDetails })
       <div
         onMouseLeave={() => setShowDetails(false)}
         onMouseEnter={() => setShowDetails((prev) => !prev)}
-        className="cursor-pointer"
-      >
+        className="cursor-pointer">
         {formattedCost}
       </div>
       {costDetails && showDetails && (
@@ -370,8 +369,13 @@ const InsightSubTable = (props: {
     return acc;
   }, new Map<number, Step>());
 
-  const { currentSelectedIndex, setCurrentSelectedIndex, currentHoverIndex, setCurrentHoverIndex } =
-    useContext(AppContext);
+  const {
+    currentSelectedIndex,
+    setCurrentSelectedIndex,
+    currentHoverIndex,
+    currentHoverAction,
+    setCurrentHoverIndex
+  } = useContext(AppContext);
 
   return (
     <>
@@ -381,8 +385,7 @@ const InsightSubTable = (props: {
           if (canExpand) {
             setIsExpanded(!isExpanded);
           }
-        }}
-      >
+        }}>
         <TableCell>
           <div className="flex flex-row gap-1 items-center">
             <Chip label={props.insight.category} chipType={props.insight.category}></Chip>
@@ -408,7 +411,11 @@ const InsightSubTable = (props: {
             const span = spansBySpanID.get(attribute.span_id || '');
             const step = stepsByStepID.get(span?.begin_entry.action_sequence_id || 0);
             const insightCasted = props.insight as InsightWithIndividualValues;
-            const isHovered = currentHoverIndex === span?.begin_entry.action_sequence_id;
+            const isHovered =
+              (currentHoverIndex?.sequenceId === span?.begin_entry.action_sequence_id &&
+                currentHoverIndex?.appId === props.appID &&
+                currentHoverIndex?.partitionKey === props.partitionKey) ||
+              currentHoverAction === step?.step_start_log.action;
             const isCurrentSelected = currentSelectedIndex === span?.begin_entry.action_sequence_id;
             return (
               <TableRow
@@ -438,8 +445,7 @@ const InsightSubTable = (props: {
                         }
                       : undefined
                   );
-                }}
-              >
+                }}>
                 <TableCell></TableCell>
                 <TableCell className="">
                   {step && (
@@ -511,15 +517,13 @@ export const InsightsView = (props: {
           variety of attributes, including those populated by{' '}
           <a
             className="text-dwlightblue"
-            href={'https://www.traceloop.com/docs/openllmetry/tracing/without-sdk'}
-          >
+            href={'https://www.traceloop.com/docs/openllmetry/tracing/without-sdk'}>
             opentelemetry instrumentation.
           </a>{' '}
           -- E.G. LLM call data. To instrument, and start collecting, see{' '}
           <a
             className="text-dwlightblue"
-            href={'https://burr.apache.org/concepts/additional-visibility/#quickstart'}
-          >
+            href={'https://burr.apache.org/concepts/additional-visibility/#quickstart'}>
             see docs.
           </a>
         </h2>

@@ -35,7 +35,7 @@ import ReactFlow, {
 } from 'reactflow';
 
 import 'reactflow/dist/style.css';
-import { backgroundColorsForIndex } from './AppView';
+import { AppContext, backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
 import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
 
@@ -79,6 +79,7 @@ type EdgeType = {
 };
 
 const ActionNode = (props: { data: NodeData }) => {
+  const { setCurrentHoverAction, currentHoverAction } = React.useContext(AppContext);
   const {
     highlightedActions: previousActions,
     hoverAction,
@@ -98,7 +99,8 @@ const ActionNode = (props: { data: NodeData }) => {
       : shouldHighlight
         ? 'bg-gray-100'
         : '';
-  const opacity = hoverAction?.step_start_log.action === name ? 'opacity-50' : '';
+  const opacity =
+    hoverAction?.step_start_log.action === name || currentHoverAction === name ? 'opacity-50' : '';
   const additionalClasses = isCurrentAction
     ? 'border-dwlightblue/50 text-white border-2'
     : shouldHighlight
@@ -109,7 +111,8 @@ const ActionNode = (props: { data: NodeData }) => {
       <Handle type="target" position={Position.Top} />
       <div
         className={`${bgColor} ${opacity} ${additionalClasses} text-xl font-sans p-4 rounded-md border`}
-      >
+        onMouseEnter={() => setCurrentHoverAction(name)}
+        onMouseLeave={() => setCurrentHoverAction(undefined)}>
         {name}
       </div>
       <Handle type="source" position={Position.Bottom} id="a" />

@@ -177,8 +177,7 @@ const CommonTableRow = (props: {
           });
         }
         e.stopPropagation();
-      }}
-    >
+      }}>
       {props.children}
     </TableRow>
   );
@@ -215,14 +214,16 @@ const ActionTableRow = (props: {
     setTab,
     currentHoverIndex,
     setCurrentHoverIndex,
+    currentHoverAction,
     currentSelectedIndex,
     setCurrentSelectedIndex
   } = useContext(AppContext);
 
   const isHovered =
-    currentHoverIndex?.sequenceId === sequenceID &&
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey;
+    (currentHoverIndex?.sequenceId === sequenceID &&
+      currentHoverIndex?.appId === props.appID &&
+      currentHoverIndex?.partitionKey === props.partitionKey) ||
+    currentHoverAction === props.step.step_start_log.action;
   // const spanCount = props.step.spans.length;
   const childCount = props.links.length;
   const shouldBeHighlighted =
@@ -253,8 +254,7 @@ const ActionTableRow = (props: {
       setCurrentHoverIndex={setCurrentHoverIndex}
       setCurrentSelectedIndex={setCurrentSelectedIndex}
       appID={props.appID}
-      partitionKey={props.partitionKey}
-    >
+      partitionKey={props.partitionKey}>
       <TableCell className="text-gray-500 w-12 max-w-12 min-w-12">
         <div className="flex flex-row items-center">
           <RecursionDepthPadding depth={props.depth}>
@@ -272,8 +272,7 @@ const ActionTableRow = (props: {
             />
           </div>
           <div
-            className={`${props.minimized ? 'w-32' : 'w-72 max-w-72'} flex flex-row justify-start gap-1 items-center`}
-          >
+            className={`${props.minimized ? 'w-32' : 'w-72 max-w-72'} flex flex-row justify-start gap-1 items-center`}>
             <Chip
               label={isStreaming ? 'stream' : 'action'}
               chipType={isStreaming ? 'stream' : 'action'}
@@ -478,13 +477,19 @@ const LinkSubTable = (props: {
   latestTimeSeen: Date;
   depth: number;
 }) => {
-  const { currentHoverIndex, setCurrentHoverIndex, currentSelectedIndex, setCurrentSelectedIndex } =
-    useContext(AppContext);
+  const {
+    currentHoverIndex,
+    setCurrentHoverIndex,
+    currentHoverAction,
+    currentSelectedIndex,
+    setCurrentSelectedIndex
+  } = useContext(AppContext);
   const sequenceID = props.step.step_start_log.sequence_id;
   const isHovered =
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey &&
-    currentHoverIndex?.sequenceId === sequenceID;
+    (currentHoverIndex?.appId === props.appID &&
+      currentHoverIndex?.partitionKey === props.partitionKey &&
+      currentHoverIndex?.sequenceId === sequenceID) ||
+    currentHoverAction === props.step.step_start_log.action;
   const shouldBeHighlighted =
     currentSelectedIndex !== undefined &&
     currentSelectedIndex.appId === props.appID &&
@@ -523,8 +528,7 @@ const LinkSubTable = (props: {
               currentSelectedIndex={currentSelectedIndex}
               step={props.step}
               setCurrentHoverIndex={setCurrentHoverIndex}
-              setCurrentSelectedIndex={setCurrentSelectedIndex}
-            >
+              setCurrentSelectedIndex={setCurrentSelectedIndex}>
               <TableCell colSpan={1} className="">
                 <RecursionDepthPadding depth={props.depth}>
                   <Icon className={`h-5 w-5 ${iconColor} -ml-1`} />
@@ -532,8 +536,7 @@ const LinkSubTable = (props: {
               </TableCell>
               <TableCell
                 colSpan={1}
-                className={`${normalText} w-48 min-w-48 max-w-48 truncate pl-9`}
-              >
+                className={`${normalText} w-48 min-w-48 max-w-48 truncate pl-9`}>
                 <div
                   className="z-50 truncate"
                   onClick={(e) => {
@@ -541,8 +544,7 @@ const LinkSubTable = (props: {
                       `/project/${props.projectId}/${subApp.child.partition_key || 'null'}/${subApp.child.app_id}`
                     );
                     e.stopPropagation();
-                  }}
-                >
+                  }}>
                   <span className="hover:underline">{subApp.child.app_id}</span>
                 </div>
               </TableCell>
@@ -669,11 +671,9 @@ const StepSubTableRow = (props: {
       currentSelectedIndex={currentSelectedIndex}
       step={props.step}
       setCurrentHoverIndex={setCurrentHoverIndex}
-      setCurrentSelectedIndex={setCurrentSelectedIndex}
-    >
+      setCurrentSelectedIndex={setCurrentSelectedIndex}>
       <TableCell
-        className={` ${lightText} w-10 min-w-10 ${props.displaySpanID ? '' : 'text-opacity-0'}`}
-      >
+        className={` ${lightText} w-10 min-w-10 ${props.displaySpanID ? '' : 'text-opacity-0'}`}>
         <RecursionDepthPadding depth={props.depth}>
           <span>{spanIDUniqueToAction}</span>
         </RecursionDepthPadding>
@@ -682,14 +682,12 @@ const StepSubTableRow = (props: {
         <>
           <TableCell
             onClick={onClick}
-            className={`${normalText} ${props.minimized ? 'w-32 min-w-32' : 'w-72 max-w-72'} flex flex-col`}
-          >
+            className={`${normalText} ${props.minimized ? 'w-32 min-w-32' : 'w-72 max-w-72'} flex flex-col`}>
             <div className="flex flex-row gap-1 items-center">
               {[...Array(depth).keys()].map((i) => (
                 <Icon
                   key={i}
-                  className={`${i === depth - 1 ? 'opacity-0' : 'opacity-0'} text-lg text-gray-600 w-4 flex-shrink-0`}
-                ></Icon>
+                  className={`${i === depth - 1 ? 'opacity-0' : 'opacity-0'} text-lg text-gray-600 w-4 flex-shrink-0`}></Icon>
               ))}
               <Chip
                 label={
@@ -745,8 +743,7 @@ const StepSubTableRow = (props: {
                 className="flex justify-start overflow-hidden pl-20"
                 onClick={(e) => {
                   e.stopPropagation();
-                }}
-              >
+                }}>
                 <RenderedField
                   value={(props.model as AttributeModel).value}
                   defaultExpanded={true} // no real need for default expanded
@@ -781,7 +778,7 @@ const StepSubTable = (props: {
   displayAnnotations: boolean;
   depth: number;
 }) => {
-  const { currentHoverIndex, currentSelectedIndex } = useContext(AppContext);
+  const { currentHoverIndex, currentHoverAction, currentSelectedIndex } = useContext(AppContext);
   const attributesBySpanID = props.attributes.reduce((acc, attr) => {
     const existing = acc.get(attr.span_id) || [];
     existing.push(attr);
@@ -797,9 +794,10 @@ const StepSubTable = (props: {
   // }, new Map<string | null, Array<InitializeStreamModel | FirstItemStreamModel | EndStreamModel>>());
   const sequenceID = props.step.step_start_log.sequence_id;
   const isHovered =
-    currentHoverIndex?.sequenceId === sequenceID &&
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey;
+    (currentHoverIndex?.sequenceId === sequenceID &&
+      currentHoverIndex?.appId === props.appID &&
+      currentHoverIndex?.partitionKey === props.partitionKey) ||
+    currentHoverAction === props.step.step_start_log.action;
   // const spanCount = props.step.spans.length;
   const shouldBeHighlighted =
     currentSelectedIndex !== undefined &&
@@ -1142,13 +1140,11 @@ const WaterfallPiece: React.FC<{
                   onClick={(e) => {
                     props.setSubActionExpanded?.(!props.isSubActionExpanded);
                     e.stopPropagation();
-                  }}
-                >
+                  }}>
                   <div
                     className={`${props.isHighlighted ? 'bg-transparent' : props.bgColor} opacity-50 h-1 px-0 rounded-sm flex flex-row justify-center items-center`}
                     onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
-                  >
+                    onMouseLeave={() => setIsHovered(false)}>
                     <SubActionIcon
                       className={`hover:scale-125 transform-none cursor-pointer h-4 w-4 rounded-full text-gray-700 ${props.isHighlighted ? props.bgColor : 'bg-white'}`}
                     />
@@ -1165,8 +1161,7 @@ const WaterfallPiece: React.FC<{
               style={{
                 left: `calc(${leftPositionPercentage}% - 20px)`,
                 width: `calc(${widthPercentage}% + 40px)` // 20px buffer on each side
-              }}
-            ></div>
+              }}></div>
 
             {
               <div
@@ -1180,8 +1175,7 @@ const WaterfallPiece: React.FC<{
                   left: isCloseToEnd
                     ? `auto`
                     : `calc(${leftPositionPercentage}% + ${widthPercentage}%)`
-                }}
-              >
+                }}>
                 {hoverItem}
               </div>
             }
@@ -1838,8 +1832,7 @@ const ParentLink = (props: {
       <TableCell colSpan={2} className="text-gray-500">
         <div className="flex flex-row gap-1 items-center pl-5">
           <Link
-            to={`/project/${props.projectId}/${props.parentPointer.partition_key}/${props.parentPointer.app_id}`}
-          >
+            to={`/project/${props.projectId}/${props.parentPointer.partition_key}/${props.parentPointer.app_id}`}>
             <span className="hover:underline">{props.parentPointer.app_id}</span>
           </Link>
           <span>@</span>

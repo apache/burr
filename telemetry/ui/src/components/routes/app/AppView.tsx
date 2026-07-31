@@ -117,6 +117,8 @@ export type HighlightState = {
   currentSelectedIndex?: SequenceLocation;
   setCurrentHoverIndex: (index: SequenceLocation | undefined) => void;
   currentHoverIndex?: SequenceLocation;
+  setCurrentHoverAction: (action: string | undefined) => void;
+  currentHoverAction?: string;
   currentEditingAnnotationContext?: AnnotationEditingContext;
   setCurrentEditingAnnotationContext: (
     annotationContext: AnnotationEditingContext | undefined
@@ -145,6 +147,8 @@ export const AppContext = createContext<HighlightState>({
   currentSelectedIndex: undefined,
   setCurrentHoverIndex: () => {},
   currentHoverIndex: undefined,
+  setCurrentHoverAction: () => {},
+  currentHoverAction: undefined,
   currentEditingAnnotationContext: undefined,
   setCurrentEditingAnnotationContext: () => {},
   createAnnotation: () => {
@@ -222,6 +226,7 @@ export const AppView = (props: {
   const { projectId } = props;
   // const [currentActionIndex, setCurrentActionIndex] = useState<number | undefined>(undefined);
   const [hoverIndex, setHoverIndex] = useState<SequenceLocation | undefined>(undefined);
+  const [hoverActionName, setHoverActionName] = useState<string | undefined>(undefined);
   const [autoRefresh, setAutoRefresh] = useState(props.defaultAutoRefresh || false);
   const shouldQuery = projectId !== undefined && appID !== undefined;
   const [minimizedTable, setMinimizedTable] = useState(false);
@@ -473,6 +478,8 @@ export const AppView = (props: {
         currentSelectedIndex: currentSequenceLocation,
         setCurrentHoverIndex: setHoverIndex,
         currentHoverIndex: hoverIndex,
+        setCurrentHoverAction: setHoverActionName,
+        currentHoverAction: hoverActionName,
         currentEditingAnnotationContext: currentEditingAnnotationContext,
         setCurrentEditingAnnotationContext: setCurrentEditingAnnotationContext,
         // TODO -- handle span ID
@@ -503,15 +510,13 @@ export const AppView = (props: {
           return response;
         },
         refreshAnnotationData: refetchAnnotationsData
-      }}
-    >
+      }}>
       <Layout
         mode={fullScreen ? 'expanding-second' : minimizedTable ? 'first-minimal' : 'half'}
         firstItem={
           <div className="w-full h-full flex flex-col">
             <div
-              className={`w-full ${fullScreen ? 'h-full' : props.orientation === 'stacked_vertical' ? 'h-full' : 'h-1/2'}`}
-            >
+              className={`w-full ${fullScreen ? 'h-full' : props.orientation === 'stacked_vertical' ? 'h-full' : 'h-1/2'}`}>
               <ApplicationTable
                 steps={stepsSorted}
                 appID={appID}
