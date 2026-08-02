@@ -3753,6 +3753,63 @@ def test_application_exposes_app_context_through_context_manager_sync():
     app.run(halt_after=["result"])
 
 
+def test_application_context_restores_outer_context_after_nested_run():
+    @action(reads=[], writes=[])
+    def inner_action(state: State) -> State:
+        return state
+
+    inner_app = (
+        ApplicationBuilder().with_actions(inner_action).with_entrypoint("inner_action").build()
+    )
+
+    @action(reads=[], writes=[])
+    def outer_action(state: State) -> State:
+        outer_context = ApplicationContext.get()
+        assert outer_context is not None
+
+        inner_app.run(halt_after=["inner_action"])
+
+        assert ApplicationContext.get() is outer_context
+        return state
+
+    outer_app = (
+        ApplicationBuilder().with_actions(outer_action).with_entrypoint("outer_action").build()
+    )
+    outer_app.run(halt_after=["outer_action"])
+
+    assert ApplicationContext.get() is None
+
+
+def test_application_context_restores_outer_context_after_nested_run_error():
+    @action(reads=[], writes=[])
+    def failing_inner_action(state: State) -> State:
+        raise RuntimeError("expected inner failure")
+
+    inner_app = (
+        ApplicationBuilder()
+        .with_actions(failing_inner_action)
+        .with_entrypoint("failing_inner_action")
+        .build()
+    )
+
+    @action(reads=[], writes=[])
+    def outer_action(state: State) -> State:
+        outer_context = ApplicationContext.get()
+        assert outer_context is not None
+
+        with pytest.raises(RuntimeError, match="expected inner failure"):
+            inner_app.run(halt_after=["failing_inner_action"])
+
+        assert ApplicationContext.get() is outer_context
+        return state
+
+    outer_app = (
+        ApplicationBuilder().with_actions(outer_action).with_entrypoint("outer_action").build()
+    )
+    outer_app.run(halt_after=["outer_action"])
+
+    assert ApplicationContext.get() is None
+
 async def test_application_exposes_app_context_through_context_manager_async():
     """Tests that we can get the context from the application correctly"""
 
@@ -3778,6 +3835,53 @@ async def test_application_exposes_app_context_through_context_manager_async():
     )
     await app.arun(halt_after=["result"])
 
+
+async def test_application_context_restores_outer_context_after_nested_arun():
+    @action(reads=[], writes=[])
+    async def inner_action(state: State) -> State:
+        return state
+
+    inner_app = (
+        ApplicationBuilder().with_actions(inner_action).with_entrypoint("inner_action").build()
+    )
+
+    @action(reads=[], writes=[])
+    async def outer_action(state: State) -> State:
+        outer_context = ApplicationContext.get()
+        assert outer_context is not None
+
+        await inner_app.arun(halt_after=["inner_action"])
+
+        assert ApplicationContext.get() is outer_context
+        return state
+
+    outer_app = (
+        ApplicationBuilder().with_actions(outer_action).with_entrypoint("outer_action").build()
+    )
+    await outer_app.arun(halt_after=["outer_action"])
+
+    assert ApplicationContext.get() is None
+
+
+def test_application_context_restores_reentrant_context():
+    @action(reads=[], writes=[])
+    def action_to_run(state: State) -> State:
+        return state
+
+    context = (
+        ApplicationBuilder()
+        .with_actions(action_to_run)
+        .with_entrypoint("action_to_run")
+        .build()
+        .context
+    )
+
+    with context:
+        with context:
+            assert ApplicationContext.get() is context
+        assert ApplicationContext.get() is context
+
+    assert ApplicationContext.get() is None
 
 def test_application_passes_context_when_declared():
     """Tests that the context is passed to the function correctly"""
