@@ -3810,6 +3810,7 @@ def test_application_context_restores_outer_context_after_nested_run_error():
 
     assert ApplicationContext.get() is None
 
+
 async def test_application_exposes_app_context_through_context_manager_async():
     """Tests that we can get the context from the application correctly"""
 
@@ -3882,6 +3883,7 @@ def test_application_context_restores_reentrant_context():
         assert ApplicationContext.get() is context
 
     assert ApplicationContext.get() is None
+
 
 def test_application_passes_context_when_declared():
     """Tests that the context is passed to the function correctly"""
