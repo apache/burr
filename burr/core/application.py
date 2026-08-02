@@ -655,16 +655,31 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
         return _application_context.get()
 
     def __enter__(self) -> "ApplicationContext":
-        _application_context.set(self)
+        token = _application_context.set(self)
+        token_stack = _application_context_token_stack.get()
+        _application_context_token_stack.set(token_stack + ((self, token),))
         return self
 
     def __exit__(self, __exc_type, __exc_value, __traceback):
-        _application_context.set(None)
+        token_stack = _application_context_token_stack.get()
+        if not token_stack:
+            raise RuntimeError("ApplicationContext context manager was not entered")
+
+        active_context, token = token_stack[-1]
+        if active_context is not self:
+            raise RuntimeError("ApplicationContext contexts must be exited in LIFO order")
+
+        _application_context.reset(token)
+        _application_context_token_stack.set(token_stack[:-1])
 
 
 _application_context = contextvars.ContextVar[Optional[ApplicationContext]](
     "application_context", default=None
 )
+# Keep tokens task-local so nested and concurrent context-manager uses do not share them.
+_application_context_token_stack: contextvars.ContextVar[
+    Tuple[Tuple[ApplicationContext, contextvars.Token[Optional[ApplicationContext]]], ...]
+] = contextvars.ContextVar("application_context_token_stack", default=())
 # The purpose of this is to ensure that we don't run the run call hooks multiple times
 # We do this as some functions call out to others (but they do not call out to themselves, recursively)
 # Thus we keep track of a sentinel, unique per execute method, which tells us if we have already logged
