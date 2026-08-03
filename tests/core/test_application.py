@@ -3885,6 +3885,66 @@ def test_application_context_restores_reentrant_context():
     assert ApplicationContext.get() is None
 
 
+async def test_application_context_restores_outer_context_when_reused_by_concurrent_tasks():
+    @action(reads=[], writes=[])
+    def action_to_run(state: State) -> State:
+        return state
+
+    outer_context = (
+        ApplicationBuilder()
+        .with_actions(action_to_run)
+        .with_entrypoint("action_to_run")
+        .build()
+        .context
+    )
+    context = (
+        ApplicationBuilder()
+        .with_actions(action_to_run)
+        .with_entrypoint("action_to_run")
+        .build()
+        .context
+    )
+    first_entered = asyncio.Event()
+    second_entered = asyncio.Event()
+    release_second = asyncio.Event()
+
+    async def first_task():
+        with context:
+            assert ApplicationContext.get() is context
+            first_entered.set()
+            await second_entered.wait()
+        assert ApplicationContext.get() is outer_context
+
+    async def second_task():
+        await first_entered.wait()
+        with context:
+            assert ApplicationContext.get() is context
+            second_entered.set()
+            await release_second.wait()
+            assert ApplicationContext.get() is context
+        assert ApplicationContext.get() is outer_context
+
+    with outer_context:
+        first = asyncio.create_task(first_task())
+        second = asyncio.create_task(second_task())
+        try:
+            await asyncio.wait_for(second_entered.wait(), timeout=5)
+            await asyncio.wait_for(first, timeout=5)
+            assert not second.done()
+            release_second.set()
+            await asyncio.wait_for(second, timeout=5)
+        finally:
+            release_second.set()
+            for task in (first, second):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(first, second, return_exceptions=True)
+
+        assert ApplicationContext.get() is outer_context
+
+    assert ApplicationContext.get() is None
+
+
 def test_application_passes_context_when_declared():
     """Tests that the context is passed to the function correctly"""
     context_list = []
