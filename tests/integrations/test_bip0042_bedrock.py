@@ -21,12 +21,16 @@ import inspect
 from unittest.mock import MagicMock
 
 import pytest
-from botocore.exceptions import ClientError
 
 from burr.core.action import SingleStepAction, StreamingAction
 from burr.core.state import State
 
 boto3 = pytest.importorskip("boto3", reason="boto3 required for Bedrock tests")
+# botocore ships with boto3, so it must be imported *after* the skip guard --
+# otherwise collecting this module raises ImportError instead of skipping when
+# the [bedrock] extra is not installed, and `pytest tests/` aborts entirely.
+from botocore.exceptions import ClientError
+
 import burr.integrations as integrations
 from burr.integrations import bedrock
 from burr.integrations.bedrock import BedrockAction, BedrockStreamingAction, StateToPromptMapper
