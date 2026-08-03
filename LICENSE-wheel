@@ -490,7 +490,7 @@ The following components are licensed under the MIT license:
   mdast-util-phrasing@4.1.0
       Copyright (c) 2017 Titus Wormer <tituswormer@gmail.com>
       Copyright (c) 2017 Victor Felder <victor@draft.li>
-  mdast-util-to-hast@13.1.0
+  mdast-util-to-hast@13.2.1
       Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
   mdast-util-to-markdown@2.1.0
       Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com>
@@ -564,7 +564,7 @@ The following components are licensed under the MIT license:
       Copyright (c) 2015 Espen Hovlandsdal
   react-query@3.39.3
       Copyright (c) 2019 Tanner Linsley
-  react-router@7.18.1
+  react-router@7.18.2
       Copyright (c) React Training LLC 2015-2019
       Copyright (c) Remix Software Inc. 2020-2021
       Copyright (c) Shopify Inc. 2022-2023
