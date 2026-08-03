@@ -18,11 +18,14 @@
 #-->
 # Validates the Apache release pipeline on every PR: builds the real release
 # artifacts (git archive, sdist, wheel) using the release script with
-# --skip-signing, runs Apache RAT on the source tarball, then installs the
-# wheel into a fresh venv outside the source tree and smoke-tests the server.
+# --skip-signing, runs Apache RAT on the source tarball, checks that
+# LICENSE-wheel still covers the npm packages bundled into the compiled UI,
+# then installs the wheel into a fresh venv outside the source tree and
+# smoke-tests the server.
 #
 # This is designed to catch the class of bugs that have broken recent RCs:
-# license/header issues (RAT), examples missing from the wheel (smoke test),
+# license/header issues (RAT), a LICENSE-wheel that no longer matches the
+# bundled UI dependencies, examples missing from the wheel (smoke test),
 # and general "voter tries to install this and it breaks" failures.
 
 name: Release Validation
@@ -141,6 +144,14 @@ jobs:
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-src.tar.gz"
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
           test -f "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+
+      # RAT excludes burr/tracking/server/build/**, so it never inspects the
+      # compiled UI -- the only content the wheel adds over the sdist. This
+      # step covers that gap: it re-derives the bundled npm packages from a
+      # sourcemap build and fails if LICENSE-wheel no longer matches, which
+      # is what silently drifts on a dependency bump.
+      - name: Check LICENSE-wheel covers the bundled UI dependencies
+        run: python scripts/generate_wheel_license.py --check
 
       - name: Run Apache RAT on source and sdist tarballs
         run: |
