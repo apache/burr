@@ -511,7 +511,7 @@ Persistence/Tracking
 By default, the trackers/persisters will be passed from the parent application to the child application. The application IDs
 will be created as a a stable hash of the parent ID + the index of the child ID, requiring the order to be constant to ensure that the same application ID is used for the same task every time.
 
-Note that we will be adding hte ability to create a unique key, per application, but that is not implemented yet.
+Note that we will be adding the ability to create a unique key, per application, but that is not implemented yet.
 
 It will also utilize the same persister to load from the prior state, if that is used on the application level (see :ref:`state persistence <state-persistence>`).
 
@@ -526,7 +526,7 @@ The default behavior is to cascade all the following constructs through to the p
 2. State saving/persistence (given by the :py:meth:`burr.core.application.ApplicationBuilder.with_state_persister` function in :py:class:`burr.core.application.ApplicationBuilder`)
 3. State loading (given by the :py:meth:`burr.core.application.ApplicationBuilder.initialize_from` function in :py:class:`burr.core.application.ApplicationBuilder`)
 
-These will then be passed ot the corresponding sub-application tasks. If any of these objects implement a `.copy()` method, that will be called. Otherwise the same instance will be created. Not the tracker/persister/loader must be serializable
+These will then be passed to the corresponding sub-application tasks. If any of these objects implement a `.copy()` method, that will be called. Otherwise the same instance will be created. Not the tracker/persister/loader must be serializable
 to work in non-multithreaded executors, and thread-safe to work in multithreaded instances.
 
 In mst cases, (2) and (3) above will be the same, however there all valid use-cases where you might want to use different persisters/loaders for the sub-application.

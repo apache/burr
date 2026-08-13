@@ -40,4 +40,4 @@ To connect Burr to a database, you can use one of the provided persisters, or bu
 
 - :ref:`Documentation on persistence <state-persistence>`
 - :ref:`Set of available persisters <persistersref>`
-- `Simple chatbot intro with persistence to SQLLite <https://github.com/apache/burr/blob/main/examples/simple-chatbot-intro/notebook.ipynb>`_
+- `Simple chatbot intro with persistence to SQLite <https://github.com/apache/burr/blob/main/examples/simple-chatbot-intro/notebook.ipynb>`_

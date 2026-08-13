@@ -83,7 +83,7 @@ applications.
 
 In general, Burr gives you the constructs for synchronous and asynchronous execution. We usually do that by
 providing both methods (see specific references for more detail and reach out if you feel like we
-are missing a specific implementation). Furthermore, Burr suports the following APIs for both synchronous/asynchronous interfaces:
+are missing a specific implementation). Furthermore, Burr supports the following APIs for both synchronous/asynchronous interfaces:
 
 - :ref:`hooks <hooksref>`
 - :ref:`persisters <persistersref>`
@@ -93,7 +93,7 @@ Nuances of Sync + Async together
 
 We encourage to make a decision to either commit fully to sync or async. That said,
 there are cases where a hybrid situation may be desirable or unavoidable (testing, prototyping,
-legacy code, ...) and we give some options to handle that. The table bellow shows the
+legacy code, ...) and we give some options to handle that. The table below shows the
 possibilities Burr now supports -- combining the set of synchronous/asynchronous.
 
 
