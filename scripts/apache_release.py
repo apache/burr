@@ -48,6 +48,7 @@ PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DOWNLOADS_URL = f"https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/"
 DEFAULT_DEV_SVN_ROOT = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}"
 DEFAULT_RELEASE_SVN_ROOT = (
@@ -692,7 +693,64 @@ def _remove_ui_build_artifacts() -> None:
         print("    ✓ UI build artifacts removed")
 
 
-def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
+def _release_build_environment(source_date_epoch: int) -> dict[str, str]:
+    """Return the shared environment for reproducible Flit builds."""
+    env = os.environ.copy()
+    env["FLIT_USE_VCS"] = "0"
+    env["SOURCE_DATE_EPOCH"] = str(source_date_epoch)
+    return env
+
+
+def _git_source_date_epoch() -> int:
+    """Return the anchored HEAD commit timestamp for official release builds."""
+    result = _run_command(
+        [
+            "git",
+            "-C",
+            str(PROJECT_ROOT),
+            "-c",
+            "log.showSignature=false",
+            "show",
+            "-s",
+            "--format=%ct",
+            "HEAD",
+        ],
+        description="Reading the source commit timestamp...",
+        error_message="Could not determine the HEAD commit timestamp",
+    )
+    raw_epoch = result.stdout.strip()
+    if not raw_epoch.isdigit():
+        _fail(f"Git returned an invalid commit timestamp: {raw_epoch!r}")
+
+    ambient_epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if ambient_epoch and ambient_epoch != raw_epoch:
+        print(
+            "  ⚠️  Ignoring ambient SOURCE_DATE_EPOCH="
+            f"{ambient_epoch}; using HEAD commit timestamp {raw_epoch}"
+        )
+    return int(raw_epoch)
+
+
+def _environment_source_date_epoch() -> Optional[int]:
+    """Return an explicitly configured rebuild epoch, treating blank as unset."""
+    raw_epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if not raw_epoch:
+        return None
+    try:
+        return int(raw_epoch)
+    except ValueError:
+        _fail("SOURCE_DATE_EPOCH must be an integer Unix timestamp")
+
+
+def _wheel_source_date_epoch() -> int:
+    """Use an explicit rebuild epoch, or the anchored commit timestamp in Git."""
+    configured_epoch = _environment_source_date_epoch()
+    return configured_epoch if configured_epoch is not None else _git_source_date_epoch()
+
+
+def _build_sdist_from_git(
+    version: str, output_dir: str = "dist", source_date_epoch: Optional[int] = None
+) -> str:
     """Build source distribution from git using flit."""
     _print_step(1, 2, "Building sdist with flit")
 
@@ -700,17 +758,13 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     _remove_ui_build_artifacts()
     _check_git_working_tree()
 
-    env = os.environ.copy()
-    env["FLIT_USE_VCS"] = "0"
-    source_epoch = _source_date_epoch(version, output_dir)
-    if source_epoch is not None:
-        env["SOURCE_DATE_EPOCH"] = str(source_epoch)
+    epoch = source_date_epoch if source_date_epoch is not None else _git_source_date_epoch()
     _run_command(
         ["flit", "build", "--format", "sdist"],
         description="Running flit build --format sdist...",
         error_message="Failed to build sdist",
         success_message="flit sdist created successfully",
-        env=env,
+        env=_release_build_environment(epoch),
     )
 
     # Find and rename sdist
@@ -732,14 +786,6 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
 
     return apache_sdist
-
-
-def _source_date_epoch(version: str, output_dir: str = "dist") -> Optional[int]:
-    """Use the source archive timestamp when available so local rebuilds are comparable."""
-    source_archive = os.path.join(output_dir, f"apache-burr-{version}-incubating-src.tar.gz")
-    if os.path.exists(source_archive):
-        return int(os.path.getmtime(source_archive))
-    return None
 
 
 # ============================================================================
@@ -877,7 +923,9 @@ def _cleanup_wheel_contents(
                 shutil.rmtree(backup_dir)
 
 
-def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str:
+def _build_wheel_from_current_dir(
+    version: str, output_dir: str = "dist", source_date_epoch: Optional[int] = None
+) -> str:
     """Build wheel from current directory (matches what voters do).
 
     This is MUCH simpler than the old approach:
@@ -894,18 +942,14 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     _print_step(3, 3, "Building wheel with flit")
 
     try:
-        env = os.environ.copy()
-        env["FLIT_USE_VCS"] = "0"
-        source_epoch = _source_date_epoch(version, output_dir)
-        if source_epoch is not None:
-            env["SOURCE_DATE_EPOCH"] = str(source_epoch)
+        epoch = source_date_epoch if source_date_epoch is not None else _wheel_source_date_epoch()
 
         _run_command(
             ["flit", "build", "--format", "wheel"],
             description="",
             error_message="Wheel build failed",
             success_message="Wheel built successfully",
-            env=env,
+            env=_release_build_environment(epoch),
         )
 
         # Find the wheel
@@ -1486,6 +1530,7 @@ def cmd_all(args) -> bool:
     _verify_project_root()
     _validate_version(args.version)
     _check_git_working_tree()
+    source_date_epoch = _git_source_date_epoch()
 
     # Step 1: Git Archive
     _print_step(1, 4, "Creating git archive")
@@ -1493,14 +1538,18 @@ def cmd_all(args) -> bool:
 
     # Step 2: Build sdist
     _print_step(2, 4, "Building sdist")
-    sdist_path = _build_sdist_from_git(args.version, args.output_dir)
+    sdist_path = _build_sdist_from_git(
+        args.version, args.output_dir, source_date_epoch=source_date_epoch
+    )
     _sign_artifact(sdist_path, skip_signing=skip_signing)
     if not _verify_artifact_complete(sdist_path, skip_signing=skip_signing):
         _fail("sdist verification failed!")
 
     # Step 3: Build wheel
     _print_step(3, 4, "Building wheel")
-    wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
+    wheel_path = _build_wheel_from_current_dir(
+        args.version, args.output_dir, source_date_epoch=source_date_epoch
+    )
     if not _verify_wheel_with_twine(wheel_path):
         _fail("Twine verification failed!")
     _sign_artifact(wheel_path, skip_signing=skip_signing)

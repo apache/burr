@@ -509,11 +509,15 @@ def verify_signatures(artifacts_dir: str, summary: VerificationSummary | None = 
     return all_valid
 
 
-def _safe_extract_tar(tar_handle: tarfile.TarFile, extract_dir: str) -> None:
+def _safe_extract_tar(
+    tar_handle: tarfile.TarFile,
+    extract_dir: str,
+    members: list[tarfile.TarInfo] | None = None,
+) -> None:
     try:
-        tar_handle.extractall(extract_dir, filter="data")
+        tar_handle.extractall(extract_dir, members=members, filter="data")
     except TypeError:
-        tar_handle.extractall(extract_dir)
+        tar_handle.extractall(extract_dir, members=members)
 
 
 def _build_rat_command(
@@ -783,14 +787,27 @@ def _release_artifact_map(artifacts_dir: str) -> dict[str, list[str]]:
     }
 
 
-def _extract_project_root(source_artifact: str, destination: str) -> Path:
+def _extract_project_root_and_epoch(source_artifact: str, destination: str) -> tuple[Path, int]:
     with tarfile.open(source_artifact, "r:gz") as tar:
-        _safe_extract_tar(tar, destination)
+        members = tar.getmembers()
+        if not members:
+            raise ValueError(f"source archive is empty: {source_artifact}")
+        source_date_epoch = int(members[0].mtime)
+        _safe_extract_tar(tar, destination, members=members)
 
     entries = [entry for entry in Path(destination).iterdir()]
     if len(entries) == 1 and entries[0].is_dir():
-        return entries[0]
-    return Path(destination)
+        return entries[0], source_date_epoch
+    return Path(destination), source_date_epoch
+
+
+def _reproducible_build_environment(source_date_epoch: int) -> dict[str, str]:
+    """Return the shared environment for voter rebuilds."""
+    env = os.environ.copy()
+    env["FLIT_USE_VCS"] = "0"
+    env["SOURCE_DATE_EPOCH"] = str(source_date_epoch)
+    env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"
+    return env
 
 
 def _load_apache_release_module(project_root: Path):
@@ -824,16 +841,13 @@ def _build_reproducible_wheel(
         version,
         output_dir,
     ]
-    env = os.environ.copy()
-    env["SOURCE_DATE_EPOCH"] = str(source_epoch)
-    env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"
     result = subprocess.run(
         command,
         cwd=project_root,
         capture_output=True,
         text=True,
         check=False,
-        env=env,
+        env=_reproducible_build_environment(source_epoch),
     )
     output = "\n".join(item for item in [result.stdout, result.stderr] if item)
     return result.returncode == 0, output
@@ -841,8 +855,10 @@ def _build_reproducible_wheel(
 
 def _build_reproducible_artifacts(source_artifact: str, output_dir: str) -> tuple[bool, str]:
     with tempfile.TemporaryDirectory() as temp_dir:
-        project_root = _extract_project_root(source_artifact, temp_dir)
-        source_epoch = int(os.path.getmtime(source_artifact))
+        try:
+            project_root, source_epoch = _extract_project_root_and_epoch(source_artifact, temp_dir)
+        except (OSError, tarfile.TarError, ValueError) as exc:
+            return False, f"unable to read source epoch: {exc}"
         version_match = re.search(r"(\d+\.\d+\.\d+)", os.path.basename(source_artifact))
         if version_match is None:
             return False, f"unable to determine version from {os.path.basename(source_artifact)}"
@@ -852,17 +868,13 @@ def _build_reproducible_artifacts(source_artifact: str, output_dir: str) -> tupl
         if os.path.exists(dist_dir):
             shutil.rmtree(dist_dir)
 
-        env = os.environ.copy()
-        env["FLIT_USE_VCS"] = "0"
-        env["SOURCE_DATE_EPOCH"] = str(source_epoch)
-        env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"
         sdist_result = subprocess.run(
             ["flit", "build", "--format", "sdist"],
             cwd=project_root,
             capture_output=True,
             text=True,
             check=False,
-            env=env,
+            env=_reproducible_build_environment(source_epoch),
         )
         if sdist_result.returncode != 0:
             return False, sdist_result.stderr or sdist_result.stdout
