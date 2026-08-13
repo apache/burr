@@ -25,6 +25,7 @@ or hit a max number of iterations (or epochs), etc.
 
 Note: this example uses the class based API to define the actions. You could also use the function+decorator API.
 """
+
 import burr.core.application
 from burr.core import Action, Condition, State, default
 

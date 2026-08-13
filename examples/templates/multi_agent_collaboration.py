@@ -21,6 +21,7 @@ Template for multi-agent collaboration.
 This contains a simple example of how to set up a multi-agent collaboration.
 The functions are to be filled in with the actual code to run the agents.
 """
+
 from burr import core
 from burr.core import ApplicationBuilder, State, action, default
 from burr.tracking import client as burr_tclient

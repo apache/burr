@@ -24,6 +24,7 @@ way to do it.
 
 Note: you could unroll this into a single application.
 """
+
 import uuid
 
 import agent_supervisor

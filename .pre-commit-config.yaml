@@ -24,12 +24,12 @@
 exclude: '^telemetry/ui|^burr/tracking/server/demo_data(/|$)'
 repos:
   - repo: https://github.com/ambv/black
-    rev: 23.11.0
+    rev: 26.5.1
     hooks:
       - id: black
         args: [--line-length=100]
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         # burr/examples is a symlink. trailing-whitespace would mangle the
@@ -49,7 +49,7 @@ repos:
       - id: check-ast
   # isort python package import sorting
   - repo: https://github.com/pycqa/isort
-    rev: '5.12.0'
+    rev: '9.0.0b2'
     hooks:
       - id: isort
         args:
@@ -65,7 +65,7 @@ repos:
             'burr',
           ]
   - repo: https://github.com/pycqa/flake8
-    rev: 6.1.0
+    rev: 7.3.0
     hooks:
       - id: flake8
   - repo: local

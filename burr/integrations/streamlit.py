@@ -100,7 +100,7 @@ def load_state_from_log_file(jsonl_log_file: str, app: Application) -> AppState:
         record = Record(
             state=json_line["state"],
             action=json_line["action"],
-            result=json_line["result"]
+            result=json_line["result"],
             # TODO -- add start time, end time
         )
         out.append(record)

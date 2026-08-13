@@ -25,6 +25,7 @@ e.g. python run.py
 and then
 burr-test-case create --project-name serde-example --app-id APP_ID --sequence-id 3 --serde-module application.py
 """
+
 import pprint
 import uuid
 

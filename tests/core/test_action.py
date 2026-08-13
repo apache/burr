@@ -1205,8 +1205,7 @@ def test_streaming_result_callback_error_async():
 
 
 def test_derive_inputs_from_fn_state_only():
-    def fn(state):
-        ...
+    def fn(state): ...
 
     bound_params = {}
     required, optional = derive_inputs_from_fn(bound_params, fn)
@@ -1215,8 +1214,7 @@ def test_derive_inputs_from_fn_state_only():
 
 
 def test_derive_inputs_from_fn_state_and_required():
-    def fn(state, a, b):
-        ...
+    def fn(state, a, b): ...
 
     bound_params = {"state": 1}
     required, optional = derive_inputs_from_fn(bound_params, fn)
@@ -1225,8 +1223,7 @@ def test_derive_inputs_from_fn_state_and_required():
 
 
 def test_derive_inputs_from_fn_state_required_and_optional():
-    def fn(state, a, b=2):
-        ...
+    def fn(state, a, b=2): ...
 
     bound_params = {"state": 1}
     required, optional = derive_inputs_from_fn(bound_params, fn)
@@ -1235,8 +1232,7 @@ def test_derive_inputs_from_fn_state_required_and_optional():
 
 
 def test_derive_inputs_from_fnh_state_and_all_bound_except_state():
-    def fn(state, a, b):
-        ...
+    def fn(state, a, b): ...
 
     bound_params = {"a": 1, "b": 2}
     required, optional = derive_inputs_from_fn(bound_params, fn)
@@ -1245,8 +1241,7 @@ def test_derive_inputs_from_fnh_state_and_all_bound_except_state():
 
 
 def test_non_existent_bound_parameters():
-    def fn(state, a):
-        ...
+    def fn(state, a): ...
 
     bound_params = {"a": 1, "non_existent": 2}
     required, optional = derive_inputs_from_fn(bound_params, fn)

@@ -16,6 +16,7 @@
 # under the License.
 
 """This file is truncated to just the relevant parts for the example."""
+
 from typing import Tuple
 
 import openai

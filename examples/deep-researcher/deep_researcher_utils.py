@@ -2,6 +2,7 @@
 Based on code from https://github.com/langchain-ai/local-deep-researcher/tree/005db90331e116eb3edb4e9b43822136b211444e/src/ollama_deep_researcher
 Copied under the MIT License.
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
