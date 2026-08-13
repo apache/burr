@@ -297,7 +297,11 @@ jobs:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
           mkdir -p /tmp/sdist-extract /tmp/sdist-wheel
-          tar -xzf "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz" \
+          SDIST_PATH="dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
+          export SOURCE_DATE_EPOCH=$(python -c \
+            "import sys, tarfile; print(int(tarfile.open(sys.argv[1]).next().mtime))" \
+            "$SDIST_PATH")
+          tar -xzf "$SDIST_PATH" \
             -C /tmp/sdist-extract
           # Find the single top-level directory the tarball extracted into
           SDIST_ROOT=$(find /tmp/sdist-extract -maxdepth 1 -mindepth 1 -type d | head -1)

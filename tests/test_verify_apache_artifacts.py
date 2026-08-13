@@ -22,6 +22,7 @@ import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 
 def _load_verify_module():
@@ -41,12 +42,16 @@ def _reference_text(filename: str) -> bytes:
     return (Path(__file__).resolve().parent.parent / filename).read_bytes()
 
 
-def _write_tar_gz(path: Path, root: str, files: dict[str, bytes]) -> None:
+def _write_tar_gz(
+    path: Path, root: str, files: dict[str, bytes], *, member_mtime: Optional[int] = None
+) -> None:
     with tarfile.open(path, "w:gz") as tar:
         for relative_name, content in files.items():
             with tempfile.NamedTemporaryFile(delete=False, dir=path.parent) as temp_file:
                 temp_path = Path(temp_file.name)
                 temp_path.write_bytes(content)
+            if member_mtime is not None:
+                os.utime(temp_path, (member_mtime, member_mtime))
             tar.add(temp_path, arcname=f"{root}/{relative_name}")
             temp_path.unlink()
 
@@ -388,6 +393,29 @@ def test_compare_wheel_contents_detects_file_missing_from_first_wheel(tmp_path):
 
     assert match is False
     assert any("burr/extra.py" in d for d in diffs)
+
+
+def test_extract_project_root_gets_epoch_from_member_not_local_mtime(tmp_path):
+    source_tar = tmp_path / "apache-burr-0.43.0-incubating-src.tar.gz"
+    _write_tar_gz(source_tar, "source-root", {"README.md": b"source"}, member_mtime=123456789)
+    os.utime(source_tar, (987654321, 987654321))
+
+    project_root, source_epoch = verify._extract_project_root_and_epoch(
+        str(source_tar), str(tmp_path / "extract")
+    )
+
+    assert source_epoch == 123456789
+    assert (project_root / "README.md").read_bytes() == b"source"
+
+
+def test_reproducible_build_reports_invalid_source_archive(tmp_path):
+    source_tar = tmp_path / "apache-burr-0.43.0-incubating-src.tar.gz"
+    source_tar.write_bytes(b"not a tarball")
+
+    ok, error = verify._build_reproducible_artifacts(str(source_tar), str(tmp_path / "rebuilt"))
+
+    assert ok is False
+    assert error.startswith("unable to read source epoch:")
 
 
 def test_verify_licenses_runs_rat_on_wheel_in_addition_to_tarball(tmp_path, monkeypatch):

@@ -44,9 +44,9 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm install --ignore-scripts
+    - run: npm ci --ignore-scripts
     - run: npm run build
     # `npm test` starts vitest in watch mode, which never exits on CI.
     - run: npx vitest run
-    - run: npm run lint:fix
-    - run: npm run format:fix
+    - run: npm run lint
+    - run: npm run format

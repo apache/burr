@@ -35,9 +35,10 @@
     "build": "tsc && vite build",
     "test": "vitest",
     "preview": "vite preview",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix --max-warnings=0 --config ./.eslintrc.js --ignore-path ./.eslintignore",
-    "format:fix": "prettier --write ./**/*.{ts,tsx,css,md,json} --config ./.prettierrc.json --ignore-path ./.prettierignore",
+    "format": "prettier --check \"./**/*.{ts,tsx,css,md,json}\" --config ./.prettierrc.json --ignore-path ./.prettierignore",
+    "format:fix": "prettier --write \"./**/*.{ts,tsx,css,md,json}\" --config ./.prettierrc.json --ignore-path ./.prettierignore",
     "precommit": "npm run lint:fix && npm run format",
     "prepush": "npm run lint"
   },
@@ -76,6 +77,9 @@
     ],
     "*.tsx": [
       "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,md,json}": [
       "prettier --write"
     ]
   }
