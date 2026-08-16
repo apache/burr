@@ -492,6 +492,356 @@ class PostEndStreamHookAsync(abc.ABC):
         pass
 
 
+@lifecycle.base_hook("pre_run_step_worker")
+class PreRunStepHookWorker(abc.ABC):
+    """Hook that runs on the worker (e.g., Ray/Temporal) before action execution.
+    This hook is designed to be called by execution interceptors on remote workers,
+    as opposed to PreRunStepHook which always runs on the main orchestrator process."""
+
+    @abc.abstractmethod
+    def pre_run_step_worker(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        """Run before a step is executed on the worker.
+
+        :param action: Action to be executed
+        :param state: State prior to step execution
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("pre_run_step_worker")
+class PreRunStepHookWorkerAsync(abc.ABC):
+    """Async hook that runs on the worker before action execution."""
+
+    @abc.abstractmethod
+    async def pre_run_step_worker(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        """Async run before a step is executed on the worker.
+
+        :param action: Action to be executed
+        :param state: State prior to step execution
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("post_run_step_worker")
+class PostRunStepHookWorker(abc.ABC):
+    """Hook that runs on the worker after action execution.
+    This hook is designed to be called by execution interceptors on remote workers,
+    as opposed to PostRunStepHook which always runs on the main orchestrator process."""
+
+    @abc.abstractmethod
+    def post_run_step_worker(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        result: Optional[Dict[str, Any]],
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        """Run after a step is executed on the worker.
+
+        :param action: Action that was executed
+        :param state: State after step execution
+        :param result: Result of the action
+        :param exception: Exception that was raised
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("post_run_step_worker")
+class PostRunStepHookWorkerAsync(abc.ABC):
+    """Async hook that runs on the worker after action execution."""
+
+    @abc.abstractmethod
+    async def post_run_step_worker(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        result: Optional[dict],
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        """Async run after a step is executed on the worker.
+
+        :param action: Action that was executed
+        :param state: State after step execution
+        :param result: Result of the action
+        :param exception: Exception that was raised
+        :param future_kwargs: Future keyword arguments
+        """
+        pass
+
+
+@lifecycle.base_hook("pre_start_stream_worker")
+class PreStartStreamHookWorker(abc.ABC):
+    """Hook that runs on the worker after a stream is started."""
+
+    @abc.abstractmethod
+    def pre_start_stream_worker(
+        self,
+        *,
+        action: str,
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        pass
+
+
+@lifecycle.base_hook("pre_start_stream_worker")
+class PreStartStreamHookWorkerAsync(abc.ABC):
+    """Async hook that runs on the worker after a stream is started."""
+
+    @abc.abstractmethod
+    async def pre_start_stream_worker(
+        self,
+        *,
+        action: str,
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        pass
+
+
+@lifecycle.base_hook("post_end_stream_worker")
+class PostEndStreamHookWorker(abc.ABC):
+    """Hook that runs on the worker after a stream is ended."""
+
+    @abc.abstractmethod
+    def post_end_stream_worker(
+        self,
+        *,
+        action: str,
+        result: Optional[Dict[str, Any]],
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        pass
+
+
+@lifecycle.base_hook("post_end_stream_worker")
+class PostEndStreamHookWorkerAsync(abc.ABC):
+    """Async hook that runs on the worker after a stream is ended."""
+
+    @abc.abstractmethod
+    async def post_end_stream_worker(
+        self,
+        *,
+        action: str,
+        result: Optional[Dict[str, Any]],
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        pass
+
+
+@lifecycle.interceptor_hook("intercept_action_execution")
+class ActionExecutionInterceptorHook(abc.ABC):
+    """Hook that can wrap/replace action execution (e.g., for Ray/Temporal).
+    This hook allows you to intercept the execution of an action and run it
+    on a different execution backend while maintaining the same interface.
+
+    The interceptor receives a worker_adapter_set containing only worker hooks
+    (PreRunStepHookWorker, PostRunStepHookWorker, etc.) that can be called
+    on the remote execution environment."""
+
+    @abc.abstractmethod
+    def should_intercept(
+        self,
+        *,
+        action: "Action",
+        **future_kwargs: Any,
+    ) -> bool:
+        """Determine if this action should be intercepted.
+
+        :param action: Action to potentially intercept
+        :param future_kwargs: Future keyword arguments
+        :return: True if this hook should intercept execution
+        """
+        pass
+
+    @abc.abstractmethod
+    def intercept_run(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ) -> dict:
+        """Replace the action.run() call with custom execution.
+
+        Note: The state passed here is the FULL state, not subsetted.
+        You are responsible for subsetting it to action.reads if needed.
+
+        :param action: Action to execute
+        :param state: Current state (FULL state, not subsetted)
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments (includes worker_adapter_set)
+        :return: Result dictionary from running the action
+        """
+        pass
+
+
+@lifecycle.interceptor_hook("intercept_action_execution")
+class ActionExecutionInterceptorHookAsync(abc.ABC):
+    """Async version of ActionExecutionInterceptorHook for intercepting async actions."""
+
+    @abc.abstractmethod
+    def should_intercept(
+        self,
+        *,
+        action: "Action",
+        **future_kwargs: Any,
+    ) -> bool:
+        """Determine if this action should be intercepted.
+
+        Note: This method is intentionally synchronous even on async interceptors.
+        It is a pure predicate used inside lambdas that cannot be awaited. If you
+        need I/O to decide, cache the result during __init__ or pre_run_step.
+
+        :param action: Action to potentially intercept
+        :param future_kwargs: Future keyword arguments
+        :return: True if this hook should intercept execution
+        """
+        pass
+
+    @abc.abstractmethod
+    async def intercept_run(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ) -> dict:
+        """Replace the action.run() call with custom execution.
+
+        Note: The state passed here is the FULL state, not subsetted.
+        You are responsible for subsetting it to action.reads if needed.
+
+        :param action: Action to execute
+        :param state: Current state (FULL state, not subsetted)
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments (includes worker_adapter_set)
+        :return: Result dictionary from running the action
+        """
+        pass
+
+
+@lifecycle.interceptor_hook(
+    "intercept_streaming_action", intercept_method="intercept_stream_run_and_update"
+)
+class StreamingActionInterceptorHook(abc.ABC):
+    """Hook to intercept streaming action execution (e.g., for Ray/Temporal).
+    This hook allows you to wrap streaming actions to execute on different backends.
+
+    The interceptor receives a worker_adapter_set containing only worker hooks
+    that can be called on the remote execution environment."""
+
+    @abc.abstractmethod
+    def should_intercept(
+        self,
+        *,
+        action: "Action",
+        **future_kwargs: Any,
+    ) -> bool:
+        """Determine if this streaming action should be intercepted.
+
+        :param action: Streaming action to potentially intercept
+        :param future_kwargs: Future keyword arguments
+        :return: True if this hook should intercept execution
+        """
+        pass
+
+    @abc.abstractmethod
+    def intercept_stream_run_and_update(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        """Replace stream_run_and_update with custom execution.
+        Must be a generator that yields (result_dict, optional_state) tuples.
+
+        :param action: Streaming action to execute
+        :param state: Current state
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments (includes worker_adapter_set)
+        :return: Generator yielding (dict, Optional[State]) tuples
+        """
+        pass
+
+
+@lifecycle.interceptor_hook(
+    "intercept_streaming_action", intercept_method="intercept_stream_run_and_update"
+)
+class StreamingActionInterceptorHookAsync(abc.ABC):
+    """Async version for intercepting async streaming actions."""
+
+    @abc.abstractmethod
+    def should_intercept(
+        self,
+        *,
+        action: "Action",
+        **future_kwargs: Any,
+    ) -> bool:
+        """Determine if this streaming action should be intercepted.
+
+        Note: This method is intentionally synchronous even on async interceptors.
+        It is a pure predicate used inside lambdas that cannot be awaited. If you
+        need I/O to decide, cache the result during __init__ or pre_run_step.
+
+        :param action: Streaming action to potentially intercept
+        :param future_kwargs: Future keyword arguments
+        :return: True if this hook should intercept execution
+        """
+        pass
+
+    @abc.abstractmethod
+    async def intercept_stream_run_and_update(
+        self,
+        *,
+        action: "Action",
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ):
+        """Replace stream_run_and_update with custom execution.
+        Must be an async generator that yields (result_dict, optional_state) tuples.
+
+        :param action: Streaming action to execute
+        :param state: Current state
+        :param inputs: Inputs to the action
+        :param future_kwargs: Future keyword arguments (includes worker_adapter_set)
+        :return: Async generator yielding (dict, Optional[State]) tuples
+        """
+        pass
+
+
 # strictly for typing -- this conflicts a bit with the lifecycle decorator above, but its fine for now
 # This makes IDE completion/type-hinting easier
 LifecycleAdapter = Union[
@@ -515,4 +865,16 @@ LifecycleAdapter = Union[
     PreStartStreamHookAsync,
     PostStreamItemHookAsync,
     PostEndStreamHookAsync,
+    PreRunStepHookWorker,
+    PreRunStepHookWorkerAsync,
+    PostRunStepHookWorker,
+    PostRunStepHookWorkerAsync,
+    PreStartStreamHookWorker,
+    PreStartStreamHookWorkerAsync,
+    PostEndStreamHookWorker,
+    PostEndStreamHookWorkerAsync,
+    ActionExecutionInterceptorHook,
+    ActionExecutionInterceptorHookAsync,
+    StreamingActionInterceptorHook,
+    StreamingActionInterceptorHookAsync,
 ]

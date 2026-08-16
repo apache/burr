@@ -44,6 +44,8 @@ FILTERLIST = [
     "talks",
     "parallelism",  # TODO - remove this shortly
     "pytest",
+    "remote-execution-ray",
+    "remote-execution-temporal",
 ]
 
 

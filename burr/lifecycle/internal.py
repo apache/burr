@@ -28,9 +28,11 @@ if TYPE_CHECKING:
 
 SYNC_HOOK = "hooks"
 ASYNC_HOOK = "async_hooks"
+INTERCEPTOR_TYPE = "interceptor_type"
 
 REGISTERED_SYNC_HOOKS: Set[str] = set()
 REGISTERED_ASYNC_HOOKS: Set[str] = set()
+REGISTERED_INTERCEPTORS: Set[str] = set()
 
 
 class InvalidLifecycleHook(Exception):
@@ -61,6 +63,36 @@ def validate_hook_fn(fn: Callable):
                 raise InvalidLifecycleHook(
                     f"Lifecycle hooks can only have keyword-only arguments. "
                     f"Method/hook {fn} has argument {param} that is not keyword-only."
+                )
+
+
+def validate_interceptor_method(fn: Callable, method_name: str):
+    """Validates that an interceptor method has the correct signature.
+    Interceptor methods must have keyword-only arguments (including **future_kwargs).
+
+    :param fn: The function to validate
+    :param method_name: Name of the method being validated
+    :raises InvalidLifecycleHook: If the function is not a valid interceptor method
+    """
+    if fn is None:
+        raise InvalidLifecycleHook(f"Interceptor method {method_name} does not exist on the class.")
+    sig = inspect.signature(fn)
+    # Check for **future_kwargs
+    if (
+        "future_kwargs" not in sig.parameters
+        or sig.parameters["future_kwargs"].kind != inspect.Parameter.VAR_KEYWORD
+    ):
+        raise InvalidLifecycleHook(
+            f"Interceptor method {method_name} must have a `**future_kwargs` argument. "
+            f"Method {fn} does not."
+        )
+    # All non-self, non-future_kwargs parameters must be keyword-only
+    for param in sig.parameters.values():
+        if param.name not in ("future_kwargs", "self"):
+            if param.kind != inspect.Parameter.KEYWORD_ONLY:
+                raise InvalidLifecycleHook(
+                    f"Interceptor method {method_name} can only have keyword-only arguments. "
+                    f"Method {fn} has argument {param} that is not keyword-only."
                 )
 
 
@@ -105,6 +137,41 @@ class lifecycle:
 
         return decorator
 
+    @classmethod
+    def interceptor_hook(
+        cls,
+        interceptor_type: str,
+        should_intercept_method: str = "should_intercept",
+        intercept_method: str = "intercept_run",
+    ):
+        """Decorator for interceptor hooks that can wrap/replace action execution.
+
+        Interceptors have two methods:
+        1. should_intercept() - determines if an action should be intercepted
+        2. intercept_run() or intercept_stream_run_and_update() - replaces the execution
+
+        :param interceptor_type: Type identifier for the interceptor (e.g., "intercept_action_execution", "intercept_streaming_action")
+        :param should_intercept_method: Name of the should_intercept method (default: "should_intercept")
+        :param intercept_method: Name of the intercept method (default: "intercept_run" or "intercept_stream_run_and_update")
+        """
+
+        def decorator(clazz):
+            # Validate should_intercept method
+            should_intercept_fn = getattr(clazz, should_intercept_method, None)
+            validate_interceptor_method(should_intercept_fn, should_intercept_method)
+
+            # Validate intercept method
+            intercept_fn = getattr(clazz, intercept_method, None)
+            validate_interceptor_method(intercept_fn, intercept_method)
+
+            # Register the interceptor type
+            setattr(clazz, INTERCEPTOR_TYPE, interceptor_type)
+            REGISTERED_INTERCEPTORS.add(interceptor_type)
+
+            return clazz
+
+        return decorator
+
 
 class LifecycleAdapterSet:
     """An internal class that groups together all the lifecycle adapters.
@@ -119,7 +186,15 @@ class LifecycleAdapterSet:
         :param adapters: Adapters to group together
         """
         self._adapters = list(adapters)
-        self.sync_hooks, self.async_hooks = self._get_lifecycle_hooks()
+        self._sync_hooks, self._async_hooks = self._get_lifecycle_hooks()
+
+    @property
+    def sync_hooks(self):
+        return self._sync_hooks
+
+    @property
+    def async_hooks(self):
+        return self._async_hooks
 
     def with_new_adapters(self, *adapters: "LifecycleAdapter") -> "LifecycleAdapterSet":
         """Adds new adapters to the set.
@@ -212,3 +287,56 @@ class LifecycleAdapterSet:
         :return: A list of adapters
         """
         return self._adapters
+
+    def get_first_matching_hook(
+        self, hook_name: str, predicate: Callable[["LifecycleAdapter"], bool]
+    ):
+        """Get first hook of given type that matches predicate.
+
+        For interceptor hooks, this uses the registered interceptor types to find
+        matching interceptors. For standard hooks, it uses the hook registry.
+
+        :param hook_name: Name of the hook to search for (or interceptor type)
+        :param predicate: Function that takes a hook and returns True if it matches
+        :return: The first matching hook, or None if no match found
+        """
+        # Check if this is a registered interceptor type
+        if hook_name in REGISTERED_INTERCEPTORS:
+            # Search for adapters with this interceptor type
+            for adapter in self.adapters:
+                for cls in inspect.getmro(adapter.__class__):
+                    interceptor_type = getattr(cls, INTERCEPTOR_TYPE, None)
+                    if interceptor_type == hook_name:
+                        if predicate(adapter):
+                            return adapter
+            return None
+
+        # Standard hook lookup for registered hooks
+        hooks = self.sync_hooks.get(hook_name, []) + self.async_hooks.get(hook_name, [])
+        for hook in hooks:
+            if predicate(hook):
+                return hook
+        return None
+
+    def get_worker_adapter_set(self) -> "LifecycleAdapterSet":
+        """Create a new LifecycleAdapterSet containing only worker hooks.
+        Worker hooks are those with names ending in '_worker' and are designed
+        to be called on remote execution environments (Ray/Temporal workers).
+
+        :return: A new LifecycleAdapterSet with only worker hooks
+        """
+        worker_hooks = []
+        for adapter in self.adapters:
+            # Check if this adapter is a worker hook by looking at its registered hooks
+            is_worker = False
+            for cls in inspect.getmro(adapter.__class__):
+                sync_hook = getattr(cls, SYNC_HOOK, None)
+                async_hook = getattr(cls, ASYNC_HOOK, None)
+                if (sync_hook and sync_hook.endswith("_worker")) or (
+                    async_hook and async_hook.endswith("_worker")
+                ):
+                    is_worker = True
+                    break
+            if is_worker:
+                worker_hooks.append(adapter)
+        return LifecycleAdapterSet(*worker_hooks)

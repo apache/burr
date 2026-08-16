@@ -158,7 +158,13 @@ def _remap_dunder_parameters(
     return inputs
 
 
-def _run_function(function: Function, state: State, inputs: Dict[str, Any], name: str) -> dict:
+def _run_function(
+    function: Function,
+    state: State,
+    inputs: Dict[str, Any],
+    name: str,
+    adapter_set: Optional["LifecycleAdapterSet"] = None,
+) -> dict:
     """Runs a function, returning the result of running the function.
     Note this restricts the keys in the state to only those that the
     function reads.
@@ -166,6 +172,8 @@ def _run_function(function: Function, state: State, inputs: Dict[str, Any], name
     :param function: Function to run
     :param state: State at time of execution
     :param inputs: Inputs to the function
+    :param name: Name of the action (for error messages)
+    :param adapter_set: Optional lifecycle adapter set for checking interceptors
     :return:
     """
     if function.is_async():
@@ -174,6 +182,21 @@ def _run_function(function: Function, state: State, inputs: Dict[str, Any], name
             "in non-async context. Use astep()/aiterate()/arun() "
             "instead...)"
         )
+
+    # Check for execution interceptors
+    if adapter_set:
+        interceptor = adapter_set.get_first_matching_hook(
+            "intercept_action_execution", lambda hook: hook.should_intercept(action=function)
+        )
+        if interceptor:
+            worker_adapter_set = adapter_set.get_worker_adapter_set()
+            result = interceptor.intercept_run(
+                action=function, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+            )
+            _validate_result(result, name)
+            return result
+
+    # Normal execution path
     state_to_use = state.subset(*function.reads)
     function.validate_inputs(inputs)
     if "__context" in inputs or "__tracer" in inputs:
@@ -185,10 +208,30 @@ def _run_function(function: Function, state: State, inputs: Dict[str, Any], name
 
 
 async def _arun_function(
-    function: Function, state: State, inputs: Dict[str, Any], name: str
+    function: Function,
+    state: State,
+    inputs: Dict[str, Any],
+    name: str,
+    adapter_set: Optional["LifecycleAdapterSet"] = None,
 ) -> dict:
     """Runs a function, returning the result of running the function.
     Async version of the above."""
+
+    # Check for execution interceptors
+    if adapter_set:
+        interceptor = adapter_set.get_first_matching_hook(
+            "intercept_action_execution",
+            lambda hook: hook.should_intercept(action=function) and hasattr(hook, "intercept_run"),
+        )
+        if interceptor and inspect.iscoroutinefunction(interceptor.intercept_run):
+            worker_adapter_set = adapter_set.get_worker_adapter_set()
+            result = await interceptor.intercept_run(
+                action=function, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+            )
+            _validate_result(result, name)
+            return result
+
+    # Normal execution path
     state_to_use = state.subset(*function.reads)
     function.validate_inputs(inputs)
     result = await function.run(state_to_use, **inputs)
@@ -299,7 +342,10 @@ def _format_BASE_ERROR_MESSAGE(action: Action, input_state: State, inputs: dict)
 
 
 def _run_single_step_action(
-    action: SingleStepAction, state: State, inputs: Optional[Dict[str, Any]]
+    action: SingleStepAction,
+    state: State,
+    inputs: Optional[Dict[str, Any]],
+    adapter_set: Optional["LifecycleAdapterSet"] = None,
 ) -> Tuple[Dict[str, Any], State]:
     """Runs a single step action. This API is internal-facing and a bit in flux, but
     it corresponds to the SingleStepAction class.
@@ -307,9 +353,33 @@ def _run_single_step_action(
     :param action: Action to run
     :param state: State to run with
     :param inputs: Inputs to pass directly to the action
+    :param adapter_set: Optional lifecycle adapter set for checking interceptors
     :return: The result of running the action, and the new state
     """
-    # TODO -- guard all reads/writes with a subset of the state
+    # Check for execution interceptors
+    if adapter_set:
+        interceptor = adapter_set.get_first_matching_hook(
+            "intercept_action_execution", lambda hook: hook.should_intercept(action=action)
+        )
+        if interceptor:
+            worker_adapter_set = adapter_set.get_worker_adapter_set()
+            result = interceptor.intercept_run(
+                action=action, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+            )
+            # Check if interceptor returned state via special key (for single-step actions)
+            if "__INTERCEPTOR_NEW_STATE__" in result:
+                new_state = result.pop("__INTERCEPTOR_NEW_STATE__")
+            else:
+                # For multi-step actions or if state wasn't provided
+                # we need to compute it
+                new_state = action.update(result, state)
+
+            _validate_result(result, action.name, action.schema)
+            out = result, _state_update(state, new_state)
+            _validate_reducer_writes(action, new_state, action.name)
+            return out
+
+    # Normal execution path
     action.validate_inputs(inputs)
     result, new_state = _adjust_single_step_output(
         action.run_and_update(state, **inputs), action.name, action.schema
@@ -334,7 +404,18 @@ def _run_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
-    generator = action.stream_run_and_update(state, **inputs)
+
+    # Check for streaming action interceptors
+    interceptor = lifecycle_adapters.get_first_matching_hook(
+        "intercept_streaming_action", lambda hook: hook.should_intercept(action=action)
+    )
+    if interceptor:
+        worker_adapter_set = lifecycle_adapters.get_worker_adapter_set()
+        generator = interceptor.intercept_stream_run_and_update(
+            action=action, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+        )
+    else:
+        generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
     count = 0
@@ -402,7 +483,20 @@ async def _arun_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
-    generator = action.stream_run_and_update(state, **inputs)
+
+    # Check for streaming action interceptors
+    interceptor = lifecycle_adapters.get_first_matching_hook(
+        "intercept_streaming_action",
+        lambda hook: hook.should_intercept(action=action)
+        and hasattr(hook, "intercept_stream_run_and_update"),
+    )
+    if interceptor and inspect.isasyncgenfunction(interceptor.intercept_stream_run_and_update):
+        worker_adapter_set = lifecycle_adapters.get_worker_adapter_set()
+        generator = interceptor.intercept_stream_run_and_update(
+            action=action, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+        )
+    else:
+        generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
     count = 0
@@ -582,9 +676,35 @@ async def _arun_multi_step_streaming_action(
 
 
 async def _arun_single_step_action(
-    action: SingleStepAction, state: State, inputs: Optional[Dict[str, Any]]
+    action: SingleStepAction,
+    state: State,
+    inputs: Optional[Dict[str, Any]],
+    adapter_set: Optional["LifecycleAdapterSet"] = None,
 ) -> Tuple[dict, State]:
     """Runs a single step action in async. See the synchronous version for more details."""
+    # Check for execution interceptors
+    if adapter_set:
+        interceptor = adapter_set.get_first_matching_hook(
+            "intercept_action_execution",
+            lambda hook: hook.should_intercept(action=action) and hasattr(hook, "intercept_run"),
+        )
+        if interceptor and inspect.iscoroutinefunction(interceptor.intercept_run):
+            worker_adapter_set = adapter_set.get_worker_adapter_set()
+            result = await interceptor.intercept_run(
+                action=action, state=state, inputs=inputs, worker_adapter_set=worker_adapter_set
+            )
+            # Check if interceptor returned state via special key (for single-step actions)
+            if "__INTERCEPTOR_NEW_STATE__" in result:
+                new_state = result.pop("__INTERCEPTOR_NEW_STATE__")
+            else:
+                # For multi-step actions or if state wasn't provided
+                new_state = action.update(result, state)
+
+            _validate_result(result, action.name, action.schema)
+            _validate_reducer_writes(action, new_state, action.name)
+            return result, _state_update(state, new_state)
+
+    # Normal execution path
     state_to_use = state
     action.validate_inputs(inputs)
     result, new_state = _adjust_single_step_output(
@@ -974,11 +1094,15 @@ class Application(Generic[ApplicationStateType]):
             try:
                 if next_action.single_step:
                     result, new_state = _run_single_step_action(
-                        next_action, self._state, action_inputs
+                        next_action, self._state, action_inputs, adapter_set=self._adapter_set
                     )
                 else:
                     result = _run_function(
-                        next_action, self._state, action_inputs, name=next_action.name
+                        next_action,
+                        self._state,
+                        action_inputs,
+                        name=next_action.name,
+                        adapter_set=self._adapter_set,
                     )
                     new_state = _run_reducer(next_action, self._state, result, next_action.name)
 
@@ -1108,7 +1232,19 @@ class Application(Generic[ApplicationStateType]):
             result = None
             new_state = self._state
             try:
-                if not next_action.is_async():
+                # Check if there's an async interceptor for this action
+                has_async_interceptor = False
+                if self._adapter_set:
+                    interceptor = self._adapter_set.get_first_matching_hook(
+                        "intercept_action_execution",
+                        lambda hook: hook.should_intercept(action=next_action)
+                        and hasattr(hook, "intercept_run"),
+                    )
+                    if interceptor and inspect.iscoroutinefunction(interceptor.intercept_run):
+                        has_async_interceptor = True
+
+                # Only delegate to sync version if action is sync AND no async interceptor
+                if not next_action.is_async() and not has_async_interceptor:
                     # we can just delegate to the synchronous version, it will block the event loop,
                     # but that's safer than assuming its OK to launch a thread
                     # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
@@ -1122,7 +1258,10 @@ class Application(Generic[ApplicationStateType]):
                 action_inputs = self._process_inputs(inputs, next_action)
                 if next_action.single_step:
                     result, new_state = await _arun_single_step_action(
-                        next_action, self._state, inputs=action_inputs
+                        next_action,
+                        self._state,
+                        inputs=action_inputs,
+                        adapter_set=self._adapter_set,
                     )
                 else:
                     result = await _arun_function(
@@ -1130,6 +1269,7 @@ class Application(Generic[ApplicationStateType]):
                         self._state,
                         inputs=action_inputs,
                         name=next_action.name,
+                        adapter_set=self._adapter_set,
                     )
                     new_state = _run_reducer(next_action, self._state, result, next_action.name)
                 new_state = self._update_internal_state_value(new_state, next_action)
