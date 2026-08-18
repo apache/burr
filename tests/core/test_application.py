@@ -46,6 +46,7 @@ from burr.core.application import (
     Application,
     ApplicationBuilder,
     ApplicationContext,
+    StreamingFailurePolicy,
     _adjust_single_step_output,
     _arun_function,
     _arun_multi_step_streaming_action,
@@ -62,10 +63,14 @@ from burr.core.application import (
 )
 from burr.core.graph import Graph, GraphBuilder, Transition
 from burr.core.persistence import (
+    AsyncInMemoryPersister,
     AsyncDevNullPersister,
     BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
+    InMemoryPersister,
+    PersisterHook,
+    PersisterHookAsync,
     PersistedStateData,
     SQLLitePersister,
 )
@@ -1620,12 +1625,28 @@ class MultiStepStreamingCounterWithExceptionNoResultAsync(AsyncStreamingAction):
         return state.update(**result).append(tracker=result["count"])
 
 
-def test__run_single_step_streaming_action_graceful_exception():
-    """When the generator raises but yields a final state in finally, stream completes gracefully."""
+def test__run_single_step_streaming_action_fails_closed_by_default():
     action = SingleStepStreamingCounterWithException().with_name("counter")
     state = State({"count": 0, "tracker": []})
     generator = _run_single_step_streaming_action(
         action, state, inputs={}, sequence_id=0, partition_key="pk", app_id="app"
+    )
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        list(generator)
+
+
+def test__run_single_step_streaming_action_commit_partial():
+    action = SingleStepStreamingCounterWithException().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _run_single_step_streaming_action(
+        action,
+        state,
+        inputs={},
+        sequence_id=0,
+        partition_key="pk",
+        app_id="app",
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
     )
     results = list(generator)
     intermediate = [(r, s) for r, s in results if s is None]
@@ -1650,8 +1671,7 @@ def test__run_single_step_streaming_action_exception_propagates():
         list(generator)
 
 
-async def test__run_single_step_streaming_action_graceful_exception_async():
-    """Async: when the generator raises but yields a final state in finally, stream completes."""
+async def test__run_single_step_streaming_action_fails_closed_by_default_async():
     action = SingleStepStreamingCounterWithExceptionAsync().with_name("counter")
     state = State({"count": 0, "tracker": []})
     generator = _arun_single_step_streaming_action(
@@ -1662,6 +1682,25 @@ async def test__run_single_step_streaming_action_graceful_exception_async():
         app_id="app",
         partition_key="pk",
         lifecycle_adapters=LifecycleAdapterSet(),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        async for _ in generator:
+            pass
+
+
+async def test__run_single_step_streaming_action_commit_partial_async():
+    action = SingleStepStreamingCounterWithExceptionAsync().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _arun_single_step_streaming_action(
+        action=action,
+        state=state,
+        inputs={},
+        sequence_id=0,
+        app_id="app",
+        partition_key="pk",
+        lifecycle_adapters=LifecycleAdapterSet(),
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
     )
     results = []
     async for item in generator:
@@ -1695,12 +1734,28 @@ async def test__run_single_step_streaming_action_exception_propagates_async():
             pass
 
 
-def test__run_multi_step_streaming_action_graceful_exception():
-    """When the generator raises but yields a final result in finally, stream completes."""
+def test__run_multi_step_streaming_action_fails_closed_by_default():
     action = MultiStepStreamingCounterWithException().with_name("counter")
     state = State({"count": 0, "tracker": []})
     generator = _run_multi_step_streaming_action(
         action, state, inputs={}, sequence_id=0, partition_key="pk", app_id="app"
+    )
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        list(generator)
+
+
+def test__run_multi_step_streaming_action_commit_partial():
+    action = MultiStepStreamingCounterWithException().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _run_multi_step_streaming_action(
+        action,
+        state,
+        inputs={},
+        sequence_id=0,
+        partition_key="pk",
+        app_id="app",
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
     )
     results = list(generator)
     intermediate = [(r, s) for r, s in results if s is None]
@@ -1725,8 +1780,7 @@ def test__run_multi_step_streaming_action_exception_propagates():
         list(generator)
 
 
-async def test__run_multi_step_streaming_action_graceful_exception_async():
-    """Async: when the generator raises but yields a final result in finally, stream completes."""
+async def test__run_multi_step_streaming_action_fails_closed_by_default_async():
     action = MultiStepStreamingCounterWithExceptionAsync().with_name("counter")
     state = State({"count": 0, "tracker": []})
     generator = _arun_multi_step_streaming_action(
@@ -1737,6 +1791,25 @@ async def test__run_multi_step_streaming_action_graceful_exception_async():
         app_id="app",
         partition_key="pk",
         lifecycle_adapters=LifecycleAdapterSet(),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        async for _ in generator:
+            pass
+
+
+async def test__run_multi_step_streaming_action_commit_partial_async():
+    action = MultiStepStreamingCounterWithExceptionAsync().with_name("counter")
+    state = State({"count": 0, "tracker": []})
+    generator = _arun_multi_step_streaming_action(
+        action=action,
+        state=state,
+        inputs={},
+        sequence_id=0,
+        app_id="app",
+        partition_key="pk",
+        lifecycle_adapters=LifecycleAdapterSet(),
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
     )
     results = []
     async for item in generator:
@@ -1768,6 +1841,76 @@ async def test__run_multi_step_streaming_action_exception_propagates_async():
     with pytest.raises(RuntimeError, match="simulated failure with no result"):
         async for _ in generator:
             pass
+
+
+def test_stream_result_failure_does_not_commit_state():
+    persister = InMemoryPersister()
+    action = MultiStepStreamingCounterWithException().with_name("counter")
+    app = (
+        ApplicationBuilder()
+        .with_actions(action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHook(persister))
+        .build()
+    )
+
+    _, streaming_result = app.stream_result(halt_after=["counter"])
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        streaming_result.get()
+
+    persisted_state = persister.load("pk", "app")
+    assert app.state["count"] == 0
+    assert persisted_state["state"]["count"] == 0
+    assert persisted_state["status"] == "failed"
+
+
+def test_stream_result_commit_partial_requires_explicit_policy():
+    action = MultiStepStreamingCounterWithException().with_name("counter")
+    app = (
+        ApplicationBuilder()
+        .with_actions(action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .build()
+    )
+
+    _, streaming_result = app.stream_result(
+        halt_after=["counter"],
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
+    )
+    result, state = streaming_result.get()
+
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert app.state["count"] == 1
+
+
+async def test_astream_result_failure_does_not_commit_state():
+    persister = AsyncInMemoryPersister()
+    action = MultiStepStreamingCounterWithExceptionAsync().with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister))
+        .abuild()
+    )
+
+    _, streaming_result = await app.astream_result(halt_after=["counter"])
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        await streaming_result.get()
+
+    persisted_state = await persister.load("pk", "app")
+    assert app.state["count"] == 0
+    assert persisted_state["state"]["count"] == 0
+    assert persisted_state["status"] == "failed"
 
 
 class SingleStepActionWithDeletionAsync(SingleStepActionWithDeletion):

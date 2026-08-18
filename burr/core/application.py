@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextvars
 import dataclasses
+import enum
 import functools
 import inspect
 import logging
@@ -87,6 +88,13 @@ SEQUENCE_ID = "__SEQUENCE_ID"
 
 StateType = TypeVar("StateType")
 StateTypeToSet = TypeVar("StateTypeToSet")
+
+
+class StreamingFailurePolicy(str, enum.Enum):
+    """Controls how streaming actions handle exceptions after producing output."""
+
+    FAIL_CLOSED = "fail_closed"
+    COMMIT_PARTIAL = "commit_partial"
 
 
 def _validate_result(result: Any, name: str, schema: ActionSchema = DEFAULT_SCHEMA) -> None:
@@ -328,6 +336,7 @@ def _run_single_step_streaming_action(
     app_id: str,
     partition_key: Optional[str],
     lifecycle_adapters: LifecycleAdapterSet = LifecycleAdapterSet(),
+    failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
 ) -> Generator[Tuple[dict, Optional[State]], None, None]:
     """Runs a single step streaming action. This API is internal-facing.
     This normalizes + validates the output."""
@@ -367,7 +376,7 @@ def _run_single_step_streaming_action(
                 )
                 yield result, None
     except Exception as e:
-        if state_update is None:
+        if failure_policy != StreamingFailurePolicy.COMMIT_PARTIAL or state_update is None:
             raise
         logger.warning(
             "Streaming action '%s' raised %s after yielding %d items. "
@@ -397,6 +406,7 @@ async def _arun_single_step_streaming_action(
     app_id: str,
     partition_key: Optional[str],
     lifecycle_adapters: LifecycleAdapterSet = LifecycleAdapterSet(),
+    failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
 ) -> AsyncGenerator[Tuple[dict, Optional[State]], None]:
     """Runs a single step streaming action in async. See the synchronous version for more details."""
     action.validate_inputs(inputs)
@@ -435,7 +445,7 @@ async def _arun_single_step_streaming_action(
                 )
                 yield result, None
     except Exception as e:
-        if state_update is None:
+        if failure_policy != StreamingFailurePolicy.COMMIT_PARTIAL or state_update is None:
             raise
         logger.warning(
             "Streaming action '%s' raised %s after yielding %d items. "
@@ -467,6 +477,7 @@ def _run_multi_step_streaming_action(
     app_id: str,
     partition_key: Optional[str],
     lifecycle_adapters: LifecycleAdapterSet = LifecycleAdapterSet(),
+    failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
 ) -> Generator[Tuple[dict, Optional[State[ApplicationStateType]]], None, None]:
     """Runs a multi-step streaming action. E.G. one with a run/reduce step.
     This API is internal-facing. Note that this converts the shape of a
@@ -505,7 +516,7 @@ def _run_multi_step_streaming_action(
                 count += 1
                 yield next_result, None
     except Exception as e:
-        if result is None:
+        if failure_policy != StreamingFailurePolicy.COMMIT_PARTIAL or result is None:
             raise
         logger.warning(
             "Streaming action '%s' raised %s after yielding %d items. "
@@ -531,6 +542,7 @@ async def _arun_multi_step_streaming_action(
     app_id: str,
     partition_key: Optional[str],
     lifecycle_adapters: LifecycleAdapterSet = LifecycleAdapterSet(),
+    failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
 ) -> AsyncGenerator[Tuple[dict, Optional[State[ApplicationStateType]]], None]:
     """Runs a multi-step streaming action in async. See the synchronous version for more details."""
     action.validate_inputs(inputs)
@@ -563,7 +575,7 @@ async def _arun_multi_step_streaming_action(
                 count += 1
                 yield next_result, None
     except Exception as e:
-        if result is None:
+        if failure_policy != StreamingFailurePolicy.COMMIT_PARTIAL or result is None:
             raise
         logger.warning(
             "Streaming action '%s' raised %s after yielding %d items. "
@@ -1396,6 +1408,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: list[str],
         halt_before: Optional[list[str]] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
     ) -> Tuple[Action, StreamingResultContainer[ApplicationStateType, Union[dict, Any]]]:
         """Streams a result out.
 
@@ -1403,6 +1416,8 @@ class Application(Generic[ApplicationStateType]):
         :param halt_before: The list of actions/tags to halt before execution of. It will halt on the first one. Note that
             if this is met, the streaming result container will be empty (and return None) for the result, having an empty generator.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world
+        :param failure_policy: Controls whether an exception after yielding output fails the action or
+            explicitly commits the last partial result. Defaults to fail closed.
         :return: A streaming result container, which is a generator that will yield results as they come in, as well as cache/give you the final result,
             and update state accordingly.
 
@@ -1424,8 +1439,9 @@ class Application(Generic[ApplicationStateType]):
         halt_after condition.
 
         The :py:class:`StreamingResultContainer <burr.core.action.StreamingResultContainer>` is meant as a convenience -- specifically this allows for
-        hooks, callbacks, etc... so you can take the control flow and still have state updated afterwards. Hooks/state update will be called after an exception
-        is thrown during streaming, or the stream is completed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
+        hooks, callbacks, etc... so you can take control flow while retaining the final state update. Hooks are called after an exception is thrown
+        during streaming, or the stream is completed; state is updated only after successful completion or when ``COMMIT_PARTIAL`` is selected.
+        Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
 
 
         To see how this works, let's take the following action (simplified as a single-node workflow) as an example:
@@ -1607,6 +1623,7 @@ class Application(Generic[ApplicationStateType]):
                     app_id=self._uid,
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
+                    failure_policy=failure_policy,
                 )
                 return next_action, StreamingResultContainer(
                     generator, self._state, process_result, callback
@@ -1621,6 +1638,7 @@ class Application(Generic[ApplicationStateType]):
                     app_id=self._uid,
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
+                    failure_policy=failure_policy,
                 )
         except Exception as e:
             # We only want to raise this in the case of an exception
@@ -1647,6 +1665,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: list[str],
         halt_before: Optional[list[str]] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
     ) -> Tuple[Action, AsyncStreamingResultContainer[ApplicationStateType, Union[dict, Any]]]:
         """Streams a result out in an asynchronous manner.
 
@@ -1654,6 +1673,8 @@ class Application(Generic[ApplicationStateType]):
         :param halt_before: The list of actions/tags to halt before execution of. It will halt on the first one. Note that
             if this is met, the streaming result container will be empty (and return None) for the result, having an empty generator.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world
+        :param failure_policy: Controls whether an exception after yielding output fails the action or
+            explicitly commits the last partial result. Defaults to fail closed.
         :return: An asynchronous :py:class:`AsyncStreamingResultContainer <burr.core.action.AsyncStreamingResultContainer>`, which is a generator that will yield results as they come in, as well as cache/give you the final result,
             and update state accordingly.
 
@@ -1675,8 +1696,9 @@ class Application(Generic[ApplicationStateType]):
         halt_after condition.
 
         The :py:class:`AsyncStreamingResultContainer <burr.core.action.AsyncStreamingResultContainer>` is meant as a convenience -- specifically this allows for
-        hooks, callbacks, etc... so you can take the control flow and still have state updated afterwards. Hooks/state update will be called after an exception
-        is thrown during streaming, or the stream is completed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
+        hooks, callbacks, etc... so you can take control flow while retaining the final state update. Hooks are called after an exception is thrown
+        during streaming, or the stream is completed; state is updated only after successful completion or when ``COMMIT_PARTIAL`` is selected.
+        Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
 
 
         To see how this works, let's take the following action (simplified as a single-node workflow) as an example:
@@ -1864,6 +1886,7 @@ class Application(Generic[ApplicationStateType]):
                     app_id=self._uid,
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
+                    failure_policy=failure_policy,
                 )
                 return next_action, AsyncStreamingResultContainer(
                     generator, self._state, process_result, callback
@@ -1886,6 +1909,7 @@ class Application(Generic[ApplicationStateType]):
                     app_id=self._uid,
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
+                    failure_policy=failure_policy,
                 )
         except Exception as e:
             # We only want to raise this in the case of an exception
@@ -1920,6 +1944,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: Optional[Union[str, List[str]]] = None,
         halt_before: Optional[Union[str, List[str]]] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
     ) -> Generator[
         Tuple[Action, StreamingResultContainer[ApplicationStateType, Union[dict, Any]]],
         None,
@@ -1940,6 +1965,7 @@ class Application(Generic[ApplicationStateType]):
         :param halt_after: Action names/tags to halt before
         :param halt_before: _description_, defaults to None
         :param inputs: _description_, defaults to None
+        :param failure_policy: Streaming exception policy passed to each action. Defaults to fail closed.
         :return: _description_
         :yield: _description_
         """
@@ -1951,7 +1977,10 @@ class Application(Generic[ApplicationStateType]):
         while self.has_next_action():
             next_action = self.get_next_action()
             _, streaming_result = self.stream_result(
-                halt_after=[next_action.name], halt_before=None, inputs=inputs
+                halt_after=[next_action.name],
+                halt_before=None,
+                inputs=inputs,
+                failure_policy=failure_policy,
             )
             yield next_action, streaming_result
             # We need to ensure it's fully exhausted before going to the next action
@@ -1965,6 +1994,7 @@ class Application(Generic[ApplicationStateType]):
         halt_after: Optional[Union[str, List[str]]] = None,
         halt_before: Optional[Union[str, List[str]]] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        failure_policy: StreamingFailurePolicy = StreamingFailurePolicy.FAIL_CLOSED,
     ) -> AsyncGenerator[
         Tuple[
             Action,
@@ -1978,6 +2008,7 @@ class Application(Generic[ApplicationStateType]):
         :param halt_after: Action names/tags to halt after the action completes
         :param halt_before: Action names/tags to halt after
         :param inputs: Inputs to the first action run
+        :param failure_policy: Streaming exception policy passed to each action. Defaults to fail closed.
         :return: Async generator yielding tuples of (action, streaming_result_container)
         :yield: Tuples of (action, streaming_result_container)
         """
@@ -1988,7 +2019,10 @@ class Application(Generic[ApplicationStateType]):
         while self.has_next_action():
             next_action = self.get_next_action()
             _, streaming_result = await self.astream_result(  # Use astream_result
-                halt_after=[next_action.name], halt_before=None, inputs=inputs
+                halt_after=[next_action.name],
+                halt_before=None,
+                inputs=inputs,
+                failure_policy=failure_policy,
             )
             yield next_action, streaming_result
             # We need to ensure it's fully exhausted before going to the next action
