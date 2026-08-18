@@ -177,6 +177,37 @@ class Graph:
             )
         return self._action_tag_map.get(tag)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a dependency-free, JSON-serializable representation of the graph.
+
+        Actions and transitions retain their declaration order. Unordered action
+        metadata is sorted so repeated exports are deterministic.
+
+        :return: Graph metadata suitable for external tools and user interfaces.
+        """
+        actions = []
+        for action in self.actions:
+            required_inputs, optional_inputs = action.optional_and_required_inputs
+            actions.append(
+                {
+                    "name": action.name,
+                    "reads": sorted(action.reads),
+                    "writes": sorted(action.writes),
+                    "inputs": sorted(required_inputs),
+                    "optional_inputs": sorted(optional_inputs),
+                    "tags": sorted(action.tags),
+                }
+            )
+        transitions = [
+            {
+                "from": transition.from_.name,
+                "to": transition.to.name,
+                "condition": transition.condition.name,
+            }
+            for transition in self.transitions
+        ]
+        return {"type": "graph", "actions": actions, "transitions": transitions}
+
     def visualize(
         self,
         output_file_path: Optional[Union[str, pathlib.Path]] = None,
