@@ -47,9 +47,9 @@ read from state; they come from the caller:
 ``.bind(...)``. Pass per-turn values with ``inputs={...}`` on ``run`` / ``step`` /
 ``iterate``. See :ref:`inputs <inputref>`.
 
----------------------------
+----------------------------
 ``halt_before`` and ``run``
----------------------------
+----------------------------
 
 ``Application.run`` walks the graph until a halt condition hits, then returns
 ``(action, result, state)``.
@@ -66,7 +66,7 @@ actions in the same ``run`` that also need ``inputs`` are undefined -- halt befo
 instead, and pass their values on the next ``run``.
 
 You can pass action names or tags (``"@tag:needs_human"``). The same halt arguments work
-on ``iterate`` / ``arun`` / ``aiterate``. Details are in :ref:`applications`.
+on ``iterate`` / ``arun`` / ``aiterate``. Details are in :ref:`Applications <applications>`.
 
 --------------------------------
 A graph with one handoff
@@ -239,14 +239,14 @@ application, calls ``run`` once, and returns. The next request supplies the next
 
 ``examples/email-assistant`` does that with ``initialize_from(..., resume_at_next_action=True)``
 and a persister / tracker keyed by ``app_id``. The person can come back seconds or days
-later. See :ref:`state-persistence`.
+later. See :ref:`State Persistence <state-persistence>`.
 
 ``app.get_next_action()`` is useful here: the handler can tell the client which form to
 show without advancing the graph.
 
-----------------
+-----------------
 Command-line only
-----------------
+-----------------
 
 If the application only ever runs in a terminal, you can call ``input(...)`` inside an
 action and skip the outer loop. That does not work for a web server, a persisted app, or
@@ -272,9 +272,9 @@ wrapping action on the next ``run``. The child is not visible to the parent's
 See also
 ------------
 
-- :ref:`applications` -- ``run``, ``iterate``, ``halt_before`` / ``halt_after``
-- :ref:`inputref` -- runtime inputs vs ``.bind(...)``
-- :ref:`state-persistence` -- pause and resume across requests
+- :ref:`Applications <applications>` -- ``run``, ``iterate``, ``halt_before`` / ``halt_after``
+- :ref:`inputs <inputref>` -- runtime inputs vs ``.bind(...)``
+- :ref:`State Persistence <state-persistence>` -- pause and resume across requests
 - `Email assistant <https://github.com/apache/burr/tree/main/examples/email-assistant>`_
 - `Graph-DB RAG CLI loop <https://github.com/apache/burr/blob/main/examples/conversational-rag/graph_db_example/application.py>`_
 - `Burr in a web server <https://github.com/apache/burr/tree/main/examples/web-server>`_
