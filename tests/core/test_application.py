@@ -1931,6 +1931,31 @@ async def test_app_astep_sync_action_persists_executed_state():
     assert persisted_state["status"] == "completed"
 
 
+async def test_app_astep_sync_single_step_action_persists_executed_state():
+    persister = AsyncInMemoryPersister()
+    counter_action = base_single_step_counter.with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(counter_action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister))
+        .abuild()
+    )
+
+    _, result, state = await app.astep()
+
+    persisted_state = await persister.load("pk", "app")
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert state["tracker"] == [1]
+    assert persisted_state["state"]["count"] == 1
+    assert persisted_state["state"]["tracker"] == [1]
+    assert persisted_state["status"] == "completed"
+
+
 def test_app_step_context():
     APP_ID = str(uuid.uuid4())
     PARTITION_KEY = str(uuid.uuid4())
