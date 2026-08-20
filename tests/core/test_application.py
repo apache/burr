@@ -310,7 +310,7 @@ class CallCaptureTracker(
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         self.post_run_execute_calls.append(("post", locals()))
@@ -341,7 +341,7 @@ class ExecuteMethodTrackerAsync(
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         self.post_run_execute_calls.append(("post", locals()))
@@ -2654,6 +2654,10 @@ def test_stream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.post_end_stream_calls) == 2
     assert len(stream_event_tracker.post_stream_item_calls) == 20
     assert len(stream_event_tracker.post_stream_item_calls) == 20
+    assert len(action_tracker.pre_run_execute_calls) == 1
+    assert len(action_tracker.post_run_execute_calls) == 1
+    assert action_tracker.post_run_execute_calls[0][1]["method"] == ExecuteMethod.stream_iterate
+    assert action_tracker.post_run_execute_calls[0][1]["exception"] is None
 
 
 @pytest.mark.asyncio
@@ -2712,6 +2716,10 @@ async def test_astream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.pre_start_stream_calls) == 2
     assert len(stream_event_tracker.post_end_stream_calls) == 2
     assert len(stream_event_tracker.post_stream_item_calls) == 20
+    assert len(action_tracker.pre_run_execute_calls) == 1
+    assert len(action_tracker.post_run_execute_calls) == 1
+    assert action_tracker.post_run_execute_calls[0][1]["method"] == ExecuteMethod.astream_iterate
+    assert action_tracker.post_run_execute_calls[0][1]["exception"] is None
 
 
 async def test_astream_result_halt_after_run_through_streaming():
@@ -3343,6 +3351,414 @@ async def test_application_run_step_runs_hooks():
     assert len(hooks[1].post_called) == 1
     assert len(hooks[0].post_run_execute_calls) == 1
     assert len(hooks[0].pre_run_execute_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "method, execute_method",
+    [("step", ExecuteMethod.step), ("run", ExecuteMethod.run)],
+)
+def test_sync_execute_hook_reports_action_exception(method, execute_method):
+    tracker = CallCaptureTracker()
+    broken_action = base_broken_action.with_name("broken")
+    app = Application(
+        state=State({}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    with pytest.raises(BrokenStepException):
+        if method == "step":
+            app.step()
+        else:
+            app.run(halt_after=["broken"])
+
+    assert len(tracker.pre_run_execute_calls) == 1
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == execute_method
+    assert isinstance(post_kwargs["exception"], BrokenStepException)
+
+
+@pytest.mark.parametrize(
+    "method, execute_method",
+    [("astep", ExecuteMethod.astep), ("arun", ExecuteMethod.arun)],
+)
+async def test_async_execute_hook_reports_action_exception(method, execute_method):
+    sync_tracker = CallCaptureTracker()
+    async_tracker = ExecuteMethodTrackerAsync()
+    broken_action = base_broken_action_async.with_name("broken")
+    app = Application(
+        state=State({}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(sync_tracker, async_tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    with pytest.raises(BrokenStepException):
+        if method == "astep":
+            await app.astep()
+        else:
+            await app.arun(halt_after=["broken"])
+
+    assert len(sync_tracker.pre_run_execute_calls) == 1
+    assert len(sync_tracker.post_run_execute_calls) == 1
+    assert len(async_tracker.pre_run_execute_calls) == 1
+    assert len(async_tracker.post_run_execute_calls) == 1
+    sync_post_kwargs = sync_tracker.post_run_execute_calls[0][1]
+    async_post_kwargs = async_tracker.post_run_execute_calls[0][1]
+    assert sync_post_kwargs["method"] == execute_method
+    assert async_post_kwargs["method"] == execute_method
+    assert isinstance(sync_post_kwargs["exception"], BrokenStepException)
+    assert isinstance(async_post_kwargs["exception"], BrokenStepException)
+
+
+async def test_async_execute_hook_reports_cancellation():
+    tracker = ExecuteMethodTrackerAsync()
+
+    @action(reads=[], writes=[])
+    async def cancelled_action(state: State) -> State:
+        raise asyncio.CancelledError()
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(cancelled=cancelled_action)
+        .with_transitions()
+        .with_entrypoint("cancelled")
+        .with_state()
+        .with_hooks(tracker)
+        .build()
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await app.astep()
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.astep
+    assert isinstance(post_kwargs["exception"], asyncio.CancelledError)
+
+
+def test_execute_hook_pre_failure_does_not_leak_sentinel():
+    class RaisesOnce(PreApplicationExecuteCallHook, PostApplicationExecuteCallHook):
+        def __init__(self):
+            self.pre_calls = 0
+            self.post_calls = 0
+
+        def pre_run_execute_call(self, **future_kwargs):
+            self.pre_calls += 1
+            if self.pre_calls == 1:
+                raise RuntimeError("pre hook failure")
+
+        def post_run_execute_call(self, **future_kwargs):
+            self.post_calls += 1
+
+    tracker = RaisesOnce()
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    with pytest.raises(RuntimeError, match="pre hook failure"):
+        app.step()
+    app.step()
+
+    assert tracker.pre_calls == 2
+    assert tracker.post_calls == 1
+
+
+def test_stream_result_setup_failure_reports_exception_and_clears_sentinel():
+    tracker = CallCaptureTracker()
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    with pytest.raises(ValueError, match="not registered actions"):
+        app.stream_result(halt_after=["missing"])
+    app.step()
+
+    assert len(tracker.pre_run_execute_calls) == 2
+    assert len(tracker.post_run_execute_calls) == 2
+    stream_post_kwargs = tracker.post_run_execute_calls[0][1]
+    step_post_kwargs = tracker.post_run_execute_calls[1][1]
+    assert stream_post_kwargs["method"] == ExecuteMethod.stream_result
+    assert isinstance(stream_post_kwargs["exception"], ValueError)
+    assert step_post_kwargs["method"] == ExecuteMethod.step
+    assert step_post_kwargs["exception"] is None
+
+
+async def test_astream_result_setup_failure_reports_exception_and_clears_sentinel():
+    tracker = ExecuteMethodTrackerAsync()
+    counter_action = base_counter_action_async.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    with pytest.raises(ValueError, match="not registered actions"):
+        await app.astream_result(halt_after=["missing"])
+    await app.astep()
+
+    assert len(tracker.pre_run_execute_calls) == 2
+    assert len(tracker.post_run_execute_calls) == 2
+    stream_post_kwargs = tracker.post_run_execute_calls[0][1]
+    step_post_kwargs = tracker.post_run_execute_calls[1][1]
+    assert stream_post_kwargs["method"] == ExecuteMethod.astream_result
+    assert isinstance(stream_post_kwargs["exception"], ValueError)
+    assert step_post_kwargs["method"] == ExecuteMethod.astep
+    assert step_post_kwargs["exception"] is None
+
+
+def test_stream_result_reports_stream_exception_to_execute_hook():
+    tracker = CallCaptureTracker()
+    broken_action = MultiStepStreamingCounterWithExceptionNoResult().with_name("broken")
+    app = Application(
+        state=State({"count": 0, "tracker": []}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    _, stream = app.stream_result(halt_after=["broken"])
+    with pytest.raises(RuntimeError, match="simulated failure with no result"):
+        list(stream)
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.stream_result
+    assert isinstance(post_kwargs["exception"], RuntimeError)
+
+
+async def test_astream_result_reports_stream_exception_to_execute_hook():
+    tracker = ExecuteMethodTrackerAsync()
+    broken_action = MultiStepStreamingCounterWithExceptionNoResultAsync().with_name("broken")
+    app = Application(
+        state=State({"count": 0, "tracker": []}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    _, stream = await app.astream_result(halt_after=["broken"])
+    with pytest.raises(RuntimeError, match="simulated failure with no result"):
+        async for _ in stream:
+            pass
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.astream_result
+    assert isinstance(post_kwargs["exception"], RuntimeError)
+
+
+async def test_astream_result_reports_cancellation_to_execute_hook():
+    class CancelledStreamingAction(AsyncStreamingAction):
+        async def stream_run(self, state: State, **run_kwargs) -> AsyncGenerator[dict, None]:
+            raise asyncio.CancelledError()
+            yield  # Make this an async generator.
+
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+        @property
+        def writes(self) -> list[str]:
+            return []
+
+        def update(self, result: dict, state: State) -> State:
+            return state
+
+    tracker = ExecuteMethodTrackerAsync()
+    app = Application(
+        state=State({}),
+        entrypoint="cancelled",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[CancelledStreamingAction().with_name("cancelled")], transitions=[]),
+    )
+
+    _, stream = await app.astream_result(halt_after=["cancelled"])
+    with pytest.raises(asyncio.CancelledError):
+        async for _ in stream:
+            pass
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.astream_result
+    assert isinstance(post_kwargs["exception"], asyncio.CancelledError)
+
+
+def test_iterate_execute_hook_reports_action_exception_after_iteration_starts():
+    tracker = CallCaptureTracker()
+    broken_action = base_broken_action.with_name("broken")
+    app = Application(
+        state=State({}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    iterator = app.iterate(halt_after=["broken"])
+    assert not tracker.pre_run_execute_calls
+    assert not tracker.post_run_execute_calls
+    with pytest.raises(BrokenStepException):
+        next(iterator)
+
+    assert len(tracker.pre_run_execute_calls) == 1
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.iterate
+    assert isinstance(post_kwargs["exception"], BrokenStepException)
+
+
+def test_iterate_execute_hook_finishes_after_iteration_ends():
+    tracker = CallCaptureTracker()
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    iterator = app.iterate(halt_after=["counter"])
+    assert not tracker.pre_run_execute_calls
+    assert not tracker.post_run_execute_calls
+    next(iterator)
+    assert len(tracker.pre_run_execute_calls) == 1
+    assert not tracker.post_run_execute_calls
+    with pytest.raises(StopIteration):
+        next(iterator)
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.iterate
+    assert post_kwargs["exception"] is None
+
+
+async def test_aiterate_execute_hook_reports_action_exception_after_iteration_starts():
+    tracker = ExecuteMethodTrackerAsync()
+    broken_action = base_broken_action_async.with_name("broken")
+    app = Application(
+        state=State({}),
+        entrypoint="broken",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[broken_action], transitions=[]),
+    )
+
+    iterator = app.aiterate(halt_after=["broken"])
+    assert not tracker.pre_run_execute_calls
+    assert not tracker.post_run_execute_calls
+    with pytest.raises(BrokenStepException):
+        await anext(iterator)
+
+    assert len(tracker.pre_run_execute_calls) == 1
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.aiterate
+    assert isinstance(post_kwargs["exception"], BrokenStepException)
+
+
+async def test_aiterate_execute_hook_finishes_after_iteration_ends():
+    tracker = ExecuteMethodTrackerAsync()
+    counter_action = base_counter_action_async.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    iterator = app.aiterate(halt_after=["counter"])
+    assert not tracker.pre_run_execute_calls
+    assert not tracker.post_run_execute_calls
+    await anext(iterator)
+    assert len(tracker.pre_run_execute_calls) == 1
+    assert not tracker.post_run_execute_calls
+    with pytest.raises(StopAsyncIteration):
+        await anext(iterator)
+
+    assert len(tracker.post_run_execute_calls) == 1
+    post_kwargs = tracker.post_run_execute_calls[0][1]
+    assert post_kwargs["method"] == ExecuteMethod.aiterate
+    assert post_kwargs["exception"] is None
+
+
+async def test_async_execute_hook_pre_failure_does_not_leak_sentinel():
+    class RaisesOnce(PreApplicationExecuteCallHookAsync, PostApplicationExecuteCallHookAsync):
+        def __init__(self):
+            self.pre_calls = 0
+            self.post_calls = 0
+
+        async def pre_run_execute_call(self, **future_kwargs):
+            self.pre_calls += 1
+            if self.pre_calls == 1:
+                raise RuntimeError("pre hook failure")
+
+        async def post_run_execute_call(self, **future_kwargs):
+            self.post_calls += 1
+
+    tracker = RaisesOnce()
+    counter_action = base_counter_action_async.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        adapter_set=internal.LifecycleAdapterSet(tracker),
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    with pytest.raises(RuntimeError, match="pre hook failure"):
+        await app.astep()
+    await app.astep()
+
+    assert tracker.pre_calls == 2
+    assert tracker.post_calls == 1
 
 
 def test_application_post_application_create_hook():

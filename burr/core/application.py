@@ -691,16 +691,20 @@ class _call_execute_method_pre_post:
     def call_pre(self, app) -> bool:
         if should_run_hooks := (app.uid not in _run_call_var.get({})):
             _run_call_var.set({**_run_call_var.get({}), **{app.uid: self.method}})
-            app._adapter_set.call_all_lifecycle_hooks_sync(
-                "pre_run_execute_call",
-                app_id=app._uid,
-                partition_key=app._partition_key,
-                state=app.state,
-                method=self.method,
-            )
+            try:
+                app._adapter_set.call_all_lifecycle_hooks_sync(
+                    "pre_run_execute_call",
+                    app_id=app._uid,
+                    partition_key=app._partition_key,
+                    state=app.state,
+                    method=self.method,
+                )
+            except BaseException:
+                _run_call_var.set({k: v for k, v in _run_call_var.get().items() if k != app.uid})
+                raise
         return should_run_hooks
 
-    def call_post(self, app, exc) -> bool:
+    def call_post(self, app, exc: Optional[BaseException]) -> bool:
         if should_run_hooks := (
             app.uid in _run_call_var.get(dict) and _run_call_var.get()[app.uid] == self.method
         ):
@@ -718,16 +722,20 @@ class _call_execute_method_pre_post:
     async def acall_pre(self, app) -> bool:
         if should_run_hooks := (app.uid not in _run_call_var.get({})):
             _run_call_var.set({**_run_call_var.get({}), **{app.uid: self.method}})
-            await app._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                "pre_run_execute_call",
-                app_id=app._uid,
-                partition_key=app._partition_key,
-                state=app.state,
-                method=self.method,
-            )
+            try:
+                await app._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                    "pre_run_execute_call",
+                    app_id=app._uid,
+                    partition_key=app._partition_key,
+                    state=app.state,
+                    method=self.method,
+                )
+            except BaseException:
+                _run_call_var.set({k: v for k, v in _run_call_var.get().items() if k != app.uid})
+                raise
         return should_run_hooks
 
-    async def acall_post(self, app, exc) -> bool:
+    async def acall_post(self, app, exc: Optional[BaseException]) -> bool:
         if should_run_hooks := (
             app.uid in _run_call_var.get(dict) and _run_call_var.get()[app.uid] == self.method
         ):
@@ -746,23 +754,74 @@ class _call_execute_method_pre_post:
         @functools.wraps(fn)
         async def wrapper_async(app_self, *args, **kwargs):
             # We only run at the top level, so we decorate it if we're there
-            await self.acall_pre(app_self)
-            exc = None
+            should_run_hooks = False
+            exc: Optional[BaseException] = None
             try:
+                should_run_hooks = await self.acall_pre(app_self)
                 return await fn(app_self, *args, **kwargs)
+            except BaseException as e:
+                exc = e
+                raise
             finally:
-                await self.acall_post(app_self, exc)
+                if should_run_hooks:
+                    await self.acall_post(app_self, exc)
 
         @functools.wraps(fn)
         def wrapper_sync(app_self, *args, **kwargs):
-            self.call_pre(app_self)
-            exc = None
+            should_run_hooks = False
+            exc: Optional[BaseException] = None
             try:
+                should_run_hooks = self.call_pre(app_self)
                 return fn(app_self, *args, **kwargs)
+            except BaseException as e:
+                exc = e
+                raise
             finally:
-                self.call_post(app_self, exc)
+                if should_run_hooks:
+                    self.call_post(app_self, exc)
 
-        return wrapper_async if inspect.iscoroutinefunction(fn) else wrapper_sync
+        @functools.wraps(fn)
+        def wrapper_generator(app_self, *args, **kwargs):
+            def generator():
+                should_run_hooks = False
+                exc: Optional[BaseException] = None
+                try:
+                    should_run_hooks = self.call_pre(app_self)
+                    return (yield from fn(app_self, *args, **kwargs))
+                except BaseException as e:
+                    exc = e
+                    raise
+                finally:
+                    if should_run_hooks:
+                        self.call_post(app_self, exc)
+
+            return generator()
+
+        @functools.wraps(fn)
+        def wrapper_async_generator(app_self, *args, **kwargs):
+            async def generator():
+                should_run_hooks = False
+                exc: Optional[BaseException] = None
+                try:
+                    should_run_hooks = await self.acall_pre(app_self)
+                    async for item in fn(app_self, *args, **kwargs):
+                        yield item
+                except BaseException as e:
+                    exc = e
+                    raise
+                finally:
+                    if should_run_hooks:
+                        await self.acall_post(app_self, exc)
+
+            return generator()
+
+        if inspect.iscoroutinefunction(fn):
+            return wrapper_async
+        if inspect.isasyncgenfunction(fn):
+            return wrapper_async_generator
+        if inspect.isgeneratorfunction(fn):
+            return wrapper_generator
+        return wrapper_sync
 
 
 class TracerFactoryContextHook(PreRunStepHook, PostRunStepHook):
@@ -1497,43 +1556,47 @@ class Application(Generic[ApplicationStateType]):
                 result, state = output.get()
                 print(format(result['response'], color))
         """
-        self.validate_correct_async_use()
         call_execute_method_wrapper = _call_execute_method_pre_post(ExecuteMethod.stream_result)
         call_execute_method_wrapper.call_pre(self)
-        halt_before, halt_after, inputs = self._process_control_flow_params(
-            halt_before, halt_after, inputs
-        )
-        self._validate_halt_conditions(halt_before, halt_after)
-        next_action = self.get_next_action()
-        if next_action is None:
-            raise ValueError(
-                f"Cannot stream result -- no next action found! Prior action was: {self._state[PRIOR_STEP]}"
+        try:
+            self.validate_correct_async_use()
+            halt_before, halt_after, inputs = self._process_control_flow_params(
+                halt_before, halt_after, inputs
             )
-        if next_action.name not in halt_after:
-            # fast forward until we get to the action
-            # run already handles incrementing sequence IDs, nothing to worry about here
-            next_action, results, state = self.run(
-                halt_before=halt_after + halt_before, inputs=inputs
-            )
-            # In this case, we are ready to halt and return an empty generator
-            # The results will be None, and the state will be the final state
-            # For context, this is specifically for the case in which you want to have
-            # multiple terminal points with a unified API, where some are streaming, and some are not.
-            if next_action.name in halt_before and next_action.name not in halt_after:
-                call_execute_method_wrapper.call_post(self, None)
-                return next_action, StreamingResultContainer.pass_through(
-                    results=results, final_state=state
+            self._validate_halt_conditions(halt_before, halt_after)
+            next_action = self.get_next_action()
+            if next_action is None:
+                raise ValueError(
+                    f"Cannot stream result -- no next action found! Prior action was: {self._state[PRIOR_STEP]}"
                 )
-        self._increment_sequence_id()
-        self._adapter_set.call_all_lifecycle_hooks_sync(
-            "pre_run_step",
-            action=next_action,
-            state=self._state,
-            inputs=inputs,
-            sequence_id=self.sequence_id,
-            app_id=self._uid,
-            partition_key=self._partition_key,
-        )
+            if next_action.name not in halt_after:
+                # fast forward until we get to the action
+                # run already handles incrementing sequence IDs, nothing to worry about here
+                next_action, results, state = self.run(
+                    halt_before=halt_after + halt_before, inputs=inputs
+                )
+                # In this case, we are ready to halt and return an empty generator
+                # The results will be None, and the state will be the final state
+                # For context, this is specifically for the case in which you want to have
+                # multiple terminal points with a unified API, where some are streaming, and some are not.
+                if next_action.name in halt_before and next_action.name not in halt_after:
+                    call_execute_method_wrapper.call_post(self, None)
+                    return next_action, StreamingResultContainer.pass_through(
+                        results=results, final_state=state
+                    )
+            self._increment_sequence_id()
+            self._adapter_set.call_all_lifecycle_hooks_sync(
+                "pre_run_step",
+                action=next_action,
+                state=self._state,
+                inputs=inputs,
+                sequence_id=self.sequence_id,
+                app_id=self._uid,
+                partition_key=self._partition_key,
+            )
+        except BaseException as e:
+            call_execute_method_wrapper.call_post(self, e)
+            raise
 
         # we need to track if there's any exceptions that occur during this
         try:
@@ -1548,7 +1611,7 @@ class Application(Generic[ApplicationStateType]):
             def callback(
                 result: Optional[dict],
                 state: State[ApplicationStateType],
-                exc: Optional[Exception] = None,
+                exc: Optional[BaseException] = None,
             ):
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "post_run_step",
@@ -1622,7 +1685,7 @@ class Application(Generic[ApplicationStateType]):
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
                 )
-        except Exception as e:
+        except BaseException as e:
             # We only want to raise this in the case of an exception
             # otherwise, this will get delegated to the finally
             # block of the streaming result container
@@ -1751,42 +1814,46 @@ class Application(Generic[ApplicationStateType]):
                 result, state = await output.get()
                 print(format(result['response'], color))
         """
-        call_execute_method_wrapper = _call_execute_method_pre_post(ExecuteMethod.stream_result)
+        call_execute_method_wrapper = _call_execute_method_pre_post(ExecuteMethod.astream_result)
         await call_execute_method_wrapper.acall_pre(self)
-        halt_before, halt_after, inputs = self._process_control_flow_params(
-            halt_before, halt_after, inputs
-        )
-        self._validate_halt_conditions(halt_before, halt_after)
-        next_action = self.get_next_action()
-        if next_action is None:
-            raise ValueError(
-                f"Cannot stream result -- no next action found! Prior action was: {self._state[PRIOR_STEP]}"
+        try:
+            halt_before, halt_after, inputs = self._process_control_flow_params(
+                halt_before, halt_after, inputs
             )
-        if next_action.name not in halt_after:
-            # fast forward until we get to the action
-            # run already handles incrementing sequence IDs, nothing to worry about here
-            next_action, results, state = await self.arun(
-                halt_before=halt_after + halt_before, inputs=inputs
-            )
-            # In this case, we are ready to halt and return an empty generator
-            # The results will be None, and the state will be the final state
-            # For context, this is specifically for the case in which you want to have
-            # multiple terminal points with a unified API, where some are streaming, and some are not.
-            if next_action.name in halt_before and next_action.name not in halt_after:
-                await call_execute_method_wrapper.acall_post(self, None)
-                return next_action, AsyncStreamingResultContainer.pass_through(
-                    results=results, final_state=state
+            self._validate_halt_conditions(halt_before, halt_after)
+            next_action = self.get_next_action()
+            if next_action is None:
+                raise ValueError(
+                    f"Cannot stream result -- no next action found! Prior action was: {self._state[PRIOR_STEP]}"
                 )
-        self._increment_sequence_id()
-        await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-            "pre_run_step",
-            action=next_action,
-            state=self._state,
-            inputs=inputs,
-            sequence_id=self.sequence_id,
-            app_id=self._uid,
-            partition_key=self._partition_key,
-        )
+            if next_action.name not in halt_after:
+                # fast forward until we get to the action
+                # run already handles incrementing sequence IDs, nothing to worry about here
+                next_action, results, state = await self.arun(
+                    halt_before=halt_after + halt_before, inputs=inputs
+                )
+                # In this case, we are ready to halt and return an empty generator
+                # The results will be None, and the state will be the final state
+                # For context, this is specifically for the case in which you want to have
+                # multiple terminal points with a unified API, where some are streaming, and some are not.
+                if next_action.name in halt_before and next_action.name not in halt_after:
+                    await call_execute_method_wrapper.acall_post(self, None)
+                    return next_action, AsyncStreamingResultContainer.pass_through(
+                        results=results, final_state=state
+                    )
+            self._increment_sequence_id()
+            await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                "pre_run_step",
+                action=next_action,
+                state=self._state,
+                inputs=inputs,
+                sequence_id=self.sequence_id,
+                app_id=self._uid,
+                partition_key=self._partition_key,
+            )
+        except BaseException as e:
+            await call_execute_method_wrapper.acall_post(self, e)
+            raise
         try:
 
             def process_result(
@@ -1799,7 +1866,7 @@ class Application(Generic[ApplicationStateType]):
             async def callback(
                 result: Optional[dict],
                 state: State[ApplicationStateType],
-                exc: Optional[Exception] = None,
+                exc: Optional[BaseException] = None,
             ):
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",
@@ -1887,7 +1954,7 @@ class Application(Generic[ApplicationStateType]):
                     partition_key=self._partition_key,
                     lifecycle_adapters=self._adapter_set,
                 )
-        except Exception as e:
+        except BaseException as e:
             # We only want to raise this in the case of an exception
             # otherwise, this will get delegated to the finally
             # block of the streaming result container

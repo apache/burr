@@ -312,7 +312,7 @@ class LangfuseBridge(OpenTelemetryBridge):
         self,
         *,
         state: "State",
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs: Any,
     ):
         try:

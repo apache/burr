@@ -108,7 +108,7 @@ def convert_to_otel_attribute(attr: Any):
         return str(attr)
 
 
-def _exit_span(exc: Optional[Exception] = None):
+def _exit_span(exc: Optional[BaseException] = None):
     """Ditto with _enter_span, but for exiting the span. Pops the token off the stack and detaches the context."""
     stack = token_stack.get()[:]
     token, span = stack.pop()
@@ -254,7 +254,7 @@ class OpenTelemetryBridge(
     def post_run_execute_call(
         self,
         *,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         _exit_span(exception)
