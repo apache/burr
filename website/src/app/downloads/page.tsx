@@ -86,11 +86,12 @@ const ARTIFACT_TEMPLATES: ArtifactTemplate[] = [
 
 // To add a release, prepend an entry. The first entry is rendered as "Latest".
 const RELEASES: Release[] = [
+  { version: "0.43.0", date: "August 25, 2026" },
   { version: "0.42.0", date: "May 9, 2026" },
   {
     version: "0.41.0",
     date: "January 2026",
-    note: "The PyPI wheel for 0.41.0 had packaging issues. Build from the source release if you need this version, or just use 0.42.0.",
+    note: "The PyPI wheel for 0.41.0 had packaging issues. Build from the source release if you need this version, or just use the latest.",
   },
 ];
 
