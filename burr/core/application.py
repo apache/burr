@@ -89,6 +89,19 @@ StateType = TypeVar("StateType")
 StateTypeToSet = TypeVar("StateTypeToSet")
 
 
+class ApplicationExecutionLimitError(RuntimeError):
+    """Raised when an application execution call exhausts its step budget."""
+
+    def __init__(self, max_steps: int, last_action: Action, state: State):
+        self.max_steps = max_steps
+        self.last_action = last_action
+        self.state = state
+        super().__init__(
+            f"Application execution reached max_steps={max_steps} after action "
+            f"'{last_action.name}' while another action was still available."
+        )
+
+
 def _validate_result(result: Any, name: str, schema: ActionSchema = DEFAULT_SCHEMA) -> None:
     # TODO -- split out the action schema into input/output schema types
     # Currently they're tied together, but this doesn't make as much sense for single-step actions
@@ -1262,6 +1275,7 @@ class Application(Generic[ApplicationStateType]):
         halt_before: list[str] = None,
         halt_after: list[str] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        max_steps: Optional[int] = None,
     ) -> Generator[
         Tuple[Action, dict, State[ApplicationStateType]],
         None,
@@ -1280,6 +1294,7 @@ class Application(Generic[ApplicationStateType]):
         :param halt_after: The list of actions/tags to halt after execution of. It will halt after the execution of the first one it sees.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world.
             Note that this is only used for the first iteration -- subsequent iterations will not use this.
+        :param max_steps: Maximum actions to execute during this call. ``None`` preserves unbounded execution.
         :return: Each iteration returns the result of running `step`. This generator also returns a tuple of
             [action, result, current state]
         """
@@ -1290,15 +1305,23 @@ class Application(Generic[ApplicationStateType]):
             inputs,
         )
         self._validate_halt_conditions(halt_before, halt_after)
+        if max_steps is not None and (
+            not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps <= 0
+        ):
+            raise ValueError("max_steps must be a positive integer or None")
 
         result = None
         prior_action: Optional[Action] = None
+        steps_executed = 0
         while self.has_next_action():
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
             prior_action, result, state = self.step(inputs=inputs)
+            steps_executed += 1
             yield prior_action, result, state
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
+            if max_steps is not None and steps_executed >= max_steps and self.has_next_action():
+                raise ApplicationExecutionLimitError(max_steps, prior_action, state)
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
 
     @_call_execute_method_pre_post(ExecuteMethod.aiterate)
@@ -1308,6 +1331,7 @@ class Application(Generic[ApplicationStateType]):
         halt_before: list[str] = None,
         halt_after: list[str] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        max_steps: Optional[int] = None,
     ) -> AsyncGenerator[Tuple[Action, dict, State[ApplicationStateType]], None]:
         """Returns a generator that calls step() in a row, enabling you to see the state
         of the system as it updates. This is the asynchronous version so it has no capability of t
@@ -1318,6 +1342,7 @@ class Application(Generic[ApplicationStateType]):
         :param halt_after: The list of actions/tags to halt after execution of. It will halt on the first one.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world.
             Note that this is only used for the first iteration -- subsequent iterations will not use this.
+        :param max_steps: Maximum actions to execute during this call. ``None`` preserves unbounded execution.
         :return: Each iteration returns the result of running `step`. This returns nothing -- it's an async generator which is not
             allowed to have a return value.
         """
@@ -1325,12 +1350,20 @@ class Application(Generic[ApplicationStateType]):
             halt_before, halt_after, inputs
         )
         self._validate_halt_conditions(halt_before, halt_after)
+        if max_steps is not None and (
+            not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps <= 0
+        ):
+            raise ValueError("max_steps must be a positive integer or None")
+        steps_executed = 0
         while self.has_next_action():
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
             prior_action, result, state = await self.astep(inputs=inputs)
+            steps_executed += 1
             yield prior_action, result, state
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
+            if max_steps is not None and steps_executed >= max_steps and self.has_next_action():
+                raise ApplicationExecutionLimitError(max_steps, prior_action, state)
 
     @_call_execute_method_pre_post(ExecuteMethod.run)
     def run(
@@ -1339,6 +1372,7 @@ class Application(Generic[ApplicationStateType]):
         halt_before: list[str] = None,
         halt_after: list[str] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        max_steps: Optional[int] = None,
     ) -> Tuple[Action, Optional[dict], State[ApplicationStateType]]:
         """Runs your application through until completion. Does
         not give access to the state along the way -- if you want that, use iterate().
@@ -1349,10 +1383,16 @@ class Application(Generic[ApplicationStateType]):
         :param halt_after: The list of actions/tags to halt after execution of. It will halt on the first one.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world.
             Note that this is only used for the first iteration -- subsequent iterations will not use this.
+        :param max_steps: Maximum actions to execute during this call. ``None`` preserves unbounded execution.
         :return: The final state, and the results of running the actions in the order that they were specified.
         """
         self.validate_correct_async_use()
-        gen = self.iterate(halt_before=halt_before, halt_after=halt_after, inputs=inputs)
+        gen = self.iterate(
+            halt_before=halt_before,
+            halt_after=halt_after,
+            inputs=inputs,
+            max_steps=max_steps,
+        )
         while True:
             try:
                 next(gen)
@@ -1367,6 +1407,7 @@ class Application(Generic[ApplicationStateType]):
         halt_before: list[str] = None,
         halt_after: list[str] = None,
         inputs: Optional[Dict[str, Any]] = None,
+        max_steps: Optional[int] = None,
     ) -> Tuple[Action, Optional[dict], State[ApplicationStateType]]:
         """Runs your application through until completion, using async. Does
         not give access to the state along the way -- if you want that, use iterate().
@@ -1376,6 +1417,7 @@ class Application(Generic[ApplicationStateType]):
         :param halt_before: The list of actions/tags to halt before execution of. It will halt on the first one.
         :param halt_after: The list of actions/tags to halt after execution of. It will halt on the first one.
         :param inputs: Inputs to the action -- this is if this action requires an input that is passed in from the outside world
+        :param max_steps: Maximum actions to execute during this call. ``None`` preserves unbounded execution.
         :return: The final state, and the results of running the actions in the order that they were specified.
         """
 
@@ -1386,7 +1428,10 @@ class Application(Generic[ApplicationStateType]):
         )
         self._validate_halt_conditions(halt_before, halt_after)
         async for prior_action, result, state in self.aiterate(
-            halt_before=halt_before, halt_after=halt_after, inputs=inputs
+            halt_before=halt_before,
+            halt_after=halt_after,
+            inputs=inputs,
+            max_steps=max_steps,
         ):
             pass
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)

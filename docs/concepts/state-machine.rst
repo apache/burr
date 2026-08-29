@@ -116,6 +116,28 @@ In the async context, this does not return anything (asynchronous generators are
 
 If you want it to (attempt to) run forever, you can pass empty lists to ``halt_after`` and ``halt_before``.
 
+Limiting execution steps
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Agent and tool-use graphs often contain intentional loops. Pass ``max_steps`` to
+``run``/``arun`` or ``iterate``/``aiterate`` to bound the number of actions a
+single call may execute:
+
+.. code-block:: python
+
+    from burr.core import ApplicationExecutionLimitError
+
+    try:
+        action, result, state = application.run(max_steps=20)
+    except ApplicationExecutionLimitError as exc:
+        # The application remains at the state produced by the last allowed step.
+        save_for_review(exc.state)
+
+The exception also exposes ``max_steps`` and ``last_action``. A halt condition
+or the natural end of the graph takes precedence when it is reached on the last
+allowed step. The budget applies only to the current execution call, so the
+application can be inspected and resumed with a new call.
+
 .. note::
     You can add inputs to ``iterate``/``aiterate`` by passing in a dictionary of inputs through the ``inputs`` parameter.
     This will only apply to the first action. Actions that are not the first but require inputs are considered undefined behavior.

@@ -30,6 +30,7 @@ from burr.core.application import (
     Application,
     ApplicationBuilder,
     ApplicationContext,
+    ApplicationExecutionLimitError,
     ApplicationGraph,
 )
 from burr.core.graph import Graph, GraphBuilder
@@ -42,6 +43,7 @@ __all__ = [
     "ApplicationBuilder",
     "ApplicationGraph",
     "ApplicationContext",
+    "ApplicationExecutionLimitError",
     "Condition",
     "default",
     "expr",

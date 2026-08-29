@@ -25,7 +25,7 @@ from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional,
 
 import pytest
 
-from burr.core import State
+from burr.core import ApplicationExecutionLimitError, State
 from burr.core.action import (
     DEFAULT_SCHEMA,
     Action,
@@ -2169,6 +2169,184 @@ async def test_aiterate():
         else:
             assert state["count"] == result["count"] == 10
     assert app.sequence_id == 11
+
+
+def test_run_stops_before_exceeding_max_steps():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+
+    with pytest.raises(ApplicationExecutionLimitError) as exc_info:
+        app.run(max_steps=3)
+
+    assert exc_info.value.max_steps == 3
+    assert exc_info.value.last_action.name == "counter"
+    assert exc_info.value.state["count"] == 3
+    assert app.state["count"] == 3
+
+
+def test_iterate_raises_only_when_requesting_a_step_beyond_the_budget():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+    iterator = app.iterate(max_steps=1)
+
+    action_, result, state = next(iterator)
+
+    assert action_.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    with pytest.raises(ApplicationExecutionLimitError):
+        next(iterator)
+
+
+def test_run_allows_natural_completion_at_max_steps():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    action_, result, state = app.run(max_steps=1)
+
+    assert action_.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+
+
+def test_run_can_resume_after_reaching_max_steps():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+    with pytest.raises(ApplicationExecutionLimitError):
+        app.run(max_steps=1)
+
+    action_, result, state = app.run(halt_after=["counter"], max_steps=1)
+
+    assert action_.name == "counter"
+    assert result == {"count": 2}
+    assert state["count"] == 2
+
+
+def test_run_halt_condition_takes_precedence_over_max_steps():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+
+    action_, result, state = app.run(halt_after=["counter"], max_steps=1)
+
+    assert action_.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+
+
+@pytest.mark.parametrize("max_steps", [0, -1, 1.5, "3", True])
+def test_run_rejects_invalid_max_steps(max_steps):
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(actions=[counter_action], transitions=[]),
+    )
+
+    with pytest.raises(ValueError, match="max_steps must be a positive integer"):
+        app.run(max_steps=max_steps)
+
+    assert app.sequence_id == 0
+
+
+async def test_arun_stops_before_exceeding_max_steps():
+    counter_action = base_counter_action_async.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+
+    with pytest.raises(ApplicationExecutionLimitError) as exc_info:
+        await app.arun(max_steps=2)
+
+    assert exc_info.value.max_steps == 2
+    assert exc_info.value.last_action.name == "counter"
+    assert exc_info.value.state["count"] == 2
+
+
+async def test_aiterate_raises_after_yield_and_async_halt_can_resume():
+    counter_action = base_counter_action_async.with_name("counter")
+    app = Application(
+        state=State({}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+    iterator = app.aiterate(max_steps=1)
+
+    action_, result, state = await iterator.__anext__()
+
+    assert action_.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    with pytest.raises(ApplicationExecutionLimitError):
+        await iterator.__anext__()
+
+    action_, result, state = await app.arun(halt_after=["counter"], max_steps=1)
+    assert action_.name == "counter"
+    assert result == {"count": 2}
+    assert state["count"] == 2
 
 
 async def test_aiterate_halt_before():
