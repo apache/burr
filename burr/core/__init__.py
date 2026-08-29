@@ -31,6 +31,7 @@ from burr.core.application import (
     ApplicationBuilder,
     ApplicationContext,
     ApplicationGraph,
+    StreamingFailurePolicy,
 )
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.state import State
@@ -42,6 +43,7 @@ __all__ = [
     "ApplicationBuilder",
     "ApplicationGraph",
     "ApplicationContext",
+    "StreamingFailurePolicy",
     "Condition",
     "default",
     "expr",
