@@ -683,21 +683,18 @@ def _create_git_archive(
 # ============================================================================
 
 
-def _remove_ui_build_artifacts() -> None:
-    """Remove pre-built UI artifacts to ensure clean build."""
-    ui_build_dir = os.path.join("burr", "tracking", "server", "build")
-    if os.path.exists(ui_build_dir):
-        print(f"  Removing UI build artifacts: {ui_build_dir}")
-        shutil.rmtree(ui_build_dir)
-        print("    ✓ UI build artifacts removed")
-
-
 def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
-    """Build source distribution from git using flit."""
+    """Build the sdist from a staged copy of the committed source tree.
+
+    The complete source release and the Python sdist contain different files,
+    so each needs a LICENSE describing its own contents.  Keep the repository's
+    LICENSE intact for the source release and install LICENSE-sdist as LICENSE
+    only in the isolated tree used to build the sdist.
+    """
     _print_step(1, 2, "Building sdist with flit")
 
+    output_dir = os.path.abspath(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-    _remove_ui_build_artifacts()
     _check_git_working_tree()
 
     env = os.environ.copy()
@@ -705,30 +702,56 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
     source_epoch = _source_date_epoch(version, output_dir)
     if source_epoch is not None:
         env["SOURCE_DATE_EPOCH"] = str(source_epoch)
-    _run_command(
-        ["flit", "build", "--format", "sdist"],
-        description="Running flit build --format sdist...",
-        error_message="Failed to build sdist",
-        success_message="flit sdist created successfully",
-        env=env,
-    )
 
-    # Find and rename sdist
-    expected_pattern = f"dist/apache_burr-{version.lower()}.tar.gz"
-    sdist_files = glob.glob(expected_pattern)
+    with tempfile.TemporaryDirectory(prefix="apache-burr-sdist-") as temp_dir:
+        temp_path = Path(temp_dir)
+        source_tree = temp_path / "source"
+        source_tree.mkdir()
+        source_archive = temp_path / "source.tar"
 
-    if not sdist_files:
-        _fail(f"Could not find sdist: {expected_pattern}")
+        _run_command(
+            ["git", "archive", "HEAD", "--format=tar", "--output", str(source_archive)],
+            description="Staging committed source files...",
+            error_message="Failed to stage source files for the sdist",
+        )
+        unpack_options: dict[str, Any] = {}
+        if sys.version_info >= (3, 12):
+            # This archive was just produced from our own Git repository. Be
+            # explicit on newer Python versions while retaining Python 3.9-3.11
+            # compatibility, where shutil has no filter argument.
+            unpack_options["filter"] = "fully_trusted"
+        shutil.unpack_archive(str(source_archive), str(source_tree), format="tar", **unpack_options)
 
-    original_sdist = sdist_files[0]
-    apache_sdist = os.path.join(
-        output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
-    )
+        sdist_license = source_tree / "LICENSE-sdist"
+        if not sdist_license.is_file():
+            _fail("LICENSE-sdist is missing from the committed source tree")
+        shutil.copyfile(sdist_license, source_tree / "LICENSE")
+        sdist_license.unlink()
 
-    if os.path.exists(apache_sdist):
-        os.remove(apache_sdist)
+        # A clean git archive normally has no ignored UI build output, but
+        # remove this defensively in case it becomes tracked in the future.
+        shutil.rmtree(source_tree / "burr" / "tracking" / "server" / "build", ignore_errors=True)
 
-    shutil.move(original_sdist, apache_sdist)
+        _run_command(
+            ["flit", "build", "--format", "sdist"],
+            description="Running flit build --format sdist...",
+            error_message="Failed to build sdist",
+            success_message="flit sdist created successfully",
+            env=env,
+            cwd=source_tree,
+        )
+
+        original_sdist = source_tree / "dist" / f"apache_burr-{version.lower()}.tar.gz"
+        if not original_sdist.is_file():
+            _fail(f"Could not find sdist: {original_sdist}")
+
+        apache_sdist = os.path.join(
+            output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
+        )
+        if os.path.exists(apache_sdist):
+            os.remove(apache_sdist)
+        shutil.move(original_sdist, apache_sdist)
+
     print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
 
     return apache_sdist
