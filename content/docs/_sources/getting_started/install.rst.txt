@@ -33,6 +33,11 @@ along with a fully built server.
 This will give you tools to visualize, track, and interact with the UI. You can explore the UI (including some sample projects)
 simply by running the command ``burr``. Up next we'll write our own application and follow it in the UI.
 
+.. note::
+
+    In version 0.43.0, the optional CLI requires Python 3.10 or newer. The core Burr library remains compatible with
+    Python 3.9.
+
 If you're using poetry, you can't install the ``start`` target directly, due to
 `this issue <https://github.com/python-poetry/poetry/issues/3369>`_.
 Instead, please install manually using the following command:
