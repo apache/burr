@@ -46,6 +46,7 @@ author = "Apache Burr PMC"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
     "myst_nb",
     "sphinx_sitemap",
     "sphinx_toolbox.collapse",
