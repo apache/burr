@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -416,7 +417,7 @@ s=d.getElementsByTagName('script')[0];
 <section id="quick-start">
 <h2>Quick Start<a class="headerlink" href="#quick-start" title="Link to this heading">¶</a></h2>
 <p>Install Burr with the UI extras and launch the server:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[start]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[start]"</span>
 burr
 </pre></div>
 </div>
@@ -432,7 +433,7 @@ will automatically appear in the UI:</p>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-    <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">&quot;my-project&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="s2">"local"</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">"my-project"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 </pre></div>
@@ -446,7 +447,7 @@ its application runs, and the step-by-step trace.</p>
 can reload state from any past run for debugging:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.tracking</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalTrackingClient</span>
 
-<span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;my-project&quot;</span><span class="p">)</span>
+<span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">"my-project"</span><span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">base_graph</span><span class="p">)</span>
@@ -454,8 +455,8 @@ can reload state from any past run for debugging:</p>
         <span class="n">tracker</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">default_state</span><span class="o">=</span><span class="p">{},</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;my-entrypoint&quot;</span><span class="p">,</span>
-        <span class="n">fork_from_app_id</span><span class="o">=</span><span class="s2">&quot;&lt;prior-app-id&gt;&quot;</span><span class="p">,</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"my-entrypoint"</span><span class="p">,</span>
+        <span class="n">fork_from_app_id</span><span class="o">=</span><span class="s2">"&lt;prior-app-id&gt;"</span><span class="p">,</span>
         <span class="n">fork_from_sequence_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">fork_from_partition_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span>

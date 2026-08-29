@@ -1,0 +1,738 @@
+<!--
+     Licensed to the Apache Software Foundation (ASF) under one
+     or more contributor license agreements.  See the NOTICE file
+     distributed with this work for additional information
+     regarding copyright ownership.  The ASF licenses this file
+     to you under the Apache License, Version 2.0 (the
+     "License"); you may not use this file except in compliance
+     with the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing,
+     software distributed under the License is distributed on an
+     "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     KIND, either express or implied.  See the License for the
+     specific language governing permissions and limitations
+     under the License.
+-->
+
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Transitions" href="../transitions/"><link rel="prev" title="Applications" href="../state-machine/">
+        <link rel="canonical" href="https://burr.apache.org/docs/concepts/human-in-the-loop/">
+        <link rel="prefetch" href="../../_static/burr_logo.svg" as="image">
+
+    <link rel="shortcut icon" href="../../_static/favicon.ico"><!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>Human in the Loop - Apache Burr</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=238f852d" />
+    <link rel="stylesheet" type="text/css" href="../../_static/testimonials.css?v=cc24216e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-announcement-background: #ffba00;
+  --color-announcement-text: #091E42;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-announcement-background: #ffba00;
+  --color-announcement-text: #091E42;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-announcement-background: #ffba00;
+  --color-announcement-text: #091E42;
+  
+      }
+    }
+  }
+</style>
+
+<!-- Matomo -->
+<script>
+  var _paq = window._paq = window._paq || [];
+  /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+  _paq.push(["setDoNotTrack", true]);
+  _paq.push(["disableCookies"]);
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  (function() {
+    var u="https://analytics.apache.org/";
+    _paq.push(['setTrackerUrl', u+'matomo.php']);
+    _paq.push(['setSiteId', '86']);
+    var d=document, g=d.createElement('script'),
+s=d.getElementsByTagName('script')[0];
+    g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+  })();
+</script>
+<!-- End Matomo Code -->
+<!-- Point sidebar brand link to landing page -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    var brand = document.querySelector(".sidebar-brand");
+    if (brand) brand.href = "/";
+  });
+</script>
+</head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../"><div class="brand">Apache Burr</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../../_static/burr_logo.svg" alt="Logo"/>
+  </div>
+  
+  <span class="sidebar-brand-text">Apache Burr</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search/" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Apache Burr</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/">Get started</a><input aria-label="Toggle navigation of Get started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/why-burr/">Why Burr?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/install/">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/simple-example/">Quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/up-next/">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../ui/">Burr UI</a><input aria-label="Toggle navigation of Burr UI" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../ui/getting-started/">Getting Started</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../ui/notebook/">Notebook / Colab</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../ui/deployment/">Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../examples/">Cookbook</a><input aria-label="Toggle navigation of Cookbook" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/simple/">🧸 Toy examples</a><input aria-label="Toggle navigation of 🧸 Toy examples" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/simple/counter/">Counter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/simple/cowsay/">Cowsay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/simple/choose-your-own-adventure/">Choose your own adventure</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/chatbots/">📞 Chatbots</a><input aria-label="Toggle navigation of 📞 Chatbots" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/chatbots/basic-chatbot/">Basic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/chatbots/gpt-like-chatbot/">GPT-like multimodal chatbot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/chatbots/rag-chatbot-hamilton/">Conversational RAG with Burr and Hamilton</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/agents/">🤖 Agents</a><input aria-label="Toggle navigation of 🤖 Agents" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/agents/divide-and-conquer/">Divide and Conquer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/agents/agent-patterns/">Agent patterns</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/deployment/">Deployment</a><input aria-label="Toggle navigation of Deployment" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/deployment/web-server/">Burr in a web server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/deployment/infrastructure/">Provisioning Infrastructure/Deploying</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/deployment/monitoring/">Monitoring in Production</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/deployment/aws/">AWS Deployment Example</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/guardrails/">🚧 Guardrails / Tests</a><input aria-label="Toggle navigation of 🚧 Guardrails / Tests" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/guardrails/creating_tests/">Creating Test Cases</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/data-science/">🧪 Data science</a><input aria-label="Toggle navigation of 🧪 Data science" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/data-science/ml_training/">Hyperparameter tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../examples/data-science/simulation/">Simulations</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../">Concepts</a><input aria-label="Toggle navigation of Concepts" checked="" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../overview/">Cheat Sheet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sdlc/">SDLC with LLMs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Human in the Loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-persistence/">State Persistence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../serde/">Serialization / Deserialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../streaming-actions/">Streaming Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../state-typing/">Typing State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hooks/">Hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../additional-visibility/">Additional Visibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../parallelism/">Parallelism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../recursion/">Recursive Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sync-vs-async/">Sync vs Async Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../planned-capabilities/">Planned Capabilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../reference/">API reference</a><input aria-label="Toggle navigation of API reference" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/application/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/application/#graph-apis">Graph APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/actions/">Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/state/">State</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/serde/">Serialization &amp; Deserialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/persister/">State Persistence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/conditions/">Conditions/Transitions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/tracking/">Tracking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/visibility/">Tracing Inside Actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/lifecycle/">Lifecycle API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/parallelism/">Parallelism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../reference/typing/">Typing</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../reference/integrations/">Integrations</a><input aria-label="Toggle navigation of Integrations" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/hamilton/">Hamilton</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/streamlit/">Streamlit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/opentelemetry/">OpenTelemetry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/traceloop/">Traceloop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/langfuse/">Langfuse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/langchain/">Langchain</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/pydantic/">Pydantic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/haystack/">Haystack</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/ray/">Ray</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../reference/integrations/bedrock/">Amazon Bedrock</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../contributing/">Contributing</a><input aria-label="Toggle navigation of Contributing" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/setup/">Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/iterating/">Developing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/architecture/">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../contributing/contributing/">Contributing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../ecosystem/">Ecosystem</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">ASF</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../asf/">ASF</a><input aria-label="Toggle navigation of ASF" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/">Apache Software Foundation</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/licenses/">License</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/events/current-event.html">Events</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://privacy.apache.org/policies/privacy-policy-public.html">Privacy</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/security/">Security</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/foundation/sponsorship.html">Sponsorship</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/foundation/thanks.html">Thanks</a></li>
+<li class="toctree-l2"><a class="reference external" href="https://www.apache.org/foundation/policies/conduct.html">Code of Conduct</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">RESOURCES</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference external" href="https://blog.dagworks.io/">Blog</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://discord.gg/6Zy2DwP4f3">Discord community server</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/apache/burr">GitHub</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://twitter.com/burr_framework">Twitter</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="human-in-the-loop">
+<h1>Human in the Loop<a class="headerlink" href="#human-in-the-loop" title="Link to this heading">¶</a></h1>
+<div class="admonition note" id="id1">
+<p class="admonition-title">Note</p>
+<p>The person stays outside the graph. An action that needs them declares extra function
+parameters (runtime <a class="reference internal" href="../actions/#inputref"><span class="std std-ref">inputs</span></a>). You stop the application with
+<code class="docutils literal notranslate"><span class="pre">run(halt_before=[&quot;human_step&quot;])</span></code>, collect those values yourself, then call <code class="docutils literal notranslate"><span class="pre">run</span></code>
+again and pass them as <code class="docutils literal notranslate"><span class="pre">inputs</span></code>.</p>
+</div>
+<p>An agent can run on its own until it needs a person – a prompt, a clarification, an
+approval. Burr does not prompt the user. It stops, hands control back to your code, and
+waits for the next <code class="docutils literal notranslate"><span class="pre">run</span></code>.</p>
+<p>The action that needs a person looks like any other action. The extra parameters are not
+read from state; they come from the caller:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"draft"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"approved"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">human_step</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">approved</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="n">approved</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">approved</span></code> is a runtime input. Bind long-lived objects (an API client, a DB handle) with
+<code class="docutils literal notranslate"><span class="pre">.bind(...)</span></code>. Pass per-turn values with <code class="docutils literal notranslate"><span class="pre">inputs={...}</span></code> on <code class="docutils literal notranslate"><span class="pre">run</span></code> / <code class="docutils literal notranslate"><span class="pre">step</span></code> /
+<code class="docutils literal notranslate"><span class="pre">iterate</span></code>. See <a class="reference internal" href="../actions/#inputref"><span class="std std-ref">inputs</span></a>.</p>
+<section id="halt-before-and-run">
+<h2><code class="docutils literal notranslate"><span class="pre">halt_before</span></code> and <code class="docutils literal notranslate"><span class="pre">run</span></code><a class="headerlink" href="#halt-before-and-run" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Application.run</span></code> walks the graph until a halt condition hits, then returns
+<code class="docutils literal notranslate"><span class="pre">(action,</span> <span class="pre">result,</span> <span class="pre">state)</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">halt_before=[&quot;human_step&quot;]</span></code> stops when <code class="docutils literal notranslate"><span class="pre">human_step</span></code> is the <em>next</em> action. That
+action has <strong>not</strong> run. <code class="docutils literal notranslate"><span class="pre">result</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>. The returned <code class="docutils literal notranslate"><span class="pre">action</span></code> is
+<code class="docutils literal notranslate"><span class="pre">human_step</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">halt_after=[&quot;final_result&quot;]</span></code> stops after that action has run. <code class="docutils literal notranslate"><span class="pre">result</span></code> is that
+action’s result dict. The returned <code class="docutils literal notranslate"><span class="pre">action</span></code> is <code class="docutils literal notranslate"><span class="pre">final_result</span></code>.</p></li>
+</ul>
+<p>If both could apply, <code class="docutils literal notranslate"><span class="pre">halt_before</span></code> wins. <code class="docutils literal notranslate"><span class="pre">run</span></code> always executes at least one action
+before it checks halt conditions, then <code class="docutils literal notranslate"><span class="pre">inputs</span></code> apply only to that first action. Later
+actions in the same <code class="docutils literal notranslate"><span class="pre">run</span></code> that also need <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are undefined – halt before those
+instead, and pass their values on the next <code class="docutils literal notranslate"><span class="pre">run</span></code>.</p>
+<p>You can pass action names or tags (<code class="docutils literal notranslate"><span class="pre">&quot;&#64;tag:needs_human&quot;</span></code>). The same halt arguments work
+on <code class="docutils literal notranslate"><span class="pre">iterate</span></code> / <code class="docutils literal notranslate"><span class="pre">arun</span></code> / <code class="docutils literal notranslate"><span class="pre">aiterate</span></code>. Details are in <a class="reference internal" href="../state-machine/#id1"><span class="std std-ref">Applications</span></a>.</p>
+</section>
+<section id="a-graph-with-one-handoff">
+<h2>A graph with one handoff<a class="headerlink" href="#a-graph-with-one-handoff" title="Link to this heading">¶</a></h2>
+<p>This is the shape <code class="docutils literal notranslate"><span class="pre">run(halt_before=[&quot;human_step&quot;])</span></code> is for. No LLM required:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ApplicationBuilder</span><span class="p">,</span> <span class="n">State</span><span class="p">,</span> <span class="n">action</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"task"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">task</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">task</span><span class="o">=</span><span class="n">task</span><span class="p">)</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"task"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"draft"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">agent_work</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">draft</span><span class="o">=</span><span class="sa">f</span><span class="s2">"draft for: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">'task'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"draft"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"approved"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">human_step</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">approved</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">approved</span><span class="o">=</span><span class="n">approved</span><span class="p">)</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"draft"</span><span class="p">,</span> <span class="s2">"approved"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"result"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">finish</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">result</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"draft"</span><span class="p">]</span> <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">"approved"</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ApplicationBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">agent_work</span><span class="p">,</span> <span class="n">human_step</span><span class="p">,</span> <span class="n">finish</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
+        <span class="p">(</span><span class="s2">"start"</span><span class="p">,</span> <span class="s2">"agent_work"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"agent_work"</span><span class="p">,</span> <span class="s2">"human_step"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_step"</span><span class="p">,</span> <span class="s2">"finish"</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"start"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+    <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_step"</span><span class="p">],</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"task"</span><span class="p">:</span> <span class="s2">"write a thank-you note"</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="c1"># action.name == "human_step", result is None</span>
+<span class="c1"># start and agent_work have run; human_step has not</span>
+<span class="c1"># state["draft"] is ready for the person to look at</span>
+
+<span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"finish"</span><span class="p">],</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"approved"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="c1"># first action of this run is human_step, so it receives approved=True</span>
+<span class="c1"># then finish runs; action.name == "finish"</span>
+</pre></div>
+</div>
+<p>The first <code class="docutils literal notranslate"><span class="pre">run</span></code> stops <em>before</em> <code class="docutils literal notranslate"><span class="pre">human_step</span></code>. The second <code class="docutils literal notranslate"><span class="pre">run</span></code> starts <em>at</em>
+<code class="docutils literal notranslate"><span class="pre">human_step</span></code>, so <code class="docutils literal notranslate"><span class="pre">inputs={&quot;approved&quot;:</span> <span class="pre">True}</span></code> is what that action receives.</p>
+<p><code class="docutils literal notranslate"><span class="pre">app.get_next_action()</span></code> tells you which action is queued if you want to inspect
+without running.</p>
+</section>
+<section id="a-chat-loop">
+<h2>A chat loop<a class="headerlink" href="#a-chat-loop" title="Link to this heading">¶</a></h2>
+<p>When the human action is both the entrypoint and the place you return to, collect the
+prompt in the outer loop and halt before that same action. The first step of each
+<code class="docutils literal notranslate"><span class="pre">run</span></code> is the human action (it gets <code class="docutils literal notranslate"><span class="pre">inputs</span></code>); the application then continues until
+that action is next again:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ApplicationBuilder</span><span class="p">,</span> <span class="n">State</span><span class="p">,</span> <span class="n">action</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">human_input</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">chat_history</span><span class="o">=</span><span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
+    <span class="p">)</span>
+
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">ai_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="n">reply</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"you said: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">'chat_history'</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">'content'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">response</span><span class="o">=</span><span class="n">reply</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">chat_history</span><span class="o">=</span><span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">reply</span><span class="p">}</span>
+    <span class="p">)</span>
+
+<span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ApplicationBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"you: "</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s2">"exit"</span><span class="p">:</span>
+        <span class="k">break</span>
+    <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_input"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">},</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"ai:"</span><span class="p">,</span> <span class="n">state</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>In this two-node cycle, <code class="docutils literal notranslate"><span class="pre">halt_after=[&quot;ai_response&quot;]</span></code> stops at the same place – after
+the model has spoken, before the next human turn. <code class="docutils literal notranslate"><span class="pre">halt_before=[&quot;human_input&quot;]</span></code> is the
+same stop, with <code class="docutils literal notranslate"><span class="pre">result</span> <span class="pre">is</span> <span class="pre">None</span></code> and <code class="docutils literal notranslate"><span class="pre">action.name</span> <span class="pre">==</span> <span class="pre">&quot;human_input&quot;</span></code>. The getting
+started chatbot uses <code class="docutils literal notranslate"><span class="pre">halt_after=[&quot;ai_response&quot;]</span></code> for a single turn; a running CLI
+example of the <code class="docutils literal notranslate"><span class="pre">halt_before</span></code> loop is
+<a class="reference external" href="https://github.com/apache/burr/blob/main/examples/conversational-rag/graph_db_example/application.py">examples/conversational-rag/graph_db_example/application.py</a>
+(<code class="docutils literal notranslate"><span class="pre">human_converse</span></code> / <code class="docutils literal notranslate"><span class="pre">user_question</span></code>).</p>
+</section>
+<section id="several-handoff-points">
+<h2>Several handoff points<a class="headerlink" href="#several-handoff-points" title="Link to this heading">¶</a></h2>
+<p>Some applications need a person more than once, at different actions. Halt before every
+action that needs <code class="docutils literal notranslate"><span class="pre">inputs</span></code>, halt after the terminal action, and use <code class="docutils literal notranslate"><span class="pre">action.name</span></code> to
+decide what to collect next.</p>
+<p>This is the email assistant
+(<a class="reference external" href="https://github.com/apache/burr/tree/main/examples/email-assistant">examples/email-assistant</a>).
+<code class="docutils literal notranslate"><span class="pre">process_input</span></code> takes <code class="docutils literal notranslate"><span class="pre">email_to_respond</span></code> and <code class="docutils literal notranslate"><span class="pre">response_instructions</span></code>.
+<code class="docutils literal notranslate"><span class="pre">clarify_instructions</span></code> takes <code class="docutils literal notranslate"><span class="pre">clarification_inputs</span></code> (a <code class="docutils literal notranslate"><span class="pre">list[str]</span></code>).
+<code class="docutils literal notranslate"><span class="pre">process_feedback</span></code> takes <code class="docutils literal notranslate"><span class="pre">feedback</span></code>. The graph goes
+<code class="docutils literal notranslate"><span class="pre">process_input</span> <span class="pre">→</span> <span class="pre">determine_clarifications</span> <span class="pre">→</span> <span class="pre">(clarify_instructions?)</span> <span class="pre">→</span> <span class="pre">formulate_draft</span> <span class="pre">→</span> <span class="pre">process_feedback</span> <span class="pre">→</span> <span class="pre">…</span> <span class="pre">→</span> <span class="pre">final_result</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">inputs</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"email_to_respond"</span><span class="p">:</span> <span class="n">incoming</span><span class="p">,</span>
+    <span class="s2">"response_instructions"</span><span class="p">:</span> <span class="n">instructions</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"clarify_instructions"</span><span class="p">,</span> <span class="s2">"process_feedback"</span><span class="p">],</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_result"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"clarify_instructions"</span><span class="p">:</span>
+        <span class="c1"># clarify_instructions has not run; questions are already in state</span>
+        <span class="n">answers</span> <span class="o">=</span> <span class="p">[</span><span class="nb">input</span><span class="p">(</span><span class="n">q</span> <span class="o">+</span> <span class="s2">" "</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"clarification_questions"</span><span class="p">]]</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"clarification_inputs"</span><span class="p">:</span> <span class="n">answers</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"process_feedback"</span><span class="p">:</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"feedback (empty accepts the draft): "</span><span class="p">)</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"feedback"</span><span class="p">:</span> <span class="n">comment</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"final_result"</span><span class="p">:</span>
+        <span class="k">break</span>
+</pre></div>
+</div>
+<p>Include <code class="docutils literal notranslate"><span class="pre">halt_after=[&quot;final_result&quot;]</span></code>. Without it, an empty <code class="docutils literal notranslate"><span class="pre">feedback</span></code> sends the
+graph through <code class="docutils literal notranslate"><span class="pre">final_result</span></code> and then leaves it with no next action, which <code class="docutils literal notranslate"><span class="pre">run</span></code>
+treats as undefined (it logs a warning).</p>
+<p>The FastAPI wiring for the same halt list is
+<a class="reference external" href="https://github.com/apache/burr/blob/main/examples/email-assistant/server.py">examples/email-assistant/server.py</a>
+(<code class="docutils literal notranslate"><span class="pre">_run_through</span></code>) and the walkthrough in
+<a class="reference external" href="https://github.com/apache/burr/tree/main/examples/web-server">examples/web-server</a>.</p>
+</section>
+<section id="web-servers-and-persistence">
+<h2>Web servers and persistence<a class="headerlink" href="#web-servers-and-persistence" title="Link to this heading">¶</a></h2>
+<p>The loop does not have to live in one process. On a web server each request loads the
+application, calls <code class="docutils literal notranslate"><span class="pre">run</span></code> once, and returns. The next request supplies the next
+<code class="docutils literal notranslate"><span class="pre">inputs</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">examples/email-assistant</span></code> does that with <code class="docutils literal notranslate"><span class="pre">initialize_from(...,</span> <span class="pre">resume_at_next_action=True)</span></code>
+and a persister / tracker keyed by <code class="docutils literal notranslate"><span class="pre">app_id</span></code>. The person can come back seconds or days
+later. See <a class="reference internal" href="../state-persistence/#id1"><span class="std std-ref">State Persistence</span></a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">app.get_next_action()</span></code> is useful here: the handler can tell the client which form to
+show without advancing the graph.</p>
+</section>
+<section id="command-line-only">
+<h2>Command-line only<a class="headerlink" href="#command-line-only" title="Link to this heading">¶</a></h2>
+<p>If the application only ever runs in a terminal, you can call <code class="docutils literal notranslate"><span class="pre">input(...)</span></code> inside an
+action and skip the outer loop. That does not work for a web server, a persisted app, or
+any caller that is not sitting on stdin. Prefer <code class="docutils literal notranslate"><span class="pre">halt_before</span></code> + <code class="docutils literal notranslate"><span class="pre">inputs</span></code> unless you
+are writing a one-off CLI.</p>
+</section>
+<section id="nested-applications">
+<h2>Nested applications<a class="headerlink" href="#nested-applications" title="Link to this heading">¶</a></h2>
+<p>Halting <em>inside</em> a sub-application and surfacing that to the parent is more involved.
+The wrapping action runs the child with <code class="docutils literal notranslate"><span class="pre">halt_before</span></code>, then either:</p>
+<ul class="simple">
+<li><p>sets a flag such as <code class="docutils literal notranslate"><span class="pre">need_input=True</span></code> and returns, with a parent transition back to
+itself, or</p></li>
+<li><p>copies the child’s finished state up and continues.</p></li>
+</ul>
+<p>The parent still collects the person’s values and passes them as <code class="docutils literal notranslate"><span class="pre">inputs</span></code> into the
+wrapping action on the next <code class="docutils literal notranslate"><span class="pre">run</span></code>. The child is not visible to the parent’s
+<code class="docutils literal notranslate"><span class="pre">halt_before</span></code> list.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../state-machine/#id1"><span class="std std-ref">Applications</span></a> – <code class="docutils literal notranslate"><span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">iterate</span></code>, <code class="docutils literal notranslate"><span class="pre">halt_before</span></code> / <code class="docutils literal notranslate"><span class="pre">halt_after</span></code></p></li>
+<li><p><a class="reference internal" href="../actions/#inputref"><span class="std std-ref">inputs</span></a> – runtime inputs vs <code class="docutils literal notranslate"><span class="pre">.bind(...)</span></code></p></li>
+<li><p><a class="reference internal" href="../state-persistence/#id1"><span class="std std-ref">State Persistence</span></a> – pause and resume across requests</p></li>
+<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/email-assistant">Email assistant</a></p></li>
+<li><p><a class="reference external" href="https://github.com/apache/burr/blob/main/examples/conversational-rag/graph_db_example/application.py">Graph-DB RAG CLI loop</a></p></li>
+<li><p><a class="reference external" href="https://github.com/apache/burr/tree/main/examples/web-server">Burr in a web server</a></p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../transitions/">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Transitions</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../state-machine/">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Applications</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; The Apache Software Foundation, Licensed under the Apache License, Version 2.0.
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://incubator.apache.org/" aria-label="Apache Stuff">
+<div class="apache-footer">
+    <img width="200" src="/_static/apache-incubator-logo.svg" alt="Apache Incubator Logo" class="apache-incubator-logo">
+    <div class="apache-notice">
+        <p>Apache Burr is an effort undergoing incubation at The Apache Software Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of all newly accepted projects until a further review indicates that the infrastructure, communications, and decision making process have stabilized in a manner consistent with other successful ASF projects. While incubation status is not necessarily a reflection of the completeness or stability of the code, it does indicate that the project has yet to be fully endorsed by the ASF.</p>
+    </div>
+    <div class="apache-copyright">
+        <p>Apache, the names of Apache projects, and the feather logo are either registered trademarks or trademarks of the Apache Software Foundation in the United States and/or other countries.</p>
+    </div>
+</div>
+</a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Human in the Loop</a><ul>
+<li><a class="reference internal" href="#halt-before-and-run"><code class="docutils literal notranslate"><span class="pre">halt_before</span></code> and <code class="docutils literal notranslate"><span class="pre">run</span></code></a></li>
+<li><a class="reference internal" href="#a-graph-with-one-handoff">A graph with one handoff</a></li>
+<li><a class="reference internal" href="#a-chat-loop">A chat loop</a></li>
+<li><a class="reference internal" href="#several-handoff-points">Several handoff points</a></li>
+<li><a class="reference internal" href="#web-servers-and-persistence">Web servers and persistence</a></li>
+<li><a class="reference internal" href="#command-line-only">Command-line only</a></li>
+<li><a class="reference internal" href="#nested-applications">Nested applications</a></li>
+<li><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=187304be"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>

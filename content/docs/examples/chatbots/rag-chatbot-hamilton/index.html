@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,14 +419,14 @@ s=d.getElementsByTagName('script')[0];
 <span class="c1"># distributed with this work for additional information</span>
 <span class="c1"># regarding copyright ownership.  The ASF licenses this file</span>
 <span class="c1"># to you under the Apache License, Version 2.0 (the</span>
-<span class="c1"># &quot;License&quot;); you may not use this file except in compliance</span>
+<span class="c1"># "License"); you may not use this file except in compliance</span>
 <span class="c1"># with the License.  You may obtain a copy of the License at</span>
 <span class="c1">#</span>
 <span class="c1">#   http://www.apache.org/licenses/LICENSE-2.0</span>
 <span class="c1">#</span>
 <span class="c1"># Unless required by applicable law or agreed to in writing,</span>
 <span class="c1"># software distributed under the License is distributed on an</span>
-<span class="c1"># &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
+<span class="c1"># "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
 <span class="c1"># KIND, either express or implied.  See the License for the</span>
 <span class="c1"># specific language governing permissions and limitations</span>
 <span class="c1"># under the License.</span>
@@ -465,7 +466,7 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Loads Hamilton DAG</span>
-<span class="n">conversational_rag</span> <span class="o">=</span> <span class="n">dataflows</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;conversational_rag&quot;</span><span class="p">)</span>
+<span class="n">conversational_rag</span> <span class="o">=</span> <span class="n">dataflows</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"conversational_rag"</span><span class="p">)</span>
 <span class="n">conversational_rag_driver</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">driver</span><span class="o">.</span><span class="n">Builder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_config</span><span class="p">({})</span>  <span class="c1"># replace with configuration as appropriate</span>
@@ -484,34 +485,34 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span>
-    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"question"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ai_converse</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">vector_store</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;AI conversing step. Uses Hamilton to execute the conversational pipeline.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""AI conversing step. Uses Hamilton to execute the conversational pipeline."""</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">conversational_rag_driver</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;conversational_rag_response&quot;</span><span class="p">],</span>
+        <span class="p">[</span><span class="s2">"conversational_rag_response"</span><span class="p">],</span>
         <span class="n">inputs</span><span class="o">=</span><span class="p">{</span>
-            <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">],</span>
-            <span class="s2">&quot;chat_history&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+            <span class="s2">"question"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"question"</span><span class="p">],</span>
+            <span class="s2">"chat_history"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span>
         <span class="p">},</span>
         <span class="c1"># we use overrides here because we want to pass in the vector store</span>
         <span class="n">overrides</span><span class="o">=</span><span class="p">{</span>
-            <span class="s2">&quot;vector_store&quot;</span><span class="p">:</span> <span class="n">vector_store</span><span class="p">,</span>
+            <span class="s2">"vector_store"</span><span class="p">:</span> <span class="n">vector_store</span><span class="p">,</span>
         <span class="p">}</span>
     <span class="p">)</span>
-    <span class="n">new_history</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;AI: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;conversational_rag_response&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">new_history</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"AI: </span><span class="si">{</span><span class="n">result</span><span class="p">[</span><span class="s1">'conversational_rag_response'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">new_history</span><span class="p">)</span>
 
 
 <span class="nd">@action</span><span class="p">(</span>
     <span class="n">reads</span><span class="o">=</span><span class="p">[],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"question"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">human_converse</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">user_question</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Human converse step -- make sure we get input, and store it as state.&quot;&quot;&quot;</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">question</span><span class="o">=</span><span class="n">user_question</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Human: </span><span class="si">{</span><span class="n">user_question</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span> <span class="n">state</span>
+<span class="w">    </span><span class="sd">"""Human converse step -- make sure we get input, and store it as state."""</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">question</span><span class="o">=</span><span class="n">user_question</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Human: </span><span class="si">{</span><span class="n">user_question</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span> <span class="n">state</span>
 </pre></div>
 </div>
 </div>
@@ -525,19 +526,19 @@ s=d.getElementsByTagName('script')[0];
 <span class="kn">from</span><span class="w"> </span><span class="nn">burr.lifecycle</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostRunStepHook</span><span class="p">,</span> <span class="n">PreRunStepHook</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">PrintStepHook</span><span class="p">(</span><span class="n">PostRunStepHook</span><span class="p">,</span> <span class="n">PreRunStepHook</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Custom hook to print the action/result after each step.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Custom hook to print the action/result after each step."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">pre_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🤔 AI is thinking...&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;⏳Processing input from user...&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"ai_converse"</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"🤔 AI is thinking..."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"human_converse"</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"⏳Processing input from user..."</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;State&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🎙💬&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;question&quot;</span><span class="p">],</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🤖💬&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;conversational_rag_response&quot;</span><span class="p">],</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">"State"</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Action</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"human_converse"</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"🎙💬"</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">"question"</span><span class="p">],</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"ai_converse"</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"🤖💬"</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s2">"conversational_rag_response"</span><span class="p">],</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -551,23 +552,23 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># what we will do RAG over.</span>
 <span class="n">initial_documents</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;harrison worked at kensho&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;stefan worked at Stitch Fix&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;stefan likes tacos&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;elijah worked at TwoSigma&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;elijah likes mango&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;stefan used to work at IBM&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;elijah likes to go biking&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;stefan likes to bake sourdough&quot;</span><span class="p">,</span>
+    <span class="s2">"harrison worked at kensho"</span><span class="p">,</span>
+    <span class="s2">"stefan worked at Stitch Fix"</span><span class="p">,</span>
+    <span class="s2">"stefan likes tacos"</span><span class="p">,</span>
+    <span class="s2">"elijah worked at TwoSigma"</span><span class="p">,</span>
+    <span class="s2">"elijah likes mango"</span><span class="p">,</span>
+    <span class="s2">"stefan used to work at IBM"</span><span class="p">,</span>
+    <span class="s2">"elijah likes to go biking"</span><span class="p">,</span>
+    <span class="s2">"stefan likes to bake sourdough"</span><span class="p">,</span>
 <span class="p">]</span>
 <span class="c1"># bootstrap the vector store;</span>
 <span class="n">vector_store</span> <span class="o">=</span> <span class="n">conversational_rag_driver</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-    <span class="p">[</span><span class="s2">&quot;vector_store&quot;</span><span class="p">],</span>
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;input_texts&quot;</span><span class="p">:</span> <span class="n">initial_documents</span><span class="p">})[</span><span class="s2">&quot;vector_store&quot;</span><span class="p">]</span>
+    <span class="p">[</span><span class="s2">"vector_store"</span><span class="p">],</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"input_texts"</span><span class="p">:</span> <span class="n">initial_documents</span><span class="p">})[</span><span class="s2">"vector_store"</span><span class="p">]</span>
 <span class="c1"># what we will initialize the application with</span>
 <span class="n">initial_state</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;chat_history&quot;</span><span class="p">:</span> <span class="p">[],</span>
+    <span class="s2">"question"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+    <span class="s2">"chat_history"</span><span class="p">:</span> <span class="p">[],</span>
 <span class="p">}</span>
 
 <span class="n">app_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
@@ -578,24 +579,24 @@ s=d.getElementsByTagName('script')[0];
         <span class="c1"># bind the vector store to the AI conversational step</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">vector_store</span><span class="o">=</span><span class="n">vector_store</span><span class="p">),</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># set the transitions between actions</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># add identifiers that will help track the application</span>
-    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">)</span>
     <span class="c1"># initialize the state</span>
     <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="o">**</span><span class="n">initial_state</span><span class="p">)</span>
     <span class="c1"># say what the initial action is</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_converse"</span><span class="p">)</span>
     <span class="c1"># add a hook to print the steps -- optional but shows that Burr is pluggable</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">PrintStepHook</span><span class="p">())</span>
     <span class="c1"># add tracking -- this will show up in the BURR UI.</span>
-    <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;demo:conversational-rag&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">"demo:conversational-rag"</span><span class="p">)</span>
     <span class="c1"># build the application</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
@@ -605,7 +606,7 @@ s=d.getElementsByTagName('script')[0];
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># let&#39;s visualize what we have</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># let's visualize what we have</span>
 <span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -618,20 +619,20 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">app</span><span class="o">.</span><span class="n">reset_to_entrypoint</span><span class="p">()</span> <span class="c1"># reset the app to the entrypoint</span>
-<span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Ask something (or type exit to quit): &quot;</span><span class="p">)</span>
+<span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Ask something (or type exit to quit): "</span><span class="p">)</span>
 <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">step</span><span class="p">(</span>
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ran action </span><span class="si">{</span><span class="n">previous_action</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> with result:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> and state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Ran action </span><span class="si">{</span><span class="n">previous_action</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> with result:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> and state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># now let&#39;s run the AI conversational step</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># now let's run the AI conversational step</span>
 <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ran action </span><span class="si">{</span><span class="n">previous_action</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> with result:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> and state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Ran action </span><span class="si">{</span><span class="n">previous_action</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> with result:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> and state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -643,15 +644,15 @@ s=d.getElementsByTagName('script')[0];
 actions/conditions are met.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running RAG with initial state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running RAG with initial state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Ask something (or type exit to quit): &quot;</span><span class="p">)</span>
+    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Ask something (or type exit to quit): "</span><span class="p">)</span>
     <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;human_converse&quot;</span><span class="p">],</span>
-        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">],</span>
-        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_converse"</span><span class="p">],</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"terminal"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
     <span class="p">)</span>
-    <span class="k">if</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terminal&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terminal"</span><span class="p">:</span>
         <span class="c1"># reached the end</span>
         <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="k">break</span>
@@ -683,16 +684,16 @@ as well as pick up the prior conversation from where it left off.</p>
 <span class="n">rewind_to_sequence_id</span> <span class="o">=</span> <span class="n">last_sequence_id</span> <span class="o">-</span> <span class="mi">2</span>
 <span class="n">new_app_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
 
-<span class="n">project_name</span> <span class="o">=</span> <span class="s2">&quot;demo:conversational-rag&quot;</span>
+<span class="n">project_name</span> <span class="o">=</span> <span class="s2">"demo:conversational-rag"</span>
 <span class="c1"># we use the tracking client here to get the state of the application at a prior sequence_id</span>
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="n">project_name</span><span class="p">)</span>
-<span class="n">persisted_state</span> <span class="o">=</span> <span class="n">tracker</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">,</span> 
+<span class="n">persisted_state</span> <span class="o">=</span> <span class="n">tracker</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">,</span> 
                                <span class="n">app_id</span><span class="o">=</span><span class="n">prior_app_id</span><span class="p">,</span> 
                                <span class="n">sequence_id</span><span class="o">=</span><span class="n">rewind_to_sequence_id</span><span class="p">)</span>
-<span class="n">state_values</span> <span class="o">=</span> <span class="n">persisted_state</span><span class="p">[</span><span class="s1">&#39;state&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">get_all</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded state from app_id:</span><span class="si">{</span><span class="n">prior_app_id</span><span class="si">}</span><span class="s2">, &quot;</span>
-      <span class="sa">f</span><span class="s2">&quot;sequence_id:</span><span class="si">{</span><span class="n">rewind_to_sequence_id</span><span class="si">}</span><span class="s2">::</span><span class="se">\n</span><span class="s2"> &quot;</span>
-      <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">state_values</span> <span class="o">=</span> <span class="n">persisted_state</span><span class="p">[</span><span class="s1">'state'</span><span class="p">]</span><span class="o">.</span><span class="n">get_all</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Loaded state from app_id:</span><span class="si">{</span><span class="n">prior_app_id</span><span class="si">}</span><span class="s2">, "</span>
+      <span class="sa">f</span><span class="s2">"sequence_id:</span><span class="si">{</span><span class="n">rewind_to_sequence_id</span><span class="si">}</span><span class="s2">::</span><span class="se">\n</span><span class="s2"> "</span>
+      <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state_values</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -707,20 +708,20 @@ as well as pick up the prior conversation from where it left off.</p>
         <span class="c1"># bind the vector store to the AI conversational step</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">vector_store</span><span class="o">=</span><span class="n">vector_store</span><span class="p">),</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># set the transitions between actions</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># add identifiers that will help track the application</span>
-    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">)</span>
     <span class="c1"># set state to prior state</span>
-    <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="o">**</span><span class="n">persisted_state</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span>
+    <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="o">**</span><span class="n">persisted_state</span><span class="p">[</span><span class="s2">"state"</span><span class="p">]</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span>
     <span class="c1"># say where we want to start</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_converse"</span><span class="p">)</span>
     <span class="c1"># add a hook to print the steps -- optional but shows that Burr is pluggable</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">PrintStepHook</span><span class="p">())</span>
     <span class="c1"># add tracking -- this will show up in the BURR UI.</span>
@@ -735,15 +736,15 @@ as well as pick up the prior conversation from where it left off.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># We can now change test, debug, etc. from this prior state.</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">state_values</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Ask something (or type exit to quit): &quot;</span><span class="p">)</span>
+    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Ask something (or type exit to quit): "</span><span class="p">)</span>
     <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">other_app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;human_converse&quot;</span><span class="p">],</span>
-        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">],</span>
-        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_converse"</span><span class="p">],</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"terminal"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
     <span class="p">)</span>
-    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terminal&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terminal"</span><span class="p">:</span>
         <span class="c1"># reached the end</span>
         <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="k">break</span>
@@ -755,13 +756,13 @@ as well as pick up the prior conversation from where it left off.</p>
 <h3>Picking up where we left off from a prior conversation with <code class="docutils literal notranslate"><span class="pre">initialize_from()</span></code><a class="headerlink" href="#picking-up-where-we-left-off-from-a-prior-conversation-with-initialize-from" title="Link to this heading">¶</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Now let&#39;s show how to use the ApplicationBuilder.initialize_from() method to pick up where we left off.</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Now let's show how to use the ApplicationBuilder.initialize_from() method to pick up where we left off.</span>
 <span class="c1"># This is useful if you want to continue a conversation with a user, or if you had a crash, etc.</span>
 
 <span class="c1"># set up for rewinding to a prior state -- loading it in as initial state</span>
 <span class="n">prior_app_id</span> <span class="o">=</span> <span class="n">app_id</span>
 
-<span class="n">project_name</span> <span class="o">=</span> <span class="s2">&quot;demo:conversational-rag&quot;</span>
+<span class="n">project_name</span> <span class="o">=</span> <span class="s2">"demo:conversational-rag"</span>
 <span class="c1"># we use the tracking client here to get the state of the application at a prior sequence_id</span>
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="n">project_name</span><span class="p">)</span>
 <span class="n">pick_up_where_we_left_off_app</span> <span class="o">=</span> <span class="p">(</span>
@@ -771,21 +772,21 @@ as well as pick up the prior conversation from where it left off.</p>
         <span class="c1"># bind the vector store to the AI conversational step</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">vector_store</span><span class="o">=</span><span class="n">vector_store</span><span class="p">),</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># set the transitions between actions</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># add identifiers that will help track the application</span>
-    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">prior_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">prior_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
         <span class="n">initializer</span><span class="o">=</span><span class="n">tracker</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="c1"># we want to always start at human_converse; our entrypoint</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span>
-        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can&#39;t find the prior state</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_converse"</span><span class="p">,</span>
+        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can't find the prior state</span>
     <span class="p">)</span>
     <span class="c1"># add a hook to print the steps -- optional but shows that Burr is pluggable</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">PrintStepHook</span><span class="p">())</span>
@@ -800,15 +801,15 @@ as well as pick up the prior conversation from where it left off.</p>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">pick_up_where_we_left_off_app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">pick_up_where_we_left_off_app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Ask something (or type exit to quit): &quot;</span><span class="p">)</span>
+    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Ask something (or type exit to quit): "</span><span class="p">)</span>
     <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">pick_up_where_we_left_off_app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;human_converse&quot;</span><span class="p">],</span>
-        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">],</span>
-        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_converse"</span><span class="p">],</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"terminal"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
     <span class="p">)</span>
-    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terminal&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terminal"</span><span class="p">:</span>
         <span class="c1"># reached the end</span>
         <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="k">break</span>
@@ -821,14 +822,14 @@ as well as pick up the prior conversation from where it left off.</p>
 <h3>Forking the application using prior state with <code class="docutils literal notranslate"><span class="pre">initialize_from()</span></code><a class="headerlink" href="#forking-the-application-using-prior-state-with-initialize-from" title="Link to this heading">¶</a></h3>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Now let&#39;s show how to use the ApplicationBuilder.initialize_from() method to fork a new application.</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Now let's show how to use the ApplicationBuilder.initialize_from() method to fork a new application.</span>
 <span class="c1"># This is useful if you want to debug/reuse prior state, rewind and try something else, etc.</span>
 
 <span class="c1"># set up for rewinding to a prior state -- loading it in as initial state</span>
 <span class="n">prior_app_id</span> <span class="o">=</span> <span class="n">app_id</span>
 <span class="n">new_app_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
 
-<span class="n">project_name</span> <span class="o">=</span> <span class="s2">&quot;demo:conversational-rag&quot;</span>
+<span class="n">project_name</span> <span class="o">=</span> <span class="s2">"demo:conversational-rag"</span>
 <span class="c1"># we use the tracking client here to get the state of the application at a prior sequence_id</span>
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="n">project_name</span><span class="p">)</span>
 <span class="n">forking_new_application</span> <span class="o">=</span> <span class="p">(</span>
@@ -838,23 +839,23 @@ as well as pick up the prior conversation from where it left off.</p>
         <span class="c1"># bind the vector store to the AI conversational step</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">vector_store</span><span class="o">=</span><span class="n">vector_store</span><span class="p">),</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># set the transitions between actions</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># add identifiers that will help track the application</span>
-    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
         <span class="n">initializer</span><span class="o">=</span><span class="n">tracker</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="c1"># we want to always start at human_converse; our entrypoint</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span>
-        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can&#39;t find the prior state</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_converse"</span><span class="p">,</span>
+        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can't find the prior state</span>
         <span class="n">fork_from_app_id</span><span class="o">=</span><span class="n">prior_app_id</span><span class="p">,</span> <span class="c1"># &lt;---- The new addition </span>
-        <span class="n">fork_from_partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">,</span>  <span class="c1"># &lt;---- The new addition </span>
+        <span class="n">fork_from_partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">,</span>  <span class="c1"># &lt;---- The new addition </span>
         <span class="n">fork_from_sequence_id</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># &lt;---- The new addition </span>
     <span class="p">)</span>
     <span class="c1"># add a hook to print the steps -- optional but shows that Burr is pluggable</span>
@@ -870,15 +871,15 @@ as well as pick up the prior conversation from where it left off.</p>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">forking_new_application</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Running RAG with loaded state:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">forking_new_application</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Ask something (or type exit to quit): &quot;</span><span class="p">)</span>
+    <span class="n">user_question</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Ask something (or type exit to quit): "</span><span class="p">)</span>
     <span class="n">previous_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">forking_new_application</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;human_converse&quot;</span><span class="p">],</span>
-        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">],</span>
-        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_question&quot;</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
+        <span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_converse"</span><span class="p">],</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"terminal"</span><span class="p">],</span>
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_question"</span><span class="p">:</span> <span class="n">user_question</span><span class="p">},</span>
     <span class="p">)</span>
-    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;terminal&quot;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">previous_action</span> <span class="ow">and</span> <span class="n">previous_action</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"terminal"</span><span class="p">:</span>
         <span class="c1"># reached the end</span>
         <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="k">break</span>
@@ -891,7 +892,7 @@ as well as pick up the prior conversation from where it left off.</p>
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># this should print some warnings:</span>
 <span class="n">new_app_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
 
-<span class="n">project_name</span> <span class="o">=</span> <span class="s2">&quot;demo:conversational-rag&quot;</span>
+<span class="n">project_name</span> <span class="o">=</span> <span class="s2">"demo:conversational-rag"</span>
 <span class="c1"># we use the tracking client here to get the state of the application at a prior sequence_id</span>
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="n">project_name</span><span class="p">)</span>
 <span class="n">bad_fork</span> <span class="o">=</span> <span class="p">(</span>
@@ -901,22 +902,22 @@ as well as pick up the prior conversation from where it left off.</p>
         <span class="c1"># bind the vector store to the AI conversational step</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">vector_store</span><span class="o">=</span><span class="n">vector_store</span><span class="p">),</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># set the transitions between actions</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="c1"># add identifiers that will help track the application</span>
-    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">&quot;sample_user&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">new_app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="s2">"sample_user"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
         <span class="n">initializer</span><span class="o">=</span><span class="n">tracker</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="c1"># we want to always start at human_converse; our entrypoint</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span>
-        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can&#39;t find the prior state</span>
-        <span class="n">fork_from_app_id</span><span class="o">=</span><span class="s2">&quot;NO_SUCH_APP_ID&quot;</span><span class="p">,</span> <span class="c1"># &lt;---- The new addition </span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_converse"</span><span class="p">,</span>
+        <span class="n">default_state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span> <span class="c1"># set some default state incase we can't find the prior state</span>
+        <span class="n">fork_from_app_id</span><span class="o">=</span><span class="s2">"NO_SUCH_APP_ID"</span><span class="p">,</span> <span class="c1"># &lt;---- The new addition </span>
     <span class="p">)</span>
     <span class="c1"># add a hook to print the steps -- optional but shows that Burr is pluggable</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">PrintStepHook</span><span class="p">())</span>

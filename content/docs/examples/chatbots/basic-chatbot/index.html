@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,14 +419,14 @@ s=d.getElementsByTagName('script')[0];
 <span class="c1"># distributed with this work for additional information</span>
 <span class="c1"># regarding copyright ownership.  The ASF licenses this file</span>
 <span class="c1"># to you under the Apache License, Version 2.0 (the</span>
-<span class="c1"># &quot;License&quot;); you may not use this file except in compliance</span>
+<span class="c1"># "License"); you may not use this file except in compliance</span>
 <span class="c1"># with the License.  You may obtain a copy of the License at</span>
 <span class="c1">#</span>
 <span class="c1">#   http://www.apache.org/licenses/LICENSE-2.0</span>
 <span class="c1">#</span>
 <span class="c1"># Unless required by applicable law or agreed to in writing,</span>
 <span class="c1"># software distributed under the License is distributed on an</span>
-<span class="c1"># &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
+<span class="c1"># "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
 <span class="c1"># KIND, either express or implied.  See the License for the</span>
 <span class="c1"># specific language governing permissions and limitations</span>
 <span class="c1"># under the License.</span>
@@ -460,42 +461,42 @@ s=d.getElementsByTagName('script')[0];
 <p>While this is just a pass-through to OpenAI (and is thus a little pointless) – its a start. We’ll be adding more later.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">human_input</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Pulls human input from the outside world and massages it into a standard chat format.</span>
-<span class="sd">    Note we&#39;re adding it into the chat history (with an `append` operation). This </span>
+<span class="w">    </span><span class="sd">"""Pulls human input from the outside world and massages it into a standard chat format.</span>
+<span class="sd">    Note we're adding it into the chat history (with an `append` operation). This </span>
 <span class="sd">    is just for convenience of reference -- we could easily just store the chat history</span>
 <span class="sd">    and access it.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span>
     <span class="p">}</span>
     <span class="c1"># return the prompt as the result</span>
     <span class="c1"># put the prompt in state and update the chat_history</span>
     <span class="k">return</span> <span class="p">(</span>
-        <span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">},</span> 
+        <span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">},</span> 
         <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
     <span class="p">)</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ai_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Queries OpenAI with the chat. You could easily use langchain, etc... to handle this,</span>
-<span class="sd">    but we wanted to keep it simple to demonstrate&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Queries OpenAI with the chat. You could easily use langchain, etc... to handle this,</span>
+<span class="sd">    but we wanted to keep it simple to demonstrate"""</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Client</span><span class="p">()</span>  <span class="c1"># replace with your favorite LLM client library</span>
     <span class="n">content</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-        <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo&quot;</span><span class="p">,</span>
-        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+        <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-3.5-turbo"</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span>
     <span class="p">)</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span>
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span>
     <span class="p">}</span>
     <span class="c1"># return the response as the result</span>
     <span class="c1"># put the response in state and update the chat history</span>
     <span class="k">return</span> <span class="p">(</span>
-        <span class="p">{</span><span class="s2">&quot;response&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">},</span>     
+        <span class="p">{</span><span class="s2">"response"</span><span class="p">:</span> <span class="n">content</span><span class="p">},</span>     
         <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">response</span><span class="o">=</span><span class="n">content</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
     <span class="p">)</span>
 </pre></div>
@@ -515,13 +516,13 @@ will pause (move from the application to the caller) after every <code class="do
         <span class="n">human_input</span><span class="o">=</span><span class="n">human_input</span><span class="p">,</span>
         <span class="n">ai_response</span><span class="o">=</span><span class="n">ai_response</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
-<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">&quot;digraph_initial&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">"digraph_initial"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -534,10 +535,10 @@ It returns the action it ran, the result it got, and the state. We use te state 
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">final_action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> 
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span> <span class="p">:</span> <span class="s2">&quot;Who was Aaron Burr?&quot;</span><span class="p">}</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">],</span> 
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span> <span class="p">:</span> <span class="s2">"Who was Aaron Burr?"</span><span class="p">}</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;response&#39;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">'response'</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -550,22 +551,22 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <p>Then, we’re going to add a “conditional” transition, allowing us to respond differently depending on the value of <code class="docutils literal notranslate"><span class="pre">safe</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;safe&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"safe"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">safety_check</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-    <span class="n">safe</span> <span class="o">=</span> <span class="s2">&quot;unsafe&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;safe&quot;</span><span class="p">:</span> <span class="n">safe</span><span class="p">},</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="n">safe</span><span class="p">)</span>
+    <span class="n">safe</span> <span class="o">=</span> <span class="s2">"unsafe"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"safe"</span><span class="p">:</span> <span class="n">safe</span><span class="p">},</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="n">safe</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">unsafe_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-    <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;I&#39;m sorry, my overlords have forbidden me to respond.&quot;</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="s2">"I'm sorry, my overlords have forbidden me to respond."</span>
     <span class="n">new_state</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">state</span>
         <span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">response</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
         <span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">chat_history</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span> <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">})</span>
+            <span class="n">chat_history</span><span class="o">=</span><span class="p">{</span><span class="s2">"content"</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span> <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">})</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;response&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">},</span> <span class="n">new_state</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"response"</span><span class="p">:</span> <span class="n">content</span><span class="p">},</span> <span class="n">new_state</span>
 </pre></div>
 </div>
 </div>
@@ -579,15 +580,15 @@ We’re going to add one step that checks for safety, and another that drafts a 
         <span class="n">safety_check</span><span class="o">=</span><span class="n">safety_check</span><span class="p">,</span>
         <span class="n">unsafe_response</span><span class="o">=</span><span class="n">unsafe_response</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;safety_check&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
-        <span class="p">([</span><span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> <span class="s2">&quot;human_input&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"safety_check"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+        <span class="p">([</span><span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">],</span> <span class="s2">"human_input"</span><span class="p">),</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
-<span class="n">safe_app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">&quot;digraph_safe&quot;</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">safe_app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">"digraph_safe"</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -595,10 +596,10 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">safe_app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">],</span> 
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;Who was Aaron Burr, sir (unsafe)?&quot;</span><span class="p">}</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">],</span> 
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"Who was Aaron Burr, sir (unsafe)?"</span><span class="p">}</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
@@ -616,14 +617,14 @@ We’re going to add one step that checks for safety, and another that drafts a 
         <span class="n">safety_check</span><span class="o">=</span><span class="n">safety_check</span><span class="p">,</span>
         <span class="n">unsafe_response</span><span class="o">=</span><span class="n">unsafe_response</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;safety_check&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
-        <span class="p">([</span><span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> <span class="s2">&quot;human_input&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"safety_check"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+        <span class="p">([</span><span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">],</span> <span class="s2">"human_input"</span><span class="p">),</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span>
-        <span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">&quot;demo_getting_started&quot;</span>
+        <span class="s2">"local"</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">"demo_getting_started"</span>
     <span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 </pre></div>
@@ -640,16 +641,16 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">prompt</span> <span class="ow">in</span> <span class="p">[</span>
-    <span class="s2">&quot;Who was Aaron Burr, sir?&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Who was Aaron Burr, sir (unsafe)?&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;If you had ml/ai libraries called &#39;Hamilton&#39; and &#39;Burr&#39;, what would they do?&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Who was Aaron Burr, sir?&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Who was Aaron Burr, sir (unsafe)?&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;If you had ml/ai libraries called &#39;Hamilton&#39; and &#39;Burr&#39;, what would they do?&quot;</span><span class="p">,</span>
+    <span class="s2">"Who was Aaron Burr, sir?"</span><span class="p">,</span>
+    <span class="s2">"Who was Aaron Burr, sir (unsafe)?"</span><span class="p">,</span>
+    <span class="s2">"If you had ml/ai libraries called 'Hamilton' and 'Burr', what would they do?"</span><span class="p">,</span>
+    <span class="s2">"Who was Aaron Burr, sir?"</span><span class="p">,</span>
+    <span class="s2">"Who was Aaron Burr, sir (unsafe)?"</span><span class="p">,</span>
+    <span class="s2">"If you had ml/ai libraries called 'Hamilton' and 'Burr', what would they do?"</span><span class="p">,</span>
 <span class="p">]:</span>
     <span class="n">action_we_ran</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app_with_tracker</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">],</span> 
-        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
+        <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">],</span> 
+        <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
     <span class="p">)</span>
 </pre></div>
 </div>
@@ -663,7 +664,7 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">Markdown</span>
-<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;[Link to UI](http://localhost:7241/project/demo_getting_started/</span><span class="si">{</span><span class="n">app_with_tracker</span><span class="o">.</span><span class="n">uid</span><span class="si">}</span><span class="s2">)&quot;</span>
+<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"[Link to UI](http://localhost:7241/project/demo_getting_started/</span><span class="si">{</span><span class="n">app_with_tracker</span><span class="o">.</span><span class="n">uid</span><span class="si">}</span><span class="s2">)"</span>
 <span class="n">Markdown</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -677,8 +678,8 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <span class="n">get_ipython</span><span class="p">()</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">system</span>
 <span class="o">!</span>burr<span class="w"> </span>--no-open<span class="w"> </span>&gt;<span class="w"> </span>/dev/null<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">&amp;</span>
 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="c1"># quick trick to wait for the server to start</span>
-<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;http://localhost:7241/project/demo_getting_started/</span><span class="si">{</span><span class="n">app_with_tracker</span><span class="o">.</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span>
-<span class="n">iframe</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;&lt;iframe src=&quot;</span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s1">&quot; width=&quot;100%&quot; height=&quot;1000px&quot;&gt;&lt;/iframe&gt;&#39;</span>
+<span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"http://localhost:7241/project/demo_getting_started/</span><span class="si">{</span><span class="n">app_with_tracker</span><span class="o">.</span><span class="n">uid</span><span class="si">}</span><span class="s2">"</span>
+<span class="n">iframe</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">'&lt;iframe src="</span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s1">" width="100%" height="1000px"&gt;&lt;/iframe&gt;'</span>
 <span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="n">iframe</span><span class="p">))</span>
 </pre></div>
 </div>
@@ -697,17 +698,17 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <p>More about persistence <a class="reference external" href="https://burr.apache.org/concepts/state-persistence/">here</a>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">app_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;unique_app_id_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span> <span class="c1"># unique app ID -- we create it here but this will be generated for you</span>
-<span class="n">partition_key</span> <span class="o">=</span> <span class="s2">&quot;new_burr_user&quot;</span> <span class="c1"># this can be anything. In a chatbot it will </span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">app_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"unique_app_id_</span><span class="si">{</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span> <span class="c1"># unique app ID -- we create it here but this will be generated for you</span>
+<span class="n">partition_key</span> <span class="o">=</span> <span class="s2">"new_burr_user"</span> <span class="c1"># this can be anything. In a chatbot it will </span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># we&#39;re going to be creating this multiple times to demonstrate so let&#39;s stick it in a function</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># we're going to be creating this multiple times to demonstrate so let's stick it in a function</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_persistable_app</span><span class="p">():</span>
-    <span class="n">sqllite_persister</span> <span class="o">=</span> <span class="n">persistence</span><span class="o">.</span><span class="n">SQLLitePersister</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;./sqlite.db&quot;</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span><span class="p">)</span>
+    <span class="n">sqllite_persister</span> <span class="o">=</span> <span class="n">persistence</span><span class="o">.</span><span class="n">SQLLitePersister</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">"./sqlite.db"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span><span class="p">)</span>
     <span class="n">sqllite_persister</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
     <span class="k">return</span> <span class="p">(</span>
         <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
@@ -716,19 +717,19 @@ We’re going to add one step that checks for safety, and another that drafts a 
             <span class="n">safety_check</span><span class="o">=</span><span class="n">safety_check</span><span class="p">,</span>
             <span class="n">unsafe_response</span><span class="o">=</span><span class="n">unsafe_response</span>
         <span class="p">)</span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;safety_check&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
-            <span class="p">(</span><span class="s2">&quot;safety_check&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
-            <span class="p">([</span><span class="s2">&quot;unsafe_response&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> <span class="s2">&quot;human_input&quot;</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"safety_check"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"safety_check"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">safe</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+            <span class="p">([</span><span class="s2">"unsafe_response"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">],</span> <span class="s2">"human_input"</span><span class="p">),</span>
         <span class="p">)</span><span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
             <span class="n">initializer</span><span class="o">=</span><span class="n">sqllite_persister</span><span class="p">,</span>
             <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;chat_history&quot;</span><span class="p">:</span> <span class="p">[]},</span>
-            <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_input&quot;</span>
+            <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">"chat_history"</span><span class="p">:</span> <span class="p">[]},</span>
+            <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_input"</span>
         <span class="p">)</span><span class="o">.</span><span class="n">with_state_persister</span><span class="p">(</span><span class="n">sqllite_persister</span><span class="p">)</span>
         <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">,</span> <span class="n">partition_key</span><span class="o">=</span><span class="n">partition_key</span><span class="p">)</span>
         <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span>
-            <span class="s2">&quot;local&quot;</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">&quot;demo_getting_started&quot;</span>
+            <span class="s2">"local"</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">"demo_getting_started"</span>
         <span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
     <span class="p">)</span>
 </pre></div>
@@ -739,11 +740,11 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">app_initial</span> <span class="o">=</span> <span class="n">create_persistable_app</span><span class="p">()</span>
 <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app_initial</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">],</span> 
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;Who was Aaron Burr, sir?&quot;</span><span class="p">}</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">],</span> 
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"Who was Aaron Burr, sir?"</span><span class="p">}</span>
 <span class="p">)</span>
-<span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;chat_history&#39;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;role&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s1">'chat_history'</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">'role'</span><span class="p">]</span> <span class="o">+</span> <span class="s1">':'</span> <span class="o">+</span> <span class="n">item</span><span class="p">[</span><span class="s1">'content'</span><span class="p">]</span> <span class="o">+</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -754,11 +755,11 @@ We’re going to add one step that checks for safety, and another that drafts a 
 <span class="n">app_reloaded</span> <span class="o">=</span> <span class="n">create_persistable_app</span><span class="p">()</span>
 
 <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app_reloaded</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;unsafe_response&quot;</span><span class="p">],</span> 
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;Who was Alexander Hamilton?&quot;</span><span class="p">}</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"unsafe_response"</span><span class="p">],</span> 
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"Who was Alexander Hamilton?"</span><span class="p">}</span>
 <span class="p">)</span>
-<span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s1">&#39;chat_history&#39;</span><span class="p">]:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;role&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;:&#39;</span> <span class="o">+</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s1">'chat_history'</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">'role'</span><span class="p">]</span> <span class="o">+</span> <span class="s1">':'</span> <span class="o">+</span> <span class="n">item</span><span class="p">[</span><span class="s1">'content'</span><span class="p">]</span> <span class="o">+</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

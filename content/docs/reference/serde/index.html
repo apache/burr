@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -428,11 +429,11 @@ but based on a string key value.</p>
 <p>Example usage:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">serde</span>
 
-<span class="nd">@serde</span><span class="o">.</span><span class="n">deserializer</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;pickle&quot;</span><span class="p">)</span>
+<span class="nd">@serde</span><span class="o">.</span><span class="n">deserializer</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"pickle"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">deserialize_pickle</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">pickle_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="bp">cls</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">pickle_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">pickle_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">pickle_kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">],</span> <span class="o">**</span><span class="n">pickle_kwargs</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>What this does is register the function <cite>deserialize_pickle</cite> with the key “pickle”.

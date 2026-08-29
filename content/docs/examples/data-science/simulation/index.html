@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -468,15 +469,15 @@ actions, or an action that loops over all “users”. We are still figuring out
 </section>
 <section id="code-example">
 <h2>Code example<a class="headerlink" href="#code-example" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
 <span class="sd">This module contains a stubbed out structure for one way of doing a simulation</span>
 <span class="sd"> for forecasting purposes.</span>
 
 <span class="sd">For more sophisticated forecasts where prediction of one timestep</span>
 <span class="sd">depends on the previous timestep, you need to forecast on a per-step basis. So</span>
-<span class="sd">you&#39;re effectively simulating the future at each step. This is a simple example of</span>
+<span class="sd">you're effectively simulating the future at each step. This is a simple example of</span>
 <span class="sd">how you might structure such a simulation.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tuple</span>
 
@@ -484,42 +485,42 @@ actions, or an action that loops over all “users”. We are still figuring out
 <span class="kn">from</span><span class="w"> </span><span class="nn">burr.core.action</span><span class="w"> </span><span class="kn">import</span> <span class="n">action</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data_path&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"data_path"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">prepare_data</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This would pull the data, prepare it, and return it.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This would pull the data, prepare it, and return it."""</span>
     <span class="c1"># pull data, prepare as necessary</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">_process_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;data_path&quot;</span><span class="p">])}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"data"</span><span class="p">:</span> <span class="n">_process_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"data_path"</span><span class="p">])}</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">,</span> <span class="s2">&quot;simulation_start&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">,</span> <span class="s2">"simulation_start"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"model"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_model</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This would fit the model on data before the simulation start date.&quot;&quot;&quot;</span>
-    <span class="n">training_data</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-    <span class="n">model</span> <span class="o">=</span> <span class="n">_fit_model</span><span class="p">(</span><span class="n">training_data</span><span class="p">,</span> <span class="n">upto</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;simulation_start&quot;</span><span class="p">])</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="n">model</span><span class="p">}</span>
+<span class="w">    </span><span class="sd">"""This would fit the model on data before the simulation start date."""</span>
+    <span class="n">training_data</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">_fit_model</span><span class="p">(</span><span class="n">training_data</span><span class="p">,</span> <span class="n">upto</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"simulation_start"</span><span class="p">])</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="n">model</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 
 <span class="nd">@action</span><span class="p">(</span>
-    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;simulation_start&quot;</span><span class="p">,</span> <span class="s2">&quot;simulation_end&quot;</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;data&quot;</span><span class="p">,</span> <span class="s2">&quot;current_timestep&quot;</span><span class="p">],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"simulation_start"</span><span class="p">,</span> <span class="s2">"simulation_end"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">,</span> <span class="s2">"data"</span><span class="p">,</span> <span class="s2">"current_timestep"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">forecast</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This action forecasts the next timestep in the simulation and appends it to data.&quot;&quot;&quot;</span>
-    <span class="n">model</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">]</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-    <span class="n">start_time</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;simulation_start&quot;</span><span class="p">]</span>
-    <span class="n">current_time_step</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;current_timestep&quot;</span><span class="p">,</span> <span class="n">start_time</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">"""This action forecasts the next timestep in the simulation and appends it to data."""</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"model"</span><span class="p">]</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]</span>
+    <span class="n">start_time</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"simulation_start"</span><span class="p">]</span>
+    <span class="n">current_time_step</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"current_timestep"</span><span class="p">,</span> <span class="n">start_time</span><span class="p">)</span>
     <span class="n">next_timestep</span> <span class="o">=</span> <span class="n">_forecast_timestep</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">current_time_step</span><span class="p">)</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">_update_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">next_timestep</span><span class="p">)</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span> <span class="s2">&quot;current_timestep&quot;</span><span class="p">:</span> <span class="n">next_timestep</span><span class="p">}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"data"</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span> <span class="s2">"current_timestep"</span><span class="p">:</span> <span class="n">next_timestep</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is a terminal step that would save the forecast or do something else.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This is a terminal step that would save the forecast or do something else."""</span>
     <span class="k">return</span> <span class="p">{},</span> <span class="n">state</span>
 
 
@@ -528,17 +529,17 @@ actions, or an action that loops over all “users”. We are still figuring out
         <span class="n">ApplicationBuilder</span><span class="p">()</span>
         <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">prepare_data</span><span class="p">,</span> <span class="n">build_model</span><span class="p">,</span> <span class="n">forecast</span><span class="p">,</span> <span class="n">terminate</span><span class="p">)</span>
         <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;prepare_data&quot;</span><span class="p">,</span> <span class="s2">&quot;build_model&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;build_model&quot;</span><span class="p">,</span> <span class="s2">&quot;forecast&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;forecast&quot;</span><span class="p">,</span> <span class="s2">&quot;forecast&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;current_timestep&lt;simulation_end&quot;</span><span class="p">)),</span>
-            <span class="p">(</span><span class="s2">&quot;forecast&quot;</span><span class="p">,</span> <span class="s2">&quot;terminate&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;current_timestep&gt;=simulation_end&quot;</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"prepare_data"</span><span class="p">,</span> <span class="s2">"build_model"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"build_model"</span><span class="p">,</span> <span class="s2">"forecast"</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"forecast"</span><span class="p">,</span> <span class="s2">"forecast"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"current_timestep&lt;simulation_end"</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"forecast"</span><span class="p">,</span> <span class="s2">"terminate"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"current_timestep&gt;=simulation_end"</span><span class="p">)),</span>
         <span class="p">)</span>
         <span class="o">.</span><span class="n">with_state</span><span class="p">(</span>
-            <span class="n">data_path</span><span class="o">=</span><span class="s2">&quot;SOME_PATH&quot;</span><span class="p">,</span>
-            <span class="n">simulation_start</span><span class="o">=</span><span class="s2">&quot;some-value&quot;</span><span class="p">,</span>
-            <span class="n">simulation_end</span><span class="o">=</span><span class="s2">&quot;some-end-value&quot;</span><span class="p">,</span>
+            <span class="n">data_path</span><span class="o">=</span><span class="s2">"SOME_PATH"</span><span class="p">,</span>
+            <span class="n">simulation_start</span><span class="o">=</span><span class="s2">"some-value"</span><span class="p">,</span>
+            <span class="n">simulation_end</span><span class="o">=</span><span class="s2">"some-end-value"</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;prepare_data&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"prepare_data"</span><span class="p">)</span>
         <span class="o">.</span><span class="n">build</span><span class="p">()</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">app</span>
@@ -546,32 +547,32 @@ actions, or an action that loops over all “users”. We are still figuring out
 
 <span class="c1"># --- stubbed out functions to fill out for the simulation</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_process_data</span><span class="p">(</span><span class="n">data_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This function would read and process data from a file.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This function would read and process data from a file."""</span>
     <span class="k">return</span> <span class="p">{}</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_fit_model</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">upto</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This function would fit a model on data upto a certain date.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This function would fit a model on data upto a certain date."""</span>
     <span class="k">return</span> <span class="p">{}</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_forecast_timestep</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">current_timestep</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This function would forecast the next timestep in the simulation given the model and data.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This function would forecast the next timestep in the simulation given the model and data."""</span>
     <span class="k">return</span> <span class="p">{}</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_update_data</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">next_timestep</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This function would update the data with the forecasted timestep.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""This function would update the data with the forecasted timestep."""</span>
     <span class="k">return</span> <span class="p">{}</span>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="n">_app</span> <span class="o">=</span> <span class="n">application</span><span class="p">()</span>
     <span class="n">_app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span>
-        <span class="n">output_file_path</span><span class="o">=</span><span class="s2">&quot;statemachine&quot;</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span>
+        <span class="n">output_file_path</span><span class="o">=</span><span class="s2">"statemachine"</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span>
     <span class="p">)</span>
     <span class="c1"># you could run things like this:</span>
-    <span class="c1"># last_action, result, state = _app.run(halt_after=[&quot;terminate&quot;])</span>
+    <span class="c1"># last_action, result, state = _app.run(halt_after=["terminate"])</span>
 
 </pre></div>
 </div>

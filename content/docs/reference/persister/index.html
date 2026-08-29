@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -1075,8 +1076,8 @@ before the action was applied.</p></li>
 </pre></div>
 </div>
 <p>Then you should be able to create the class like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">p</span> <span class="o">=</span> <span class="n">PostgreSQLPersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="s2">&quot;postgres&quot;</span><span class="p">,</span> <span class="s2">&quot;postgres&quot;</span><span class="p">,</span> <span class="s2">&quot;my_password&quot;</span><span class="p">,</span>
-                                   <span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="mi">54320</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">p</span> <span class="o">=</span> <span class="n">PostgreSQLPersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="s2">"postgres"</span><span class="p">,</span> <span class="s2">"postgres"</span><span class="p">,</span> <span class="s2">"my_password"</span><span class="p">,</span>
+                                   <span class="s2">"localhost"</span><span class="p">,</span> <span class="mi">54320</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -1398,18 +1399,18 @@ so this is an attempt to fix that in a backwards compatible way.</p>
 <span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_pymongo.MongoDBBasePersister" title="Link to this definition">¶</a></dt>
 <dd><p>A class used to represent a MongoDB Persister.</p>
 <p>Example usage:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">persister</span> <span class="o">=</span> <span class="n">MongoDBBasePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s1">&#39;mongodb://user:pass@localhost:27017&#39;</span><span class="p">,</span>
-                                             <span class="n">db_name</span><span class="o">=</span><span class="s1">&#39;mydatabase&#39;</span><span class="p">,</span>
-                                             <span class="n">collection_name</span><span class="o">=</span><span class="s1">&#39;mystates&#39;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">persister</span> <span class="o">=</span> <span class="n">MongoDBBasePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s1">'mongodb://user:pass@localhost:27017'</span><span class="p">,</span>
+                                             <span class="n">db_name</span><span class="o">=</span><span class="s1">'mydatabase'</span><span class="p">,</span>
+                                             <span class="n">collection_name</span><span class="o">=</span><span class="s1">'mystates'</span><span class="p">)</span>
 <span class="n">persister</span><span class="o">.</span><span class="n">save</span><span class="p">(</span>
-    <span class="n">partition_key</span><span class="o">=</span><span class="s1">&#39;example_partition&#39;</span><span class="p">,</span>
-    <span class="n">app_id</span><span class="o">=</span><span class="s1">&#39;example_app&#39;</span><span class="p">,</span>
+    <span class="n">partition_key</span><span class="o">=</span><span class="s1">'example_partition'</span><span class="p">,</span>
+    <span class="n">app_id</span><span class="o">=</span><span class="s1">'example_app'</span><span class="p">,</span>
     <span class="n">sequence_id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">position</span><span class="o">=</span><span class="s1">&#39;example_position&#39;</span><span class="p">,</span>
-    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">State</span><span class="p">({</span><span class="s1">&#39;key&#39;</span><span class="p">:</span> <span class="s1">&#39;value&#39;</span><span class="p">}),</span>
-    <span class="n">status</span><span class="o">=</span><span class="s1">&#39;completed&#39;</span>
+    <span class="n">position</span><span class="o">=</span><span class="s1">'example_position'</span><span class="p">,</span>
+    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">State</span><span class="p">({</span><span class="s1">'key'</span><span class="p">:</span> <span class="s1">'value'</span><span class="p">}),</span>
+    <span class="n">status</span><span class="o">=</span><span class="s1">'completed'</span>
 <span class="p">)</span>
-<span class="n">loaded_state</span> <span class="o">=</span> <span class="n">persister</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">partition_key</span><span class="o">=</span><span class="s1">&#39;example_partition&#39;</span><span class="p">,</span> <span class="n">app_id</span><span class="o">=</span><span class="s1">&#39;example_app&#39;</span><span class="p">,</span> <span class="n">sequence_id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">loaded_state</span> <span class="o">=</span> <span class="n">persister</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">partition_key</span><span class="o">=</span><span class="s1">'example_partition'</span><span class="p">,</span> <span class="n">app_id</span><span class="o">=</span><span class="s1">'example_app'</span><span class="p">,</span> <span class="n">sequence_id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">loaded_state</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -1658,9 +1659,9 @@ connect_kwargs: dict,</p>
 <span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_AsyncPersisterContextManager</span></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aiosqlite.AsyncSQLitePersister.from_values" title="Link to this definition">¶</a></dt>
 <dd><p>Creates a new instance of the AsyncSQLitePersister from passed in values.</p>
 <p>Can be used with <code class="docutils literal notranslate"><span class="pre">await</span></code> or as an async context manager:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">persister</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncSQLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;test.db&quot;</span><span class="p">)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">persister</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncSQLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">"test.db"</span><span class="p">)</span>
 <span class="c1"># or</span>
-<span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSQLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;test.db&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">persister</span><span class="p">:</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSQLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">"test.db"</span><span class="p">)</span> <span class="k">as</span> <span class="n">persister</span><span class="p">:</span>
     <span class="o">...</span>
 </pre></div>
 </div>
@@ -1817,8 +1818,8 @@ explaining why a new implementation, performance review and comparison to aiopg 
 </pre></div>
 </div>
 <p>Then you should be able to create the class like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">p</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncPostgreSQLPersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="s2">&quot;postgres&quot;</span><span class="p">,</span> <span class="s2">&quot;postgres&quot;</span><span class="p">,</span> <span class="s2">&quot;my_password&quot;</span><span class="p">,</span>
-                                   <span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="mi">54320</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">p</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncPostgreSQLPersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="s2">"postgres"</span><span class="p">,</span> <span class="s2">"postgres"</span><span class="p">,</span> <span class="s2">"my_password"</span><span class="p">,</span>
+                                   <span class="s2">"localhost"</span><span class="p">,</span> <span class="mi">54320</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">

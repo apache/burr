@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -461,9 +462,9 @@ useful for debugging, because you can quickly recreate the issue by running the 
 
 <span class="n">prior_app_id</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># some value</span>
 <span class="n">sequence_id</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># None or some prior step</span>
-<span class="n">partition_key</span> <span class="o">=</span> <span class="s2">&quot;SOME_VALUE&quot;</span> <span class="c1"># use None if not using a partition key</span>
+<span class="n">partition_key</span> <span class="o">=</span> <span class="s2">"SOME_VALUE"</span> <span class="c1"># use None if not using a partition key</span>
 
-<span class="n">project_name</span> <span class="o">=</span> <span class="s2">&quot;PROJECT_NAME&quot;</span>
+<span class="n">project_name</span> <span class="o">=</span> <span class="s2">"PROJECT_NAME"</span>
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">LocalTrackingClient</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="n">project_name</span><span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
@@ -472,7 +473,7 @@ useful for debugging, because you can quickly recreate the issue by running the 
         <span class="n">tracker</span><span class="p">,</span> <span class="c1"># local tracker above</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">default_state</span><span class="o">=</span><span class="p">{},</span> <span class="c1"># your default state</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;SOME_DEFAULT&quot;</span><span class="p">,</span> <span class="c1"># your default entry point</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"SOME_DEFAULT"</span><span class="p">,</span> <span class="c1"># your default entry point</span>
         <span class="n">fork_from_app_id</span><span class="o">=</span><span class="n">prior_app_id</span><span class="p">,</span>
         <span class="n">fork_from_sequence_id</span><span class="o">=</span><span class="n">sequence_id</span><span class="p">,</span>
         <span class="n">fork_from_partition_key</span><span class="o">=</span><span class="n">partition_key</span>
@@ -500,7 +501,7 @@ This will print the URL to access the Burr UI web app.</p>
 <span class="o">%</span><span class="n">load_ext</span> <span class="n">burr</span><span class="o">.</span><span class="n">integrations</span><span class="o">.</span><span class="n">notebook</span>
 <span class="o">%</span><span class="n">burr_ui</span>
 
-<span class="s2">&quot;Burr UI: http://127.0.0.1:7241&quot;</span>
+<span class="s2">"Burr UI: http://127.0.0.1:7241"</span>
 </pre></div>
 </div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># But you need to expose the port to the browser:</span>
@@ -522,7 +523,7 @@ This will print the URL to access the Burr UI web app.</p>
 <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
 
 <span class="c1"># Mount Burr UI under /burr</span>
-<span class="n">mount_burr_ui</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/burr&quot;</span><span class="p">)</span>
+<span class="n">mount_burr_ui</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"/burr"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>This allows you to run the Burr tracking UI alongside your own FastAPI

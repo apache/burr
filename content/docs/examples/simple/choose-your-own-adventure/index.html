@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,14 +419,14 @@ s=d.getElementsByTagName('script')[0];
 <span class="c1"># distributed with this work for additional information</span>
 <span class="c1"># regarding copyright ownership.  The ASF licenses this file</span>
 <span class="c1"># to you under the Apache License, Version 2.0 (the</span>
-<span class="c1"># &quot;License&quot;); you may not use this file except in compliance</span>
+<span class="c1"># "License"); you may not use this file except in compliance</span>
 <span class="c1"># with the License.  You may obtain a copy of the License at</span>
 <span class="c1">#</span>
 <span class="c1">#   http://www.apache.org/licenses/LICENSE-2.0</span>
 <span class="c1">#</span>
 <span class="c1"># Unless required by applicable law or agreed to in writing,</span>
 <span class="c1"># software distributed under the License is distributed on an</span>
-<span class="c1"># &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
+<span class="c1"># "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
 <span class="c1"># KIND, either express or implied.  See the License for the</span>
 <span class="c1"># specific language governing permissions and limitations</span>
 <span class="c1"># under the License.</span>
@@ -453,18 +454,18 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># set your OpenAI API key to run the rest of the notebook</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;OPENAI_API_KEY&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span>
+<span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"OPENAI_API_KEY"</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span>
 </pre></div>
 </div>
 </div>
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">RESTRICTIONS</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;You&#39;re a small corgi with short legs. You can&#39;t jump high,</span>
-<span class="s2">you can&#39;t run fast, you can&#39;t perform feats of athleticism in general</span>
-<span class="s2">to achieve any of your goals. You can&#39;t open doors, you can&#39;t use tools,</span>
-<span class="s2">you can&#39;t communicate with humans, you can&#39;t use your paws to manipulate</span>
-<span class="s2">objects, you can&#39;t use your mouth to communicate with humans&quot;&quot;&quot;</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">RESTRICTIONS</span> <span class="o">=</span> <span class="s2">"""You're a small corgi with short legs. You can't jump high,</span>
+<span class="s2">you can't run fast, you can't perform feats of athleticism in general</span>
+<span class="s2">to achieve any of your goals. You can't open doors, you can't use tools,</span>
+<span class="s2">you can't communicate with humans, you can't use your paws to manipulate</span>
+<span class="s2">objects, you can't use your mouth to communicate with humans"""</span>
 </pre></div>
 </div>
 </div>
@@ -474,43 +475,43 @@ s=d.getElementsByTagName('script')[0];
 <h2>Define actions<a class="headerlink" href="#define-actions" title="Link to this heading">¶</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;challenges&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"challenges"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load the first challenge as the current challenge&quot;&quot;&quot;</span>
-    <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;challenges&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+<span class="w">    </span><span class="sd">"""Load the first challenge as the current challenge"""</span>
+    <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"challenges"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">current_challenge</span><span class="o">=</span><span class="n">current_challenge</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;attempts&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">prompt_for_challenge</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Request user input to solve the current challenge&quot;&quot;&quot;</span>
-    <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">]</span>
-    <span class="n">user_response</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">current_challenge</span><span class="si">}</span><span class="s1">. What do you do?</span><span class="se">\n</span><span class="s1"> $ &#39;</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">"""Request user input to solve the current challenge"""</span>
+    <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">]</span>
+    <span class="n">user_response</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">current_challenge</span><span class="si">}</span><span class="s1">. What do you do?</span><span class="se">\n</span><span class="s1"> $ '</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attempts</span><span class="o">=</span><span class="n">user_response</span><span class="p">)</span>
 
 
 <span class="nd">@action</span><span class="p">(</span>
-    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;attempts&quot;</span><span class="p">,</span> <span class="s2">&quot;current_challenge&quot;</span><span class="p">],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;challenge_solved&quot;</span><span class="p">,</span> <span class="s2">&quot;what_happened&quot;</span><span class="p">],</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">,</span> <span class="s2">"current_challenge"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"challenge_solved"</span><span class="p">,</span> <span class="s2">"what_happened"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_attempt</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="n">response</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-        <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span>
+        <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-4o-mini"</span><span class="p">,</span>
         <span class="n">messages</span><span class="o">=</span><span class="p">[</span>
             <span class="p">{</span>
-                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;You are evaluating responses for</span>
+                <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"system"</span><span class="p">,</span>
+                <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"""You are evaluating responses for</span>
 <span class="s2">             whether they constitute solutions to the provided challenge in a text</span>
 <span class="s2">             based game, whose protagonist is a dog subject to the following limitations:</span>
-<span class="s2">             </span><span class="si">{</span><span class="n">RESTRICTIONS</span><span class="si">}</span><span class="s2">. You respond ONLY with a json object containing two fields: &quot;solved&quot;, which is a</span>
-<span class="s2">             boolean indicating whether the challenge was solved by the attempt, and &quot;what_happened&quot;,</span>
+<span class="s2">             </span><span class="si">{</span><span class="n">RESTRICTIONS</span><span class="si">}</span><span class="s2">. You respond ONLY with a json object containing two fields: "solved", which is a</span>
+<span class="s2">             boolean indicating whether the challenge was solved by the attempt, and "what_happened",</span>
 <span class="s2">             which is a string containing a brief narrative, written in the second person and addressed</span>
-<span class="s2">             to the player, of what happened during the protagonist&#39;s attempt&quot;&quot;&quot;</span><span class="p">,</span>
+<span class="s2">             to the player, of what happened during the protagonist's attempt"""</span><span class="p">,</span>
             <span class="p">},</span>
             <span class="p">{</span>
-                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;The current challenge is: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;current_challenge&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;and the player&#39;s attempt is: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;attempts&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span>
+                <span class="s2">"content"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"The current challenge is: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">'current_challenge'</span><span class="p">]</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"and the player's attempt is: </span><span class="si">{</span><span class="n">state</span><span class="p">[</span><span class="s1">'attempts'</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">],</span>
     <span class="p">)</span>
@@ -518,40 +519,40 @@ s=d.getElementsByTagName('script')[0];
     <span class="k">try</span><span class="p">:</span>
         <span class="n">json_result</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
     <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;bad json: &quot;</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"bad json: "</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
         <span class="n">json_result</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;solved&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-            <span class="s2">&quot;what_happened&quot;</span><span class="p">:</span> <span class="s2">&quot;Not sure, really. I&#39;m a dog. I can&#39;t read json. I can&#39;t read at all.&quot;</span><span class="p">,</span>
+            <span class="s2">"solved"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"what_happened"</span><span class="p">:</span> <span class="s2">"Not sure, really. I'm a dog. I can't read json. I can't read at all."</span><span class="p">,</span>
         <span class="p">}</span>
 
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-        <span class="n">challenge_solved</span><span class="o">=</span><span class="n">json_result</span><span class="p">[</span><span class="s2">&quot;solved&quot;</span><span class="p">],</span>
-        <span class="n">what_happened</span><span class="o">=</span><span class="n">json_result</span><span class="p">[</span><span class="s2">&quot;what_happened&quot;</span><span class="p">],</span>
+        <span class="n">challenge_solved</span><span class="o">=</span><span class="n">json_result</span><span class="p">[</span><span class="s2">"solved"</span><span class="p">],</span>
+        <span class="n">what_happened</span><span class="o">=</span><span class="n">json_result</span><span class="p">[</span><span class="s2">"what_happened"</span><span class="p">],</span>
     <span class="p">)</span>
 
 
 <span class="nd">@action</span><span class="p">(</span>
-    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;challenge_solved&quot;</span><span class="p">,</span> <span class="s2">&quot;current_challenge&quot;</span><span class="p">,</span> <span class="s2">&quot;what_happened&quot;</span><span class="p">],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">,</span> <span class="s2">&quot;did_win&quot;</span><span class="p">],</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"challenge_solved"</span><span class="p">,</span> <span class="s2">"current_challenge"</span><span class="p">,</span> <span class="s2">"what_happened"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">,</span> <span class="s2">"did_win"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">maybe_progress</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;What happened:&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;what_happened&quot;</span><span class="p">])</span>
-    <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;challenge_solved&quot;</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">challenges</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;did_win&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"What happened:"</span><span class="p">,</span> <span class="n">state</span><span class="p">[</span><span class="s2">"what_happened"</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">"challenge_solved"</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">]</span> <span class="o">==</span> <span class="n">challenges</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"did_win"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;current_challenge&quot;</span><span class="p">:</span> <span class="n">challenges</span><span class="p">[</span><span class="n">challenges</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+                <span class="s2">"current_challenge"</span><span class="p">:</span> <span class="n">challenges</span><span class="p">[</span><span class="n">challenges</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
             <span class="p">}</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">]}</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"current_challenge"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">]}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;challenges&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"challenges"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">win</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="c1"># get summary of actions taken from openai</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;you won&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"you won"</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">state</span>
 </pre></div>
 </div>
@@ -560,9 +561,9 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">challenges</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;There is a dish of dog food on the floor. You want to eat it&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;There is a dish of dog food on a table. You want to eat it&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;There is a dish of dog food in a locked car. You want to eat it&quot;</span><span class="p">,</span>
+    <span class="s2">"There is a dish of dog food on the floor. You want to eat it"</span><span class="p">,</span>
+    <span class="s2">"There is a dish of dog food on a table. You want to eat it"</span><span class="p">,</span>
+    <span class="s2">"There is a dish of dog food in a locked car. You want to eat it"</span><span class="p">,</span>
 <span class="p">]</span>
 </pre></div>
 </div>
@@ -572,7 +573,7 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">build_application</span><span class="p">(</span>
     <span class="n">app_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">storage_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;~/.burr&quot;</span><span class="p">,</span>
+    <span class="n">storage_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"~/.burr"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Application</span><span class="p">:</span>
     <span class="k">return</span> <span class="p">(</span>
         <span class="n">ApplicationBuilder</span><span class="p">()</span>
@@ -585,20 +586,20 @@ s=d.getElementsByTagName('script')[0];
             <span class="n">win</span><span class="o">=</span><span class="n">win</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt_for_challenge&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;prompt_for_challenge&quot;</span><span class="p">,</span> <span class="s2">&quot;evaluate_attempt&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;evaluate_attempt&quot;</span><span class="p">,</span> <span class="s2">&quot;maybe_progress&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;maybe_progress&quot;</span><span class="p">,</span> <span class="s2">&quot;win&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">did_win</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
-            <span class="p">(</span><span class="s2">&quot;maybe_progress&quot;</span><span class="p">,</span> <span class="s2">&quot;prompt_for_challenge&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"start"</span><span class="p">,</span> <span class="s2">"prompt_for_challenge"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"prompt_for_challenge"</span><span class="p">,</span> <span class="s2">"evaluate_attempt"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"evaluate_attempt"</span><span class="p">,</span> <span class="s2">"maybe_progress"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"maybe_progress"</span><span class="p">,</span> <span class="s2">"win"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">did_win</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"maybe_progress"</span><span class="p">,</span> <span class="s2">"prompt_for_challenge"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;start&quot;</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;demo_corgi_adventure&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;storage_dir&quot;</span><span class="p">:</span> <span class="n">storage_dir</span><span class="p">})</span>
+        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"start"</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">"demo_corgi_adventure"</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">"storage_dir"</span><span class="p">:</span> <span class="n">storage_dir</span><span class="p">})</span>
         <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">)</span>
         <span class="o">.</span><span class="n">build</span><span class="p">()</span>
     <span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">build_application</span><span class="p">()</span>
-<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">&quot;digraph&quot;</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">"digraph"</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -608,21 +609,21 @@ s=d.getElementsByTagName('script')[0];
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">result</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;win&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">result</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"win"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>
 <div class="cell_output docutils container">
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>What happened: You opened your mouth and attempted to eat the food, but without the ability to manipulate the dish, you couldn’t reach the food. It remained untouched on the floor, taunting you with its delicious aroma.
-What happened: You tugged at the dish with your mouth, but your short legs can&#39;t provide enough strength to pull it any closer. The dish remains out of reach, and your belly rumbles in disappointment as you realize you can&#39;t manipulate it like you hoped.
-What happened: You approach the dish of dog food with eager anticipation, but as you try to lean over and take a bite, your short legs make it difficult to reach the food comfortably. You can&#39;t quite get your mouth to the dish, and after a few attempts, you realize you&#39;ll need a different plan to enjoy your meal.
+What happened: You tugged at the dish with your mouth, but your short legs can't provide enough strength to pull it any closer. The dish remains out of reach, and your belly rumbles in disappointment as you realize you can't manipulate it like you hoped.
+What happened: You approach the dish of dog food with eager anticipation, but as you try to lean over and take a bite, your short legs make it difficult to reach the food comfortably. You can't quite get your mouth to the dish, and after a few attempts, you realize you'll need a different plan to enjoy your meal.
 What happened: You try to bite the side of the dish to tip it over, but your short legs and limited strength make it impossible. The dish remains firmly on the floor, and the tantalizing smell of the dog food wafts up to you, teasing you further.
 </pre></div>
 </div>
 <div class="output traceback highlight-ipythontb notranslate"><div class="highlight"><pre><span></span><span class="gt">---------------------------------------------------------------------------</span>
 <span class="ne">KeyboardInterrupt</span><span class="g g-Whitespace">                         </span>Traceback (most recent call last)
 <span class="n">Cell</span> <span class="n">In</span><span class="p">[</span><span class="mi">15</span><span class="p">],</span> <span class="n">line</span> <span class="mi">1</span>
-<span class="ne">----&gt; </span><span class="mi">1</span> <span class="n">action</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">result</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;win&quot;</span><span class="p">])</span>
+<span class="ne">----&gt; </span><span class="mi">1</span> <span class="n">action</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">result</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"win"</span><span class="p">])</span>
 
 <span class="nn">File ~/dagworks/burr/burr/telemetry.py:276,</span> in <span class="ni">capture_function_usage.&lt;locals&gt;.wrapped_fn</span><span class="nt">(*args, **kwargs)</span>
 <span class="g g-Whitespace">    </span><span class="mi">273</span> <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">call_fn</span><span class="p">)</span>
@@ -663,7 +664,7 @@ What happened: You try to bite the side of the dish to tip it over, but your sho
 
 <span class="nn">File ~/dagworks/burr/burr/core/application.py:843,</span> in <span class="ni">Application.step</span><span class="nt">(self, inputs)</span>
 <span class="g g-Whitespace">    </span><span class="mi">840</span> <span class="c1"># we need to increment the sequence before we start computing</span>
-<span class="g g-Whitespace">    </span><span class="mi">841</span> <span class="c1"># that way if we&#39;re replaying from state, we don&#39;t get stuck</span>
+<span class="g g-Whitespace">    </span><span class="mi">841</span> <span class="c1"># that way if we're replaying from state, we don't get stuck</span>
 <span class="g g-Whitespace">    </span><span class="mi">842</span> <span class="bp">self</span><span class="o">.</span><span class="n">_increment_sequence_id</span><span class="p">()</span>
 <span class="ne">--&gt; </span><span class="mi">843</span> <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span> <span class="n">_run_hooks</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="g g-Whitespace">    </span><span class="mi">844</span> <span class="k">return</span> <span class="n">out</span>
@@ -693,28 +694,28 @@ What happened: You try to bite the side of the dish to tip it over, but your sho
 <span class="ne">--&gt; </span><span class="mi">655</span>     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fn</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_bound_params</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span>
 
 <span class="nn">Cell In[12], line 12,</span> in <span class="ni">prompt_for_challenge</span><span class="nt">(state)</span>
-<span class="g g-Whitespace">     </span><span class="mi">10</span><span class="w"> </span><span class="sd">&quot;&quot;&quot;Request user input to solve the current challenge&quot;&quot;&quot;</span>
-<span class="g g-Whitespace">     </span><span class="mi">11</span> <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;current_challenge&quot;</span><span class="p">]</span>
-<span class="ne">---&gt; </span><span class="mi">12</span> <span class="n">user_response</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">current_challenge</span><span class="si">}</span><span class="s1">. What do you do?</span><span class="se">\n</span><span class="s1"> $ &#39;</span><span class="p">)</span>
+<span class="g g-Whitespace">     </span><span class="mi">10</span><span class="w"> </span><span class="sd">"""Request user input to solve the current challenge"""</span>
+<span class="g g-Whitespace">     </span><span class="mi">11</span> <span class="n">current_challenge</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"current_challenge"</span><span class="p">]</span>
+<span class="ne">---&gt; </span><span class="mi">12</span> <span class="n">user_response</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">current_challenge</span><span class="si">}</span><span class="s1">. What do you do?</span><span class="se">\n</span><span class="s1"> $ '</span><span class="p">)</span>
 <span class="g g-Whitespace">     </span><span class="mi">13</span> <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">attempts</span><span class="o">=</span><span class="n">user_response</span><span class="p">)</span>
 
 <span class="nn">File ~/.pyenv/versions/burr-py310/lib/python3.10/site-packages/ipykernel/kernelbase.py:1270,</span> in <span class="ni">Kernel.raw_input</span><span class="nt">(self, prompt)</span>
-<span class="g g-Whitespace">   </span><span class="mi">1268</span>     <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;raw_input was called, but this frontend does not support input requests.&quot;</span>
+<span class="g g-Whitespace">   </span><span class="mi">1268</span>     <span class="n">msg</span> <span class="o">=</span> <span class="s2">"raw_input was called, but this frontend does not support input requests."</span>
 <span class="g g-Whitespace">   </span><span class="mi">1269</span>     <span class="k">raise</span> <span class="n">StdinNotImplementedError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 <span class="ne">-&gt; </span><span class="mi">1270</span> <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_request</span><span class="p">(</span>
 <span class="g g-Whitespace">   </span><span class="mi">1271</span>     <span class="nb">str</span><span class="p">(</span><span class="n">prompt</span><span class="p">),</span>
-<span class="g g-Whitespace">   </span><span class="mi">1272</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_parent_ident</span><span class="p">[</span><span class="s2">&quot;shell&quot;</span><span class="p">],</span>
-<span class="g g-Whitespace">   </span><span class="mi">1273</span>     <span class="bp">self</span><span class="o">.</span><span class="n">get_parent</span><span class="p">(</span><span class="s2">&quot;shell&quot;</span><span class="p">),</span>
+<span class="g g-Whitespace">   </span><span class="mi">1272</span>     <span class="bp">self</span><span class="o">.</span><span class="n">_parent_ident</span><span class="p">[</span><span class="s2">"shell"</span><span class="p">],</span>
+<span class="g g-Whitespace">   </span><span class="mi">1273</span>     <span class="bp">self</span><span class="o">.</span><span class="n">get_parent</span><span class="p">(</span><span class="s2">"shell"</span><span class="p">),</span>
 <span class="g g-Whitespace">   </span><span class="mi">1274</span>     <span class="n">password</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="g g-Whitespace">   </span><span class="mi">1275</span> <span class="p">)</span>
 
 <span class="nn">File ~/.pyenv/versions/burr-py310/lib/python3.10/site-packages/ipykernel/kernelbase.py:1313,</span> in <span class="ni">Kernel._input_request</span><span class="nt">(self, prompt, ident, parent, password)</span>
 <span class="g g-Whitespace">   </span><span class="mi">1310</span> <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
 <span class="g g-Whitespace">   </span><span class="mi">1311</span>     <span class="c1"># re-raise KeyboardInterrupt, to truncate traceback</span>
-<span class="g g-Whitespace">   </span><span class="mi">1312</span>     <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Interrupted by user&quot;</span>
+<span class="g g-Whitespace">   </span><span class="mi">1312</span>     <span class="n">msg</span> <span class="o">=</span> <span class="s2">"Interrupted by user"</span>
 <span class="ne">-&gt; </span><span class="mi">1313</span>     <span class="k">raise</span> <span class="ne">KeyboardInterrupt</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
 <span class="g g-Whitespace">   </span><span class="mi">1314</span> <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-<span class="g g-Whitespace">   </span><span class="mi">1315</span>     <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Invalid Message:&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="g g-Whitespace">   </span><span class="mi">1315</span>     <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"Invalid Message:"</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="ne">KeyboardInterrupt</span>: Interrupted by user
 </pre></div>

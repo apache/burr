@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -422,7 +423,7 @@ production stack for ongoing observability.</p>
 <span class="kn">from</span><span class="w"> </span><span class="nn">burr.tracking.server.run</span><span class="w"> </span><span class="kn">import</span> <span class="n">mount_burr_ui</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
-<span class="n">mount_burr_ui</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/burr&quot;</span><span class="p">)</span>
+<span class="n">mount_burr_ui</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"/burr"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The tracking UI will then be available at <code class="docutils literal notranslate"><span class="pre">/burr</span></code> on your existing server.</p>

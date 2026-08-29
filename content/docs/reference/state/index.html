@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -444,8 +445,8 @@ s=d.getElementsByTagName('script')[0];
 must correspond to a list-like object, or an error will be raised.</p>
 <p>This is an upsert operation, meaning that if the key does not
 exist, a new list will be created with the value in it.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]})</span>
-<span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># State({&quot;a&quot;: [1, 2]})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]})</span>
+<span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># State({"a": [1, 2]})</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -483,8 +484,8 @@ exist, a new list will be created with the value in it.</p>
 must correspond to a list-like object, or an error will be raised.</p>
 <p>This is an upsert operation, meaning that if the key does not
 exist, a new list will be created and extended with the values.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]})</span>
-<span class="n">state</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>  <span class="c1"># State({&quot;a&quot;: [1, 2, 3]})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]})</span>
+<span class="n">state</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>  <span class="c1"># State({"a": [1, 2, 3]})</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -560,8 +561,8 @@ with those in other.</p>
 <dd><p>Updates the state with a set of key-value pairs
 Does an upsert operation (if the keys exist their value will be overwritten,
 otherwise they will be created)</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
-<span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># State({&quot;a&quot;: 2, &quot;b&quot;: 3})</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span> <span class="o">=</span> <span class="n">State</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+<span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># State({"a": 2, "b": 3})</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -621,13 +622,13 @@ Note: this registration is global for any state field with the same name.</p>
 tracking / persistence.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">my_field_serializer</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">MyType</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
     <span class="n">serde_value</span> <span class="o">=</span> <span class="n">_do_something_to_serialize</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">serde_value</span><span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">serde_value</span><span class="p">}</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">my_field_deserializer</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MyType</span><span class="p">:</span>
-    <span class="n">serde_value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+    <span class="n">serde_value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">_do_something_to_deserialize</span><span class="p">(</span><span class="n">serde_value</span><span class="p">)</span>
 
-<span class="n">register_field_serde</span><span class="p">(</span><span class="s2">&quot;my_field&quot;</span><span class="p">,</span> <span class="n">my_field_serializer</span><span class="p">,</span> <span class="n">my_field_deserializer</span><span class="p">)</span>
+<span class="n">register_field_serde</span><span class="p">(</span><span class="s2">"my_field"</span><span class="p">,</span> <span class="n">my_field_serializer</span><span class="p">,</span> <span class="n">my_field_deserializer</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="field-list simple">

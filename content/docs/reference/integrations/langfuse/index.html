@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,7 +419,7 @@ tracing/observability capabilities. Burr integrates with it through the
 OpenTelemetry-native Langfuse Python SDK, building on the
 <a class="reference internal" href="../opentelemetry/#opentelintegrationref"><span class="std std-ref">opentelemetry integration</span></a>.</p>
 <p>Install the integration:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[langfuse]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[langfuse]"</span>
 </pre></div>
 </div>
 <p>Then add the bridge as a hook – credentials are read from the standard
@@ -430,11 +431,11 @@ environment variables:</p>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"prompt"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">LangfuseBridge</span><span class="p">())</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
-<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
 </pre></div>
 </div>
 <p>Each application execution call becomes a Langfuse trace, each step becomes a span
@@ -484,15 +485,15 @@ user - both can be overridden.</p>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"prompt"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="n">LangfuseBridge</span><span class="p">())</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
-<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>  <span class="c1"># logs one trace to Langfuse</span>
 </pre></div>
 </div>
 <p>You can also pass credentials explicitly, or pass a pre-constructed client:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">public_key</span><span class="o">=</span><span class="s2">&quot;pk-lf-...&quot;</span><span class="p">,</span> <span class="n">secret_key</span><span class="o">=</span><span class="s2">&quot;sk-lf-...&quot;</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">public_key</span><span class="o">=</span><span class="s2">"pk-lf-..."</span><span class="p">,</span> <span class="n">secret_key</span><span class="o">=</span><span class="s2">"sk-lf-..."</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
 <span class="c1"># or, equivalently</span>
 <span class="n">LangfuseBridge</span><span class="p">(</span><span class="n">langfuse_client</span><span class="o">=</span><span class="n">my_langfuse_client</span><span class="p">)</span>
 </pre></div>

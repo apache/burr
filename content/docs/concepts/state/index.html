@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -421,11 +422,11 @@ Burr has a <code class="docutils literal notranslate"><span class="pre">State</s
 <p>The <a class="reference internal" href="../../reference/state/#burr.core.state.State" title="burr.core.state.State"><code class="xref py py-class docutils literal notranslate"><span class="pre">State</span></code></a> class provides the ability to manipulate state for a given action. It is entirely immutable,
 meaning that you can only create new states from old ones, not modify them in place.</p>
 <p>State manipulation is done through calling methods on the <code class="docutils literal notranslate"><span class="pre">State</span></code> class. The most common write are:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="n">bar</span><span class="p">)</span>  <span class="c1"># update the state with the key &quot;foo&quot; set to &quot;bar&quot;</span>
-<span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="n">bar</span><span class="p">)</span>  <span class="c1"># append &quot;bar&quot; to the list at &quot;foo&quot;</span>
-<span class="n">state</span><span class="o">.</span><span class="n">increment</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># increment the value at &quot;foo&quot; by 1</span>
-<span class="n">state</span><span class="o">.</span><span class="n">wipe</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">])</span>  <span class="c1"># remove all keys except &quot;foo&quot; and &quot;bar&quot;</span>
-<span class="n">state</span><span class="o">.</span><span class="n">wipe</span><span class="p">(</span><span class="n">delete</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">])</span>  <span class="c1"># remove &quot;foo&quot; and &quot;bar&quot; from the state</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="n">bar</span><span class="p">)</span>  <span class="c1"># update the state with the key "foo" set to "bar"</span>
+<span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="n">bar</span><span class="p">)</span>  <span class="c1"># append "bar" to the list at "foo"</span>
+<span class="n">state</span><span class="o">.</span><span class="n">increment</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># increment the value at "foo" by 1</span>
+<span class="n">state</span><span class="o">.</span><span class="n">wipe</span><span class="p">(</span><span class="n">keep</span><span class="o">=</span><span class="p">[</span><span class="s2">"foo"</span><span class="p">,</span> <span class="s2">"bar"</span><span class="p">])</span>  <span class="c1"># remove all keys except "foo" and "bar"</span>
+<span class="n">state</span><span class="o">.</span><span class="n">wipe</span><span class="p">(</span><span class="n">delete</span><span class="o">=</span><span class="p">[</span><span class="s2">"foo"</span><span class="p">,</span> <span class="s2">"bar"</span><span class="p">])</span>  <span class="c1"># remove "foo" and "bar" from the state</span>
 </pre></div>
 </div>
 <div class="admonition warning">
@@ -439,7 +440,7 @@ Any modifications to them outside of the framework is considered undefined behav
 </div>
 <p>The read operations extend from those in the <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping">Mapping</a>
 interface, but there are a few extra:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span><span class="o">.</span><span class="n">subset</span><span class="p">([</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">])</span>  <span class="c1"># return a new state with only the keys &quot;foo&quot; and &quot;bar&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state</span><span class="o">.</span><span class="n">subset</span><span class="p">([</span><span class="s2">"foo"</span><span class="p">,</span> <span class="s2">"bar"</span><span class="p">])</span>  <span class="c1"># return a new state with only the keys "foo" and "bar"</span>
 <span class="n">state</span><span class="o">.</span><span class="n">get_all</span><span class="p">()</span>  <span class="c1"># return a dictionary with every key/value of the state</span>
 </pre></div>
 </div>

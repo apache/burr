@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -437,11 +438,11 @@ but we are actively working on building first-level constructs that allow this.<
 <li><p>Wire through tracker + parent data for the sub-application</p></li>
 </ol>
 <p>After creating a simple application (1)/(2) above, you can wire through the tracker like this (some pseudocode, see the example for a fully working application).</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;joined_results&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"joined_results"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">run_multiple_sub_apps</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">__context</span><span class="p">:</span> <span class="n">ApplicationContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="c1"># for every parameter incoming, run a sub-application</span>
     <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">]:</span>
         <span class="n">subapp</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">ApplicationBuilder</span><span class="p">()</span>
             <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
@@ -467,7 +468,7 @@ but we are actively working on building first-level constructs that allow this.<
 The tracker knows how to record the link so its in the UI.</p>
 <p>You can also run this in parallel – this leverages <a class="reference external" href="https://joblib.readthedocs.io/en/latest/">joblib</a>’s
 Parallel and delayed functions, but you can use whatever tooling you want (multiprocessing, threading, etc…).</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;joined_results&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"joined_results"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">run_multiple_sub_apps</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">__context</span><span class="p">:</span> <span class="n">ApplicationContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">run_subapp</span><span class="p">(</span><span class="n">parameter_set</span><span class="p">):</span>
         <span class="n">subapp</span> <span class="o">=</span> <span class="p">(</span>
@@ -486,7 +487,7 @@ Parallel and delayed functions, but you can use whatever tooling you want (multi
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">subapp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 
-    <span class="n">results</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)(</span><span class="n">delayed</span><span class="p">(</span><span class="n">run_subapp</span><span class="p">)(</span><span class="n">parameter_set</span><span class="p">)</span> <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">])</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)(</span><span class="n">delayed</span><span class="p">(</span><span class="n">run_subapp</span><span class="p">)(</span><span class="n">parameter_set</span><span class="p">)</span> <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">])</span>
     <span class="n">joined</span> <span class="o">=</span> <span class="n">_join</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">joined_results</span><span class="o">=</span><span class="n">joined</span><span class="p">)</span>
@@ -509,7 +510,7 @@ yourself.</p>
 (say, for instance, that it’s run through levels of other frameworks), you can get access to the active context and tracker by using the following:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_active_context</span><span class="p">,</span> <span class="n">get_active_tracker</span><span class="p">,</span> <span class="n">ApplicationContext</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;joined_results&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"joined_results"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">my_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
    <span class="n">context</span> <span class="o">=</span> <span class="n">ApplicationContext</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
    <span class="k">def</span><span class="w"> </span><span class="nf">run_subapp</span><span class="p">(</span><span class="n">parameter_set</span><span class="p">):</span>
@@ -529,7 +530,7 @@ yourself.</p>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">subapp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
 
-    <span class="n">results</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)(</span><span class="n">delayed</span><span class="p">(</span><span class="n">run_subapp</span><span class="p">)(</span><span class="n">parameter_set</span><span class="p">)</span> <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;parameters_to_map&quot;</span><span class="p">])</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="n">Parallel</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">)(</span><span class="n">delayed</span><span class="p">(</span><span class="n">run_subapp</span><span class="p">)(</span><span class="n">parameter_set</span><span class="p">)</span> <span class="k">for</span> <span class="n">parameter_set</span> <span class="ow">in</span> <span class="n">state</span><span class="p">[</span><span class="s2">"parameters_to_map"</span><span class="p">])</span>
     <span class="n">joined</span> <span class="o">=</span> <span class="n">_join</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 
     <span class="c1"># do something with the context and tracker</span>

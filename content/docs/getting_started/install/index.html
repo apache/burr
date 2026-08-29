@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -416,7 +417,7 @@ s=d.getElementsByTagName('script')[0];
 <p>Burr itself requires no dependencies. Every <em>extra</em>/<em>plugin</em> is an additional install target.</p>
 <p>We recommend you start with installing the <code class="docutils literal notranslate"><span class="pre">start</span></code> target – this has dependencies necessary to track burr through the UI,
 along with a fully built server.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[start]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[start]"</span>
 </pre></div>
 </div>
 <p>This will give you tools to visualize, track, and interact with the UI. You can explore the UI (including some sample projects)
@@ -424,7 +425,7 @@ simply by running the command <code class="docutils literal notranslate"><span c
 <p>If you’re using poetry, you can’t install the <code class="docutils literal notranslate"><span class="pre">start</span></code> target directly, due to
 <a class="reference external" href="https://github.com/python-poetry/poetry/issues/3369">this issue</a>.
 Instead, please install manually using the following command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>loguru<span class="w"> </span><span class="s2">&quot;apache-burr[tracking-client,tracking-server,streamlit,graphviz,hamilton]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>loguru<span class="w"> </span><span class="s2">"apache-burr[tracking-client,tracking-server,streamlit,graphviz,hamilton]"</span>
 </pre></div>
 </div>
 <p>This is just the kitchen sink for getting started – remember, burr is dependency-free/pure python!</p>
@@ -436,87 +437,87 @@ Instead, please install manually using the following command:</p>
 <p>This only installs the framework. Zero other dependencies. All other installs below all install the
 framework + some other dependencies. Note you can combine installing multiple optional dependencies with commas, e.g.
 <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;apache-burr[cli,tracking]&quot;</span></code> installs both the CLI and tracking + UI dependencies.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[cli]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[cli]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies to run the burr CLI, i.e. <cite>burr –help</cite>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[developer]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[developer]"</span>
 </pre></div>
 </div>
 <p>This installs all the dependencies for developing locally.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[documentation]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[documentation]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies to build the documentation.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[examples]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[examples]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for the examples.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[graphviz]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[graphviz]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies to visualize the graph.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[hamilton]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[hamilton]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for Hamilton.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[haystack]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[haystack]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for Haystack.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[learn]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[learn]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for the UI, CLI, and running demos. It is equivalent to <cite>start</cite> below.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[opentelemetry]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[opentelemetry]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for using OpenTelemetry with Burr.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[postgresql]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[postgresql]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for PostgreSQL.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[pydantic]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[pydantic]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for Pydantic.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[redis]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[redis]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for Redis.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[start]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[start]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for the UI, CLI, and running demos. It is equivalent to <cite>learn</cite> above.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[streamlit]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[streamlit]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for Streamlit.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tests]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tests]"</span>
 </pre></div>
 </div>
 <p>This installs the dependencies for running unit tests.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tracking]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tracking]"</span>
 </pre></div>
 </div>
 <p>This installs the client and server dependencies for tracking and running the UI from tracking that is on a filesystem.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tracking-client]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tracking-client]"</span>
 </pre></div>
 </div>
 <p>This installs the client dependencies for tracking to a filesystem.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tracking-client-s3]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tracking-client-s3]"</span>
 </pre></div>
 </div>
 <p>This installs the client dependencies for tracking to S3.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tracking-server-s3]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tracking-server-s3]"</span>
 </pre></div>
 </div>
 <p>This installs the server dependencies to run the UI and load tracking that was sent to S3.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[tracking-server]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[tracking-server]"</span>
 </pre></div>
 </div>
 <p>This installs the server dependencies for running the UI off a filesystem.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;apache-burr[bedrock]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"apache-burr[bedrock]"</span>
 </pre></div>
 </div>
 <p>This installs <code class="docutils literal notranslate"><span class="pre">boto3</span></code> for the <a class="reference internal" href="../../reference/integrations/bedrock/#bedrock-integration"><span class="std std-ref">Amazon Bedrock integration</span></a> (<code class="docutils literal notranslate"><span class="pre">BedrockAction</span></code> / <code class="docutils literal notranslate"><span class="pre">BedrockStreamingAction</span></code>).</p>

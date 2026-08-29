@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -502,24 +503,24 @@ video on how they use this feature:</p>
 <section id="an-example">
 <h3>An example<a class="headerlink" href="#an-example" title="Link to this heading">¶</a></h3>
 <p>To make the above more concrete, let’s look at a basic chatbot:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state_persister</span> <span class="o">=</span>  <span class="n">SQLLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;.sqllite.db&quot;</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state_persister</span> <span class="o">=</span>  <span class="n">SQLLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">".sqllite.db"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span><span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="p">,</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
         <span class="n">state_persister</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;chat_history&quot;</span> <span class="p">:</span> <span class="p">[]},</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_converse&quot;</span>
+        <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">"chat_history"</span> <span class="p">:</span> <span class="p">[]},</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_converse"</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_state_persister</span><span class="p">(</span><span class="n">state_persister</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">)</span>
@@ -550,8 +551,8 @@ synchronous persisters, the connection gets closed when the object is deleted. F
 persisters this is not possible. Therefore, we suggest that you either use the persister as a context
 manager</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">SQLLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span>
-        <span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;.sqllite.db&quot;</span><span class="p">,</span>
-        <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span>
+        <span class="n">db_path</span><span class="o">=</span><span class="s2">".sqllite.db"</span><span class="p">,</span>
+        <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span>
         <span class="p">)</span> <span class="k">as</span> <span class="n">state_persister</span><span class="p">:</span>
 
     <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
@@ -570,7 +571,7 @@ manager</p>
 </pre></div>
 </div>
 <p>or manually close the connection to the database, by using the <cite>.cleanup()</cite> method of the persister</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state_persister</span> <span class="o">=</span> <span class="n">SQLLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">&quot;.sqllite.db&quot;</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">&quot;burr_state&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">state_persister</span> <span class="o">=</span> <span class="n">SQLLitePersister</span><span class="o">.</span><span class="n">from_values</span><span class="p">(</span><span class="n">db_path</span><span class="o">=</span><span class="s2">".sqllite.db"</span><span class="p">,</span> <span class="n">table_name</span><span class="o">=</span><span class="s2">"burr_state"</span><span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
@@ -610,18 +611,18 @@ tracked runs. This is useful for debugging, or building an application that enab
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
         <span class="n">ai_converse</span><span class="o">=</span><span class="n">ai_converse</span><span class="p">,</span>
         <span class="n">human_converse</span><span class="o">=</span><span class="n">human_converse</span><span class="p">,</span>
-        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">&quot;chat_history&quot;</span><span class="p">),</span>
+        <span class="n">terminal</span><span class="o">=</span><span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">Result</span><span class="p">(</span><span class="s2">"chat_history"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;&#39;exit&#39; in question&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;human_converse&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_converse&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_converse"</span><span class="p">,</span> <span class="s2">"human_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"terminal"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"'exit' in question"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"human_converse"</span><span class="p">,</span> <span class="s2">"ai_converse"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">initialize_from</span><span class="p">(</span>
         <span class="n">tracker</span><span class="p">,</span>
         <span class="n">resume_at_next_action</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;chat_history&quot;</span> <span class="p">:</span> <span class="p">[]},</span>
-        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">&quot;human_converse&quot;</span>
+        <span class="n">default_state</span><span class="o">=</span><span class="p">{</span><span class="s2">"chat_history"</span> <span class="p">:</span> <span class="p">[]},</span>
+        <span class="n">default_entrypoint</span><span class="o">=</span><span class="s2">"human_converse"</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_tracker</span><span class="p">(</span><span class="n">tracker</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_identifiers</span><span class="p">(</span><span class="n">app_id</span><span class="o">=</span><span class="n">app_id</span><span class="p">)</span>

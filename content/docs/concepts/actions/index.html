@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -457,9 +458,9 @@ framework to optimize the execution of the workflow. We call (1) a <code class="
 can return either just the updated state or a tuple of the result and the state. For example:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">action</span><span class="p">,</span> <span class="n">State</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
     <span class="n">custom_action</span><span class="o">=</span><span class="n">custom_action</span>
@@ -471,7 +472,7 @@ You also have the option of returning the intermediate results, which is useful 
 above is equivalent to returning an empty dictionary instead of the results.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">action</span><span class="p">,</span> <span class="n">State</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">var_from_state</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
@@ -481,9 +482,9 @@ above is equivalent to returning an empty dictionary instead of the results.</p>
 </pre></div>
 </div>
 <p>Function-based actions can take in parameters which are akin to passing in constructor parameters. This is done through the <a class="reference internal" href="../../reference/actions/#burr.core.action.bind" title="burr.core.action.bind"><code class="xref py py-meth docutils literal notranslate"><span class="pre">bind</span></code></a> method:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">increment_by</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
     <span class="n">custom_action</span><span class="o">=</span><span class="n">custom_action</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">increment_by</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
@@ -492,9 +493,9 @@ above is equivalent to returning an empty dictionary instead of the results.</p>
 </div>
 <p>This is the same as <code class="docutils literal notranslate"><span class="pre">functools.partial</span></code>, but it is more explicit and easier to read. If an action has parameters that are not
 bound, they will be referred to as inputs. For example:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">increment_by</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
     <span class="n">custom_action</span><span class="o">=</span><span class="n">custom_action</span>
@@ -502,10 +503,10 @@ bound, they will be referred to as inputs. For example:</p>
 </pre></div>
 </div>
 <p>Will require the inputs to be passed in at runtime. See below for how to do that. You can use default values to set optional inputs as well:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">increment_by</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
-    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"var_to_update"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">var_to_update</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">)</span>
 
 <span class="n">app</span> <span class="o">=</span> <span class="n">ApplicationBuilder</span><span class="p">()</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
     <span class="n">custom_action</span><span class="o">=</span><span class="n">custom_action</span>
@@ -535,14 +536,14 @@ injected into your Burr Actions. This is done by adding <code class="docutils li
 <span class="k">class</span><span class="w"> </span><span class="nc">CustomAction</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"var_to_update"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
@@ -562,21 +563,21 @@ injected into your Burr Actions. This is done by adding <code class="docutils li
 <span class="k">class</span><span class="w"> </span><span class="nc">CustomAction</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">increment_by</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;var_from_state&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"var_to_update"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"var_from_state"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;var_to_update&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"var_to_update"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;increment_by&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"increment_by"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p>See below for how to pass in inputs at runtime. If you want to use optional inputs with the class-based API, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> will return a tuple
@@ -586,7 +587,7 @@ of (required, optional) inputs. For example:</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">CustomAction</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="o">...</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;increment_by&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;optional_input&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"increment_by"</span><span class="p">],</span> <span class="p">[</span><span class="s2">"optional_input"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p>Note your code will have to handle the case where <code class="docutils literal notranslate"><span class="pre">optional_input</span></code> is not passed in (e.g. by setting the appropriate kwargs to the <cite>run(…)</cite> method.</p>
@@ -597,7 +598,7 @@ be injected into the action. This is done by adding <cite>__context</cite> to th
 <span class="k">class</span><span class="w"> </span><span class="nc">Counter</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"counter"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
             <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span>
@@ -606,11 +607,11 @@ be injected into the action. This is done by adding <cite>__context</cite> to th
             <span class="n">__context</span><span class="p">:</span> <span class="n">ApplicationContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
         <span class="c1"># can access the app_id from the __context</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">__context</span><span class="o">.</span><span class="n">app_id</span><span class="p">,</span> <span class="n">__context</span><span class="o">.</span><span class="n">partition_key</span><span class="p">,</span> <span class="n">__context</span><span class="o">.</span><span class="n">sequence_id</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;counter&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"counter"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">]</span> <span class="o">+</span> <span class="n">increment_by</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"counter"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
@@ -618,7 +619,7 @@ be injected into the action. This is done by adding <cite>__context</cite> to th
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
         <span class="c1"># add __context here</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;increment_by&quot;</span><span class="p">,</span> <span class="s2">&quot;__context&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"increment_by"</span><span class="p">,</span> <span class="s2">"__context"</span><span class="p">]</span>
 </pre></div>
 </div>
 <p>Refer to <a class="reference internal" href="../../reference/actions/#burr.core.action.Action" title="burr.core.action.Action"><code class="xref py py-class docutils literal notranslate"><span class="pre">Action</span></code></a> for more documentation.</p>
@@ -631,10 +632,10 @@ be injected into the action. This is done by adding <cite>__context</cite> to th
 <li><p>Provide inputs that are required as part of the application to function, e.g. human input, configuration, etc.</p></li>
 </ol>
 <p>For example using the function based API, consider the following action:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"..."</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"..."</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">my_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">Client</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;client &amp; `prompt` here are something we need to pass in.&quot;&quot;&quot;</span>
-    <span class="n">context</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">])</span>
+<span class="w">    </span><span class="sd">"""client &amp; `prompt` here are something we need to pass in."""</span>
+    <span class="n">context</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"..."</span><span class="p">])</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">llm_call</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span> <span class="c1"># some LLM call...</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
@@ -643,31 +644,32 @@ be injected into the action. This is done by adding <cite>__context</cite> to th
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># (1) bind values</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
-      <span class="c1"># we can &quot;bind&quot; values to an action</span>
+      <span class="c1"># we can "bind" values to an action</span>
       <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">my_action</span><span class="o">=</span><span class="n">my_action</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">client</span><span class="o">=</span><span class="n">client</span><span class="p">))</span>
     <span class="o">...</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 
 <span class="c1"># (2) pass them in at runtime</span>
-<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span> <span class="c1"># or app.step, app.iterate, app.astep, etc.\n&quot;</span>
-    <span class="n">halt_</span><span class="o">...</span><span class="p">,</span> <span class="c1"># your halt logic\n&quot;</span>
-    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;this will be passed into `prompt`&quot;</span><span class="p">}</span> <span class="c1"># &lt;-- we pass in values here</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span> <span class="c1"># or app.step, app.iterate, app.astep, etc.\n"</span>
+    <span class="n">halt_</span><span class="o">...</span><span class="p">,</span> <span class="c1"># your halt logic\n"</span>
+    <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"this will be passed into `prompt`"</span><span class="p">}</span> <span class="c1"># &lt;-- we pass in values here</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>For instance, say you have a chatbot. The first step will likely declare the <code class="docutils literal notranslate"><span class="pre">input</span></code> parameter <code class="docutils literal notranslate"><span class="pre">prompt</span></code> –
 it will take that, process it, and put the result in state. The subsequent steps will read the result of that from state.</p>
+<p>To stop before an action that needs a person, then resume with <code class="docutils literal notranslate"><span class="pre">inputs</span></code>, see <a class="reference internal" href="../human-in-the-loop/#id1"><span class="std std-ref">human in the loop</span></a>.</p>
 </section>
 <section id="tagging-actions">
 <h2>Tagging Actions<a class="headerlink" href="#tagging-actions" title="Link to this heading">¶</a></h2>
 <p>You can tag actions with a list of strings – this effectively functions as a “alias” for the action,
 so that a single alias can refer to multiple actions. This allows you to refer to a set of actions
 that have similar capabilities as one, using a variety of <a class="reference internal" href="../state-machine/#id1"><span class="std std-ref">application</span></a> APIs.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">],</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response_to_display&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"..."</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"..."</span><span class="p">],</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"response_to_display"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">text_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">Client</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;client &amp; `prompt` here are something we need to pass in.&quot;&quot;&quot;</span>
-    <span class="n">context</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;...&quot;</span><span class="p">])</span>
+<span class="w">    </span><span class="sd">"""client &amp; `prompt` here are something we need to pass in."""</span>
+    <span class="n">context</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"..."</span><span class="p">])</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">llm_call</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span> <span class="c1"># some LLM call...</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 </pre></div>

@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -442,35 +443,35 @@ here is that you have some custom class/type you want to serialize/deserialize.<
 
 <span class="nd">@serde</span><span class="o">.</span><span class="n">serialize</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">MY_CLASS</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">serialize_myclass</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">myclass_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Serializes the value using my custom methodology.</span>
+<span class="w">    </span><span class="sd">"""Serializes the value using my custom methodology.</span>
 
 <span class="sd">    :param value: the value to serialize.</span>
 <span class="sd">    :param myclass_kwargs: not required. Optional.</span>
 <span class="sd">    :param kwargs:</span>
 <span class="sd">    :return: dictionary of serde.KEY and value</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">if</span> <span class="n">myclass_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">myclass_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">return</span> <span class="p">{</span>
         <span class="c1"># required to identify how to deserialize</span>
-        <span class="n">serde</span><span class="o">.</span><span class="n">KEY</span><span class="p">:</span> <span class="s2">&quot;myclass&quot;</span><span class="p">,</span>
+        <span class="n">serde</span><span class="o">.</span><span class="n">KEY</span><span class="p">:</span> <span class="s2">"myclass"</span><span class="p">,</span>
         <span class="c1"># delegate to your custom serialization</span>
-        <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">some_custom_serialization</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="o">**</span><span class="n">myclass_kwargs</span><span class="p">),</span>
+        <span class="s2">"value"</span><span class="p">:</span> <span class="n">some_custom_serialization</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="o">**</span><span class="n">myclass_kwargs</span><span class="p">),</span>
     <span class="p">}</span>
 
-<span class="nd">@serde</span><span class="o">.</span><span class="n">deserializer</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;myclass&quot;</span><span class="p">)</span>
+<span class="nd">@serde</span><span class="o">.</span><span class="n">deserializer</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"myclass"</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">deserialize_myclass</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">myclass_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="bp">cls</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deserializes the value using my custom methodology.</span>
+<span class="w">    </span><span class="sd">"""Deserializes the value using my custom methodology.</span>
 
 <span class="sd">    :param value: the value to deserialize from.</span>
 <span class="sd">    :param myclass_kwargs: not required. Optional.</span>
 <span class="sd">    :param kwargs:</span>
 <span class="sd">    :return: object of type cls</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">if</span> <span class="n">myclass_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">myclass_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="c1"># delegate to your custom deserialization</span>
-    <span class="k">return</span> <span class="n">some_custom_deserialization</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">myclass_kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">some_custom_deserialization</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">],</span> <span class="o">**</span><span class="n">myclass_kwargs</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>You’ll need to this code to run/be imported so it can register itself.</p>
@@ -487,13 +488,13 @@ type based serialization/deserialization mechanism.</p>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">my_field_serializer</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">MyType</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
     <span class="n">serde_value</span> <span class="o">=</span> <span class="n">_do_something_to_serialize</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">serde_value</span><span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">serde_value</span><span class="p">}</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">my_field_deserializer</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MyType</span><span class="p">:</span>
-    <span class="n">serde_value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+    <span class="n">serde_value</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">_do_something_to_deserialize</span><span class="p">(</span><span class="n">serde_value</span><span class="p">)</span>
 
-<span class="n">state</span><span class="o">.</span><span class="n">register_field_serde</span><span class="p">(</span><span class="s2">&quot;my_field&quot;</span><span class="p">,</span> <span class="n">my_field_serializer</span><span class="p">,</span> <span class="n">my_field_deserializer</span><span class="p">)</span>
+<span class="n">state</span><span class="o">.</span><span class="n">register_field_serde</span><span class="p">(</span><span class="s2">"my_field"</span><span class="p">,</span> <span class="n">my_field_serializer</span><span class="p">,</span> <span class="n">my_field_deserializer</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>This will register a custom serializer/deserializer for the field “my_field”.</p>

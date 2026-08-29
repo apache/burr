@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">S3 Tracking on AWS (Concepts)</a></li>
@@ -416,11 +417,11 @@ s=d.getElementsByTagName('script')[0];
 <p>This guide explains how Burr tracking works with S3-backed storage, and how to
 choose between local, hybrid, and production deployment modes.</p>
 <p>Use the S3 client in your app:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;burr[tracking-client-s3]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"burr[tracking-client-s3]"</span>
 </pre></div>
 </div>
 <p>and run the S3-backed tracking server/UI:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;burr[tracking-server-s3,cli]&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"burr[tracking-server-s3,cli]"</span>
 </pre></div>
 </div>
 <section id="deployment-models">
@@ -507,9 +508,9 @@ infrastructure:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.tracking.s3client</span><span class="w"> </span><span class="kn">import</span> <span class="n">S3TrackingClient</span>
 
 <span class="n">tracker</span> <span class="o">=</span> <span class="n">S3TrackingClient</span><span class="p">(</span>
-    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;my_project&quot;</span><span class="p">,</span>
-    <span class="n">bucket</span><span class="o">=</span><span class="s2">&quot;my-burr-tracking-bucket&quot;</span><span class="p">,</span>
-    <span class="n">region</span><span class="o">=</span><span class="s2">&quot;us-east-1&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">"my_project"</span><span class="p">,</span>
+    <span class="n">bucket</span><span class="o">=</span><span class="s2">"my-burr-tracking-bucket"</span><span class="p">,</span>
+    <span class="n">region</span><span class="o">=</span><span class="s2">"us-east-1"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>

@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -452,32 +453,32 @@ if an exception is expected, the program will stop early. We will be adding the 
 on exceptions, which will allow you to transition to an error-handling (or retry) action that does not
 need the full outputs of the prior action.</p>
 <p>Here is what it would look like in the current API:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;attempts&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">,</span> <span class="s2">&quot;attempts&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"output"</span><span class="p">,</span> <span class="s2">"attempts"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">some_flaky_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;attempts&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;attempts&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"output"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"attempts"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">}</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">result</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">call_some_api</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">"output"</span><span class="p">]</span> <span class="o">=</span> <span class="n">call_some_api</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
     <span class="k">except</span> <span class="n">APIException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;attempts&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">max_retries</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">max_retries</span><span class="p">:</span>
            <span class="k">raise</span> <span class="n">e</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>One could imagine adding it as a condition (a few possibilities)</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"output"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">some_flaky_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">call_some_api</span><span class="p">(</span><span class="o">...</span><span class="p">)}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"output"</span><span class="p">:</span> <span class="n">call_some_api</span><span class="p">(</span><span class="o">...</span><span class="p">)}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 <span class="n">builder</span><span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
    <span class="n">some_flaky_action</span><span class="o">=</span><span class="n">some_flaky_action</span>
 <span class="p">)</span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
    <span class="p">(</span>
-      <span class="s2">&quot;some_flaky_action&quot;</span><span class="p">,</span>
-      <span class="s2">&quot;some_flaky_action&quot;</span><span class="p">,</span>
+      <span class="s2">"some_flaky_action"</span><span class="p">,</span>
+      <span class="s2">"some_flaky_action"</span><span class="p">,</span>
       <span class="n">error</span><span class="p">(</span><span class="n">APIException</span><span class="p">)</span> <span class="c1"># infinite retries</span>
       <span class="n">error</span><span class="p">(</span><span class="n">APIException</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span> <span class="c1"># 3 visits to this edge then it gets reset if this is not chosen</span>
-      <span class="c1"># That&#39;s stored in state</span>
+      <span class="c1"># That's stored in state</span>
    <span class="p">)</span>
 <span class="p">)</span>
 </pre></div>

@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -435,20 +436,20 @@ These have synchronous and asynchronous versions, and your hook can subclass as 
 a hook that prints out the nodes name during execution looks like this.
 We implement the pre/post run step hooks.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">PrintLnHook</span><span class="p">(</span><span class="n">PostRunStepHook</span><span class="p">,</span> <span class="n">PreRunStepHook</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">pre_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;State&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">&quot;Action&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting action: </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pre_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">"State"</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">"Action"</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Starting action: </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;State&quot;</span><span class="p">,</span>
-        <span class="n">action</span><span class="p">:</span> <span class="s2">&quot;Action&quot;</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="s2">"State"</span><span class="p">,</span>
+        <span class="n">action</span><span class="p">:</span> <span class="s2">"Action"</span><span class="p">,</span>
         <span class="n">result</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>
         <span class="n">sequence_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">exception</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">,</span>
         <span class="o">**</span><span class="n">future_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Finishing action: </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Finishing action: </span><span class="si">{</span><span class="n">action</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>To include this in the application, you pass it into the <a class="reference internal" href="../../reference/application/#burr.core.application.ApplicationBuilder.with_hooks" title="burr.core.application.ApplicationBuilder.with_hooks"><code class="xref py py-meth docutils literal notranslate"><span class="pre">with_hooks</span></code></a> method.</p>

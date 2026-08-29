@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,14 +419,14 @@ s=d.getElementsByTagName('script')[0];
 <span class="c1"># distributed with this work for additional information</span>
 <span class="c1"># regarding copyright ownership.  The ASF licenses this file</span>
 <span class="c1"># to you under the Apache License, Version 2.0 (the</span>
-<span class="c1"># &quot;License&quot;); you may not use this file except in compliance</span>
+<span class="c1"># "License"); you may not use this file except in compliance</span>
 <span class="c1"># with the License.  You may obtain a copy of the License at</span>
 <span class="c1">#</span>
 <span class="c1">#   http://www.apache.org/licenses/LICENSE-2.0</span>
 <span class="c1">#</span>
 <span class="c1"># Unless required by applicable law or agreed to in writing,</span>
 <span class="c1"># software distributed under the License is distributed on an</span>
-<span class="c1"># &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
+<span class="c1"># "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
 <span class="c1"># KIND, either express or implied.  See the License for the</span>
 <span class="c1"># specific language governing permissions and limitations</span>
 <span class="c1"># under the License.</span>
@@ -454,9 +455,9 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># create some hooks!</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">PrintWhatTheCowSaid</span><span class="p">(</span><span class="n">PostRunStepHook</span><span class="p">):</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;State&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">&quot;Action&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;cow_should_say&quot;</span> <span class="ow">and</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;cow_said&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;cow_said&quot;</span><span class="p">])</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">"State"</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">"Action"</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">"cow_should_say"</span> <span class="ow">and</span> <span class="n">state</span><span class="p">[</span><span class="s2">"cow_said"</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"cow_said"</span><span class="p">])</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CowCantSpeakFast</span><span class="p">(</span><span class="n">PostRunStepHook</span><span class="p">):</span>
@@ -464,8 +465,8 @@ s=d.getElementsByTagName('script')[0];
         <span class="nb">super</span><span class="p">(</span><span class="n">PostRunStepHook</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sleep_time</span> <span class="o">=</span> <span class="n">sleep_time</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;State&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">&quot;Action&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;cow_should_say&quot;</span><span class="p">:</span>  <span class="c1"># no need to print if we&#39;re not saying anything</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post_run_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="s2">"State"</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="s2">"Action"</span><span class="p">,</span> <span class="o">**</span><span class="n">future_kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="s2">"cow_should_say"</span><span class="p">:</span>  <span class="c1"># no need to print if we're not saying anything</span>
             <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sleep_time</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -474,16 +475,16 @@ s=d.getElementsByTagName('script')[0];
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># instantiate actions</span>
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cow_said&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"cow_said"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">cow_said</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">say_what</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
     <span class="n">said</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">say_what</span><span class="p">)</span> <span class="k">if</span> <span class="n">say_what</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cow_said&quot;</span><span class="p">:</span> <span class="n">cowsay</span><span class="o">.</span><span class="n">get_output_string</span><span class="p">(</span><span class="s2">&quot;cow&quot;</span><span class="p">,</span> <span class="n">said</span><span class="p">)</span> <span class="k">if</span> <span class="n">say_what</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cow_said"</span><span class="p">:</span> <span class="n">cowsay</span><span class="o">.</span><span class="n">get_output_string</span><span class="p">(</span><span class="s2">"cow"</span><span class="p">,</span> <span class="n">said</span><span class="p">)</span> <span class="k">if</span> <span class="n">say_what</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"cow_should_speak"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">cow_should_speak</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">}</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cow_should_speak"</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -502,17 +503,17 @@ s=d.getElementsByTagName('script')[0];
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
         <span class="n">say_nothing</span><span class="o">=</span><span class="n">cow_said</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">say_what</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
         <span class="n">say_hello</span><span class="o">=</span><span class="n">cow_said</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
-            <span class="n">say_what</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Hello world!&quot;</span><span class="p">,</span> <span class="s2">&quot;What&#39;s up?&quot;</span><span class="p">,</span> <span class="s2">&quot;Are you Aaron Burr, sir?&quot;</span><span class="p">]</span>
+            <span class="n">say_what</span><span class="o">=</span><span class="p">[</span><span class="s2">"Hello world!"</span><span class="p">,</span> <span class="s2">"What's up?"</span><span class="p">,</span> <span class="s2">"Are you Aaron Burr, sir?"</span><span class="p">]</span>
         <span class="p">),</span>
         <span class="n">cow_should_speak</span><span class="o">=</span><span class="n">cow_should_speak</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">,</span> <span class="s2">&quot;say_hello&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;say_hello&quot;</span><span class="p">,</span> <span class="s2">&quot;cow_should_speak&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">,</span> <span class="s2">&quot;say_nothing&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;not cow_should_speak&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;say_nothing&quot;</span><span class="p">,</span> <span class="s2">&quot;cow_should_speak&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"cow_should_speak"</span><span class="p">,</span> <span class="s2">"say_hello"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"cow_should_speak"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"say_hello"</span><span class="p">,</span> <span class="s2">"cow_should_speak"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"cow_should_speak"</span><span class="p">,</span> <span class="s2">"say_nothing"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"not cow_should_speak"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"say_nothing"</span><span class="p">,</span> <span class="s2">"cow_should_speak"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
     <span class="p">)</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;cow_should_speak&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"cow_should_speak"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_hooks</span><span class="p">(</span><span class="o">*</span><span class="n">hooks</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
@@ -551,7 +552,7 @@ s=d.getElementsByTagName('script')[0];
 </div>
 <div class="cell_output docutils container">
 <div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>  __________
-| What&#39;s up? |
+| What's up? |
   ==========
           \
            \
@@ -561,7 +562,7 @@ s=d.getElementsByTagName('script')[0];
                  ||----w |
                  ||     ||
   __________
-| What&#39;s up? |
+| What's up? |
   ==========
           \
            \

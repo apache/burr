@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -450,24 +451,24 @@ computes a result and modifies state. They declare what they read and write.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Note: you can replace this with your favorite LLM Client</span>
 <span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Client</span><span class="p">()</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">human_input</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ai_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="n">content</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-        <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo&quot;</span><span class="p">,</span>
-        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+        <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-3.5-turbo"</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span>
     <span class="p">)</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span>
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">response</span><span class="o">=</span><span class="n">content</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
 </pre></div>
@@ -489,16 +490,16 @@ the intermediate result of the computation), to help with debugging. There are a
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>We can visualize the application (note you need <code class="docutils literal notranslate"><span class="pre">burr[graphviz]</span></code> installed):</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="s2">&quot;./graph&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="s2">"./graph"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
 </pre></div>
 </div>
 <img alt="../../_images/chatbot.png" class="align-center" src="../../_images/chatbot.png" />
@@ -510,9 +511,9 @@ the intermediate result of the computation), to help with debugging. There are a
 <li><p>It utilizes a <a class="reference external" href="https://en.wikipedia.org/wiki/Builder_pattern#:~:text=The%20builder%20pattern%20is%20a,Gang%20of%20Four%20design%20patterns">builder pattern</a> – this is a bit old-school (comes from the java days), but is an easy/modular way to express your application</p></li>
 </ol>
 <p>Finally, we can run the application – it gives back multiple pieces of information but all we’ll use is the state.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;Who was Aaron Burr?&quot;</span><span class="p">})</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;answer:&quot;</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">]),</span> <span class="s2">&quot;items in chat&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"Who was Aaron Burr?"</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"answer:"</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">]),</span> <span class="s2">"items in chat"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The result looks exactly as you’d expect!</p>
@@ -534,40 +535,40 @@ and his reputation was tarnished by suspicions of treason and conspiracy.
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Client</span><span class="p">()</span>  <span class="c1"># replace this if not using OpenAI</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"prompt"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">human_input</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;chat_history&quot;</span><span class="p">])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"response"</span><span class="p">,</span> <span class="s2">"chat_history"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">ai_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
     <span class="n">content</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-        <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo&quot;</span><span class="p">,</span>
-        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">],</span>
+        <span class="n">model</span><span class="o">=</span><span class="s2">"gpt-3.5-turbo"</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">],</span>
     <span class="p">)</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span>
     <span class="n">chat_item</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
-        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">response</span><span class="o">=</span><span class="n">content</span><span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="n">chat_item</span><span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 
-<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="s2">&quot;./graph&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span><span class="p">)</span>
-<span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ai_response&quot;</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="s2">&quot;Who was Aaron Burr?&quot;</span><span class="p">})</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;answer:&quot;</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;chat_history&quot;</span><span class="p">]),</span> <span class="s2">&quot;items in chat&quot;</span><span class="p">)</span>
+<span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="s2">"./graph"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
+<span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"ai_response"</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="s2">"Who was Aaron Burr?"</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"answer:"</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">"response"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"chat_history"</span><span class="p">]),</span> <span class="s2">"items in chat"</span><span class="p">)</span>
 </pre></div>
 </div>
 </details><p>Finally, let’s open up the UI and see what it looks like (note, that if you have not installed <code class="docutils literal notranslate"><span class="pre">burr[learn]</span></code> now is a good time…).</p>

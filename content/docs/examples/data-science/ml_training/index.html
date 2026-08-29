@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -482,7 +483,7 @@ launching new ones as they complete (based on state).</p>
 <section id="code-example">
 <h2>Code example<a class="headerlink" href="#code-example" title="Link to this heading">¶</a></h2>
 <p>This uses the class-based API for defining an <code class="docutils literal notranslate"><span class="pre">action</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
 <span class="sd">This is a sketch of an example of a machine learning training pipeline using Burr where you</span>
 <span class="sd">want to do something dynamic like train a model for a variable number of iterations and then</span>
 <span class="sd">pick the best model from each of the iterations based on some validation metric. E.g. hyperparameter search.</span>
@@ -491,7 +492,7 @@ launching new ones as they complete (based on state).</p>
 <span class="sd">or hit a max number of iterations (or epochs), etc.</span>
 
 <span class="sd">Note: this example uses the class based API to define the actions. You could also use the function+decorator API.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">burr.core.application</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Action</span><span class="p">,</span> <span class="n">Condition</span><span class="p">,</span> <span class="n">State</span><span class="p">,</span> <span class="n">default</span>
 
@@ -499,100 +500,100 @@ launching new ones as they complete (based on state).</p>
 <span class="k">class</span><span class="w"> </span><span class="nc">ProcessDataAction</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;data_path&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"data_path"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;This is where you would load and process your data.</span>
+<span class="w">        </span><span class="sd">"""This is where you would load and process your data.</span>
 <span class="sd">        You can take in state and reference object fields.</span>
 
 <span class="sd">        You need to return a dictionary of the results that `update()` will then use to update the state.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
         <span class="c1"># load data, and run some feature engineering -- create the data sets</span>
         <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;training_data&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_OBJECT/PATH&quot;</span><span class="p">,</span> <span class="s2">&quot;evaluation_data&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_OBJECT/PATH&quot;</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"training_data"</span><span class="p">:</span> <span class="s2">"SOME_OBJECT/PATH"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">:</span> <span class="s2">"SOME_OBJECT/PATH"</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;training_data&quot;</span><span class="p">,</span> <span class="s2">&quot;evaluation_data&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"training_data"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-            <span class="n">training_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;training_data&quot;</span><span class="p">],</span> <span class="n">evaluation_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;evaluation_data&quot;</span><span class="p">]</span>
+            <span class="n">training_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"training_data"</span><span class="p">],</span> <span class="n">evaluation_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"evaluation_data"</span><span class="p">]</span>
         <span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TrainModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;training_data&quot;</span><span class="p">,</span> <span class="s2">&quot;iterations&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"training_data"</span><span class="p">,</span> <span class="s2">"iterations"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;This is where you&#39;d build the model and on each iteration do something different.</span>
+<span class="w">        </span><span class="sd">"""This is where you'd build the model and on each iteration do something different.</span>
 <span class="sd">        E.g. hyperparameter search.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># train the model, i.e. run one &quot;iteration&quot; whatever that means for you.</span>
+<span class="sd">        """</span>
+        <span class="c1"># train the model, i.e. run one "iteration" whatever that means for you.</span>
         <span class="c1"># TODO: fill in</span>
         <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_MODEL&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;iterations&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;iterations&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
-            <span class="s2">&quot;metrics&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_METRICS&quot;</span><span class="p">,</span>
+            <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"SOME_MODEL"</span><span class="p">,</span>
+            <span class="s2">"iterations"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">"metrics"</span><span class="p">:</span> <span class="s2">"SOME_METRICS"</span><span class="p">,</span>
         <span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">,</span> <span class="s2">&quot;training_metrics&quot;</span><span class="p">,</span> <span class="s2">&quot;iterations&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"models"</span><span class="p">,</span> <span class="s2">"training_metrics"</span><span class="p">,</span> <span class="s2">"iterations"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-            <span class="n">iterations</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;iterations&quot;</span><span class="p">],</span>  <span class="c1"># set current iteration value</span>
+            <span class="n">iterations</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">],</span>  <span class="c1"># set current iteration value</span>
         <span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">models</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">],</span>  <span class="c1"># append -- note this can get big if your model is big</span>
-            <span class="c1"># so you&#39;ll want to overwrite but store the conditions, or log somewhere</span>
-            <span class="n">metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">],</span>  <span class="c1"># append the metrics</span>
+            <span class="n">models</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"model"</span><span class="p">],</span>  <span class="c1"># append -- note this can get big if your model is big</span>
+            <span class="c1"># so you'll want to overwrite but store the conditions, or log somewhere</span>
+            <span class="n">metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"metrics"</span><span class="p">],</span>  <span class="c1"># append the metrics</span>
         <span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ValidateModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;models&quot;</span><span class="p">,</span> <span class="s2">&quot;evaluation_data&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"models"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute validation metrics using the model and evaluation data.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Compute validation metrics using the model and evaluation data."""</span>
         <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;validation_metrics&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_METRICS&quot;</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"validation_metrics"</span><span class="p">:</span> <span class="s2">"SOME_METRICS"</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;validation_metrics&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;validation_metrics&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">])</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">BestModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;validation_metrics&quot;</span><span class="p">,</span> <span class="s2">&quot;models&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">,</span> <span class="s2">"models"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select the best model based on the validation metrics.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Select the best model based on the validation metrics."""</span>
         <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;best_model&quot;</span><span class="p">:</span> <span class="s2">&quot;SOME_MODEL&quot;</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"best_model"</span><span class="p">:</span> <span class="s2">"SOME_MODEL"</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;best_model&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">"best_model"</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">best_model</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;best_model&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">best_model</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"best_model"</span><span class="p">])</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">application</span><span class="p">(</span><span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">application</span><span class="o">.</span><span class="n">Application</span><span class="p">:</span>
     <span class="k">return</span> <span class="p">(</span>
         <span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">ApplicationBuilder</span><span class="p">()</span>
         <span class="o">.</span><span class="n">with_state</span><span class="p">(</span>
-            <span class="n">data_path</span><span class="o">=</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span>
+            <span class="n">data_path</span><span class="o">=</span><span class="s2">"data.csv"</span><span class="p">,</span>
             <span class="n">iterations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
             <span class="n">training_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">evaluation_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -608,21 +609,21 @@ launching new ones as they complete (based on state).</p>
             <span class="n">best_model</span><span class="o">=</span><span class="n">BestModel</span><span class="p">(),</span>
         <span class="p">)</span>
         <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;process_data&quot;</span><span class="p">,</span> <span class="s2">&quot;train_model&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;train_model&quot;</span><span class="p">,</span> <span class="s2">&quot;validate_model&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;validate_model&quot;</span><span class="p">,</span> <span class="s2">&quot;best_model&quot;</span><span class="p">,</span> <span class="n">Condition</span><span class="o">.</span><span class="n">expr</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;iterations&gt;</span><span class="si">{</span><span class="n">iterations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)),</span>
-            <span class="p">(</span><span class="s2">&quot;validate_model&quot;</span><span class="p">,</span> <span class="s2">&quot;train_model&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"process_data"</span><span class="p">,</span> <span class="s2">"train_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"train_model"</span><span class="p">,</span> <span class="s2">"validate_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"validate_model"</span><span class="p">,</span> <span class="s2">"best_model"</span><span class="p">,</span> <span class="n">Condition</span><span class="o">.</span><span class="n">expr</span><span class="p">(</span><span class="sa">f</span><span class="s2">"iterations&gt;</span><span class="si">{</span><span class="n">iterations</span><span class="si">}</span><span class="s2">"</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"validate_model"</span><span class="p">,</span> <span class="s2">"train_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;process_data&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"process_data"</span><span class="p">)</span>
         <span class="o">.</span><span class="n">build</span><span class="p">()</span>
     <span class="p">)</span>
 
 
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
     <span class="n">app</span> <span class="o">=</span> <span class="n">application</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># doing good data science is up to you...</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">&quot;statemachine&quot;</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;png&quot;</span><span class="p">)</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">"statemachine"</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
     <span class="c1"># you could run things like this:</span>
-    <span class="c1"># last_action, result, state = app.run(halt_after=[&quot;best_model&quot;])</span>
+    <span class="c1"># last_action, result, state = app.run(halt_after=["best_model"])</span>
 </pre></div>
 </div>
 </section>

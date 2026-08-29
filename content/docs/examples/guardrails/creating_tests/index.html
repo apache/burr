@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -447,9 +448,9 @@ See orange lines indicating what to pull from the UI in the image below.</p>
 <li><p>Adjust the test as needed, e.g. what you’re validating or asserting and how.</p></li>
 </ol>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>burr-test-case<span class="w"> </span>create<span class="w">  </span><span class="se">\</span>
-<span class="w">  </span>--project-name<span class="w"> </span><span class="s2">&quot;SOME_NAME&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--partition-key<span class="w"> </span><span class="s2">&quot;SOME_KEY&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--app-id<span class="w"> </span><span class="s2">&quot;SOME_ID&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--project-name<span class="w"> </span><span class="s2">"SOME_NAME"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--partition-key<span class="w"> </span><span class="s2">"SOME_KEY"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--app-id<span class="w"> </span><span class="s2">"SOME_ID"</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--sequence-id<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--target-file-name<span class="w"> </span>/tmp/test-case.json
 </pre></div>

@@ -22,7 +22,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Transitions" href="../transitions/"><link rel="prev" title="State" href="../state/">
+<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Human in the Loop" href="../human-in-the-loop/"><link rel="prev" title="State" href="../state/">
         <link rel="canonical" href="https://burr.apache.org/docs/concepts/state-machine/">
         <link rel="prefetch" href="../../_static/burr_logo.svg" as="image">
 
@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -431,10 +432,10 @@ Here is the minimum that is required:</p>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 </pre></div>
@@ -454,15 +455,16 @@ Here is the minimum that is required:</p>
 </div>
 <p>Step can also take in <code class="docutils literal notranslate"><span class="pre">inputs</span></code> as a dictionary, which will be passed to the action’s run function as keyword arguments.
 This is specifically meant for a “human in the loop” scenario, where the action needs to ask for input from a user. In this case,
-the control flow is meant to be interrupted to allow for the user to provide input. See <a class="reference internal" href="../actions/#inputref"><span class="std std-ref">inputs</span></a> for more information.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">application</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="nb">input</span><span class="p">()})</span>
+the control flow is meant to be interrupted to allow for the user to provide input. See <a class="reference internal" href="../actions/#inputref"><span class="std std-ref">inputs</span></a> and
+<a class="reference internal" href="../human-in-the-loop/#id1"><span class="std std-ref">human in the loop</span></a> for more information.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">application</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="nb">input</span><span class="p">()})</span>
 </pre></div>
 </div>
 </section>
 <section id="iterate-aiterate">
 <h3><code class="docutils literal notranslate"><span class="pre">iterate</span></code>/<code class="docutils literal notranslate"><span class="pre">aiterate</span></code><a class="headerlink" href="#iterate-aiterate" title="Link to this heading">¶</a></h3>
 <p>Iterate just runs <code class="docutils literal notranslate"><span class="pre">step</span></code> in a row, functioning as a generator:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">application</span><span class="o">.</span><span class="n">iterate</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;final_action_1&quot;</span><span class="p">,</span> <span class="s2">&quot;final_action_2&quot;</span><span class="p">]):</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">application</span><span class="o">.</span><span class="n">iterate</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_action_1"</span><span class="p">,</span> <span class="s2">"final_action_2"</span><span class="p">]):</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -501,13 +503,13 @@ no more transitions to take. This, however, is not a supported feature (and will
 and return control back. <code class="docutils literal notranslate"><span class="pre">halt_after</span></code> will stop after the specified action(s) has run, and <code class="docutils literal notranslate"><span class="pre">halt_before</span></code> will stop before the specified action(s) has run.
 If multiple are specified, it will stop after the first one encountered, and the return values will be for that action.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">application</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;final_action_1&quot;</span><span class="p">,</span> <span class="s2">&quot;final_action_2&quot;</span><span class="p">]</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_action_1"</span><span class="p">,</span> <span class="s2">"final_action_2"</span><span class="p">]</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>In the async context, you can run <code class="docutils literal notranslate"><span class="pre">arun</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="k">await</span> <span class="n">application</span><span class="o">.</span><span class="n">arun</span><span class="p">(</span>
-    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;final_action_1&quot;</span><span class="p">,</span> <span class="s2">&quot;final_action_2&quot;</span><span class="p">]</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_action_1"</span><span class="p">,</span> <span class="s2">"final_action_2"</span><span class="p">]</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -533,15 +535,15 @@ in a web-server (create a graph once, application many times), import the graph 
     <span class="n">GraphBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">,</span> <span class="s2">&quot;ai_response&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;ai_response&quot;</span><span class="p">,</span> <span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
     <span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;human_input&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 </pre></div>
@@ -564,12 +566,12 @@ in a web-server (create a graph once, application many times), import the graph 
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../transitions/">
+          <a class="next-page" href="../human-in-the-loop/">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Transitions</div>
+                <div class="title">Human in the Loop</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

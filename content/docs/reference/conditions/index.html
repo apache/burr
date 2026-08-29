@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -466,9 +467,9 @@ If you want a condition that defaults to true, use Condition.default or just def
 <dd><p>Combines two conditions with an AND operator. This will return a new condition
 that is the AND of the two conditions.</p>
 <p>To check if both foo is bar and baz is qux:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">baz</span><span class="o">=</span><span class="s2">&quot;qux&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">baz</span><span class="o">=</span><span class="s2">"qux"</span><span class="p">)</span>
 <span class="c1"># equivalent to</span>
-<span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="n">baz</span><span class="o">=</span><span class="s2">&quot;qux&quot;</span><span class="p">)</span>
+<span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">,</span> <span class="n">baz</span><span class="o">=</span><span class="s2">"qux"</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -487,7 +488,7 @@ that is the AND of the two conditions.</p>
 <dd><p>Combines two conditions with an OR operator. This will return a new condition
 that is the OR of the two conditions.</p>
 <p>To check if either foo is bar or baz is qux:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">baz</span><span class="o">=</span><span class="s2">&quot;qux&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">condition</span> <span class="o">=</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">)</span> <span class="o">|</span> <span class="n">Condition</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">baz</span><span class="o">=</span><span class="s2">"qux"</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="field-list simple">
@@ -650,32 +651,32 @@ comprehensions and generator expressions, the walrus operator,
 <dd><p>Returns a condition that checks state values using optional operators.</p>
 <p>You can also refer to this as <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">burr.core</span> <span class="pre">import</span> <span class="pre">when</span></code> in the API.</p>
 <p>Basic equality (unchanged from original):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">)</span>            <span class="c1"># state[&quot;foo&quot;] == &quot;bar&quot;</span>
-<span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="n">baz</span><span class="o">=</span><span class="s2">&quot;qux&quot;</span><span class="p">)</span> <span class="c1"># state[&quot;foo&quot;] == &quot;bar&quot; AND state[&quot;baz&quot;] == &quot;qux&quot;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">)</span>            <span class="c1"># state["foo"] == "bar"</span>
+<span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">,</span> <span class="n">baz</span><span class="o">=</span><span class="s2">"qux"</span><span class="p">)</span> <span class="c1"># state["foo"] == "bar" AND state["baz"] == "qux"</span>
 </pre></div>
 </div>
 <p>Comparison operators via <code class="docutils literal notranslate"><span class="pre">__</span></code> suffix:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">age__gt</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state[&quot;age&quot;] &gt; 18</span>
-<span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>          <span class="c1"># state[&quot;age&quot;] &gt;= 18</span>
-<span class="n">when</span><span class="p">(</span><span class="n">age__lt</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state[&quot;age&quot;] &lt; 18</span>
-<span class="n">when</span><span class="p">(</span><span class="n">age__lte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>          <span class="c1"># state[&quot;age&quot;] &lt;= 18</span>
-<span class="n">when</span><span class="p">(</span><span class="n">age__ne</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>            <span class="c1"># state[&quot;age&quot;] != 0</span>
-<span class="n">when</span><span class="p">(</span><span class="n">age__eq</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state[&quot;age&quot;] == 18  (explicit)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">age__gt</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state["age"] &gt; 18</span>
+<span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>          <span class="c1"># state["age"] &gt;= 18</span>
+<span class="n">when</span><span class="p">(</span><span class="n">age__lt</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state["age"] &lt; 18</span>
+<span class="n">when</span><span class="p">(</span><span class="n">age__lte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>          <span class="c1"># state["age"] &lt;= 18</span>
+<span class="n">when</span><span class="p">(</span><span class="n">age__ne</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>            <span class="c1"># state["age"] != 0</span>
+<span class="n">when</span><span class="p">(</span><span class="n">age__eq</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>           <span class="c1"># state["age"] == 18  (explicit)</span>
 </pre></div>
 </div>
 <p>Membership operators:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">status__in</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">])</span>     <span class="c1"># state[&quot;status&quot;] in [&quot;a&quot;, &quot;b&quot;]</span>
-<span class="n">when</span><span class="p">(</span><span class="n">status__notin</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">])</span>  <span class="c1"># state[&quot;status&quot;] not in [&quot;x&quot;, &quot;y&quot;]</span>
-<span class="n">when</span><span class="p">(</span><span class="n">tags__contains</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">)</span>   <span class="c1"># &quot;python&quot; in state[&quot;tags&quot;]</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">status__in</span><span class="o">=</span><span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">])</span>     <span class="c1"># state["status"] in ["a", "b"]</span>
+<span class="n">when</span><span class="p">(</span><span class="n">status__notin</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">])</span>  <span class="c1"># state["status"] not in ["x", "y"]</span>
+<span class="n">when</span><span class="p">(</span><span class="n">tags__contains</span><span class="o">=</span><span class="s2">"python"</span><span class="p">)</span>   <span class="c1"># "python" in state["tags"]</span>
 </pre></div>
 </div>
 <p>Identity operators:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">value__is</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>            <span class="c1"># state[&quot;value&quot;] is None</span>
-<span class="n">when</span><span class="p">(</span><span class="n">value__isnot</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>         <span class="c1"># state[&quot;value&quot;] is not None</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">value__is</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>            <span class="c1"># state["value"] is None</span>
+<span class="n">when</span><span class="p">(</span><span class="n">value__isnot</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>         <span class="c1"># state["value"] is not None</span>
 </pre></div>
 </div>
 <p>Multiple conditions are ANDed together:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s2">&quot;active&quot;</span><span class="p">)</span>  <span class="c1"># age &gt;= 18 AND status == &quot;active&quot;</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="s2">"active"</span><span class="p">)</span>  <span class="c1"># age &gt;= 18 AND status == "active"</span>
 </pre></div>
 </div>
 <dl class="field-list simple">

@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -418,14 +419,14 @@ s=d.getElementsByTagName('script')[0];
 <span class="c1"># distributed with this work for additional information</span>
 <span class="c1"># regarding copyright ownership.  The ASF licenses this file</span>
 <span class="c1"># to you under the Apache License, Version 2.0 (the</span>
-<span class="c1"># &quot;License&quot;); you may not use this file except in compliance</span>
+<span class="c1"># "License"); you may not use this file except in compliance</span>
 <span class="c1"># with the License.  You may obtain a copy of the License at</span>
 <span class="c1">#</span>
 <span class="c1">#   http://www.apache.org/licenses/LICENSE-2.0</span>
 <span class="c1">#</span>
 <span class="c1"># Unless required by applicable law or agreed to in writing,</span>
 <span class="c1"># software distributed under the License is distributed on an</span>
-<span class="c1"># &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
+<span class="c1"># "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY</span>
 <span class="c1"># KIND, either express or implied.  See the License for the</span>
 <span class="c1"># specific language governing permissions and limitations</span>
 <span class="c1"># under the License.</span>
@@ -453,26 +454,26 @@ s=d.getElementsByTagName('script')[0];
 <p>We define the function <code class="docutils literal notranslate"><span class="pre">increment()</span></code> that has a <code class="docutils literal notranslate"><span class="pre">State</span></code> as input and outputs a new <code class="docutils literal notranslate"><span class="pre">State</span></code>. The decorator <code class="docutils literal notranslate"><span class="pre">&#64;action</span></code> specifies it’s a Burr action and it will need to read and write from the <code class="docutils literal notranslate"><span class="pre">counter</span></code> attribute in <code class="docutils literal notranslate"><span class="pre">State</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">increment</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Increment the counter by 1&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""Increment the counter by 1"""</span>
     
     <span class="c1"># get the value from the `state`</span>
-    <span class="n">current_count</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span>
+    <span class="n">current_count</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">]</span>
     <span class="n">current_count</span> <span class="o">+=</span> <span class="mi">1</span>
 
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Count: &quot;</span><span class="p">,</span> <span class="n">current_count</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Count: "</span><span class="p">,</span> <span class="n">current_count</span><span class="p">)</span>
 
     <span class="c1"># use `.update()` to create a new `State`</span>
     <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">counter</span><span class="o">=</span><span class="n">current_count</span><span class="p">)</span>
 
 
-<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
+<span class="nd">@action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">exit_counter</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the current count and the current time&quot;&quot;&quot;</span>
-    <span class="n">current_count</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;counter&quot;</span><span class="p">]</span>
+<span class="w">    </span><span class="sd">"""Print the current count and the current time"""</span>
+    <span class="n">current_count</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"counter"</span><span class="p">]</span>
 
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Finished counting to </span><span class="si">{</span><span class="n">current_count</span><span class="si">}</span><span class="s2"> at </span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">:</span><span class="s2">%H:%M:%S %Y-%m-%d</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Finished counting to </span><span class="si">{</span><span class="n">current_count</span><span class="si">}</span><span class="s2"> at </span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">:</span><span class="s2">%H:%M:%S %Y-%m-%d</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">state</span>
 </pre></div>
@@ -489,11 +490,11 @@ s=d.getElementsByTagName('script')[0];
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">exit_counter</span><span class="p">)</span>
     <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-        <span class="p">(</span><span class="s2">&quot;increment&quot;</span><span class="p">,</span> <span class="s2">&quot;increment&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">&quot;counter &lt; 10&quot;</span><span class="p">)),</span>
-        <span class="p">(</span><span class="s2">&quot;increment&quot;</span><span class="p">,</span> <span class="s2">&quot;exit_counter&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"increment"</span><span class="p">,</span> <span class="s2">"increment"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"counter &lt; 10"</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"increment"</span><span class="p">,</span> <span class="s2">"exit_counter"</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">counter</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">&quot;increment&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"increment"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>
 <span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -506,7 +507,7 @@ s=d.getElementsByTagName('script')[0];
 </div>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">action_obj</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;exit_counter&quot;</span><span class="p">])</span>
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">action_obj</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"exit_counter"</span><span class="p">])</span>
 </pre></div>
 </div>
 </div>

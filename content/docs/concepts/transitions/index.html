@@ -22,7 +22,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Tracking Burr" href="../tracking/"><link rel="prev" title="Applications" href="../state-machine/">
+<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Tracking Burr" href="../tracking/"><link rel="prev" title="Human in the Loop" href="../human-in-the-loop/">
         <link rel="canonical" href="https://burr.apache.org/docs/concepts/transitions/">
         <link rel="prefetch" href="../../_static/burr_logo.svg" as="image">
 
@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -430,25 +431,25 @@ You can think of them as edges in a graph.</p>
 <p>Conditions have a few APIs, but the most common are the three convenience functions:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">when</span><span class="p">,</span> <span class="n">expr</span><span class="p">,</span> <span class="n">default</span>
 <span class="n">with_transitions</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;bar&quot;</span><span class="p">),</span>  <span class="c1"># will evaluate when the state has the variable &quot;foo&quot; set to the value &quot;bar&quot;</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s1">&#39;epochs&gt;100&#39;</span><span class="p">))</span> <span class="c1"># will evaluate to True when epochs is greater than 100</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>  <span class="c1"># will always evaluate to True</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">)</span> <span class="c1"># leaving out a third conditions we allow defaults</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"bar"</span><span class="p">),</span>  <span class="c1"># will evaluate when the state has the variable "foo" set to the value "bar"</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s1">'epochs&gt;100'</span><span class="p">))</span> <span class="c1"># will evaluate to True when epochs is greater than 100</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>  <span class="c1"># will always evaluate to True</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">)</span> <span class="c1"># leaving out a third conditions we allow defaults</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">when()</span></code> also supports comparison operators via Django-style <code class="docutils literal notranslate"><span class="pre">__</span></code> suffixes:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">when</span>
 <span class="n">with_transitions</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;adult&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)),</span>       <span class="c1"># age &gt;= 18</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;child&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">age__lt</span><span class="o">=</span><span class="mi">18</span><span class="p">)),</span>         <span class="c1"># age &lt; 18</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;valid&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">score__gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">score__lte</span><span class="o">=</span><span class="mi">100</span><span class="p">)),</span>  <span class="c1"># 0 &lt; score &lt;= 100</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__in</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;active&quot;</span><span class="p">,</span> <span class="s2">&quot;pending&quot;</span><span class="p">])),</span>  <span class="c1"># membership</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;tagged&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">tags__contains</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">)),</span>  <span class="c1"># collection contains value</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;clean&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__notin</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;banned&quot;</span><span class="p">,</span> <span class="s2">&quot;suspended&quot;</span><span class="p">])),</span>  <span class="c1"># not in</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;changed&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__ne</span><span class="o">=</span><span class="s2">&quot;initial&quot;</span><span class="p">)),</span>  <span class="c1"># not equal</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;missing&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">value__is</span><span class="o">=</span><span class="kc">None</span><span class="p">)),</span>  <span class="c1"># identity check</span>
-    <span class="p">(</span><span class="s2">&quot;check&quot;</span><span class="p">,</span> <span class="s2">&quot;present&quot;</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">value__isnot</span><span class="o">=</span><span class="kc">None</span><span class="p">)),</span>  <span class="c1"># not-identity check</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"adult"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)),</span>       <span class="c1"># age &gt;= 18</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"child"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">age__lt</span><span class="o">=</span><span class="mi">18</span><span class="p">)),</span>         <span class="c1"># age &lt; 18</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"valid"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">score__gt</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">score__lte</span><span class="o">=</span><span class="mi">100</span><span class="p">)),</span>  <span class="c1"># 0 &lt; score &lt;= 100</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"active"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__in</span><span class="o">=</span><span class="p">[</span><span class="s2">"active"</span><span class="p">,</span> <span class="s2">"pending"</span><span class="p">])),</span>  <span class="c1"># membership</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"tagged"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">tags__contains</span><span class="o">=</span><span class="s2">"python"</span><span class="p">)),</span>  <span class="c1"># collection contains value</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"clean"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__notin</span><span class="o">=</span><span class="p">[</span><span class="s2">"banned"</span><span class="p">,</span> <span class="s2">"suspended"</span><span class="p">])),</span>  <span class="c1"># not in</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"changed"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">status__ne</span><span class="o">=</span><span class="s2">"initial"</span><span class="p">)),</span>  <span class="c1"># not equal</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"missing"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">value__is</span><span class="o">=</span><span class="kc">None</span><span class="p">)),</span>  <span class="c1"># identity check</span>
+    <span class="p">(</span><span class="s2">"check"</span><span class="p">,</span> <span class="s2">"present"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">value__isnot</span><span class="o">=</span><span class="kc">None</span><span class="p">)),</span>  <span class="c1"># not-identity check</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -473,8 +474,8 @@ when determining which action to run next. If no condition evaluates to <code cl
 <p>The <code class="docutils literal notranslate"><span class="pre">~</span></code> operator will invert a condition. For instance:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">when</span><span class="p">,</span> <span class="n">expr</span>
 <span class="n">with_transitions</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">,</span> <span class="o">~</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">&quot;baz&quot;</span><span class="p">),</span>  <span class="c1"># will evaluate to True when foo != baz</span>
-    <span class="p">(</span><span class="s2">&quot;from&quot;</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">,</span> <span class="o">~</span><span class="n">expr</span><span class="p">(</span><span class="s1">&#39;epochs&lt;=100&#39;</span><span class="p">))</span> <span class="c1"># will evaluate to True when epochs hits 101</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">,</span> <span class="o">~</span><span class="n">when</span><span class="p">(</span><span class="n">foo</span><span class="o">=</span><span class="s2">"baz"</span><span class="p">),</span>  <span class="c1"># will evaluate to True when foo != baz</span>
+    <span class="p">(</span><span class="s2">"from"</span><span class="p">,</span> <span class="s2">"to"</span><span class="p">,</span> <span class="o">~</span><span class="n">expr</span><span class="p">(</span><span class="s1">'epochs&lt;=100'</span><span class="p">))</span> <span class="c1"># will evaluate to True when epochs hits 101</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -503,14 +504,14 @@ default condition will be used.</p>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../state-machine/">
+          <a class="prev-page" href="../human-in-the-loop/">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Applications</div>
+                <div class="title">Human in the Loop</div>
                 
               </div>
             </a>

@@ -307,6 +307,7 @@ s=d.getElementsByTagName('script')[0];
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/actions/">Actions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state/">State</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/state-machine/">Applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../concepts/human-in-the-loop/">Human in the Loop</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/transitions/">Transitions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/tracking/">Tracking Burr</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../concepts/s3-tracking-aws/">S3 Tracking on AWS (Concepts)</a></li>
@@ -857,9 +858,9 @@ If this is None it will attempt to derive from the signature.</p></li>
 <dd><p>Binds an action to the given parameters. This is functionally equivalent to
 functools.partial, but is more explicit and is meant to be used in the API. This only works with
 the <a class="reference internal" href="#burr.core.action.action" title="burr.core.action.action"><code class="xref py py-meth docutils literal notranslate"><span class="pre">&#64;action</span></code></a>  functional API and not with the class-based API.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">([</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">([</span><span class="s2">"x"</span><span class="p">],</span> <span class="p">[</span><span class="s2">"y"</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">my_action</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">z</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">z</span><span class="p">},</span> <span class="n">state</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"y"</span><span class="p">:</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x"</span><span class="p">)</span> <span class="o">+</span> <span class="n">z</span><span class="p">},</span> <span class="n">state</span>
 
 <span class="n">my_action</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 </pre></div>
@@ -1030,10 +1031,10 @@ never instantiate this class directly, but you will use it in the API when it is
 by <a class="reference internal" href="../application/#burr.core.application.Application.stream_result" title="burr.core.application.Application.stream_result"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stream_result</span></code></a>.
 For reference, here’s how you would use it:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action_we_just_ran</span><span class="p">,</span> <span class="n">streaming_result_container</span> <span class="o">=</span> <span class="n">application</span><span class="o">.</span><span class="n">stream_result</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;getting streaming results for action=</span><span class="si">{</span><span class="n">action_we_just_ran</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"getting streaming results for action=</span><span class="si">{</span><span class="n">action_we_just_ran</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="k">for</span> <span class="n">result_component</span> <span class="ow">in</span> <span class="n">streaming_result_container</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">result_component</span><span class="p">[</span><span class="s1">&#39;response&#39;</span><span class="p">])</span> <span class="c1"># this assumes you have a response key in your result</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result_component</span><span class="p">[</span><span class="s1">'response'</span><span class="p">])</span> <span class="c1"># this assumes you have a response key in your result</span>
 
 <span class="n">final_result</span><span class="p">,</span> <span class="n">final_state</span> <span class="o">=</span> <span class="n">streaming_result_container</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 </pre></div>
@@ -1077,10 +1078,10 @@ never instantiate this class directly, but you will use it in the API when it is
 by <a class="reference internal" href="../application/#burr.core.application.Application.stream_result" title="burr.core.application.Application.stream_result"><code class="xref py py-meth docutils literal notranslate"><span class="pre">astream_result</span></code></a>.
 For reference, here’s how you would use it:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action_we_just_ran</span><span class="p">,</span> <span class="n">streaming_result_container</span> <span class="o">=</span> <span class="k">await</span> <span class="n">application</span><span class="o">.</span><span class="n">stream_result</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;getting streaming results for action=</span><span class="si">{</span><span class="n">action_we_just_ran</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"getting streaming results for action=</span><span class="si">{</span><span class="n">action_we_just_ran</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="k">async</span> <span class="k">for</span> <span class="n">result_component</span> <span class="ow">in</span> <span class="n">streaming_result_container</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">result_component</span><span class="p">[</span><span class="s1">&#39;response&#39;</span><span class="p">])</span> <span class="c1"># this assumes you have a response key in your result</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">result_component</span><span class="p">[</span><span class="s1">'response'</span><span class="p">])</span> <span class="c1"># this assumes you have a response key in your result</span>
 
 <span class="n">final_result</span><span class="p">,</span> <span class="n">final_state</span> <span class="o">=</span> <span class="k">await</span> <span class="n">streaming_result_container</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 </pre></div>
@@ -1182,10 +1183,10 @@ they run in multiple passes (run -&gt; update)</p>
 <p>For instance, you could have:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">stream_run</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
     <span class="n">buffer</span> <span class="o">=</span> <span class="p">[]</span> <span class="c1"># you might want to be more efficient than simple strcat</span>
-    <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">query</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">]):</span>
-        <span class="k">yield</span> <span class="p">{</span><span class="s1">&#39;response&#39;</span> <span class="p">:</span> <span class="n">token</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">query</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">'prompt'</span><span class="p">]):</span>
+        <span class="k">yield</span> <span class="p">{</span><span class="s1">'response'</span> <span class="p">:</span> <span class="n">token</span><span class="p">}</span>
         <span class="n">buffer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
-    <span class="k">yield</span> <span class="p">{</span><span class="s1">&#39;response&#39;</span> <span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">buffer</span><span class="p">)}</span>
+    <span class="k">yield</span> <span class="p">{</span><span class="s1">'response'</span> <span class="p">:</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">buffer</span><span class="p">)}</span>
 </pre></div>
 </div>
 <p>This would utilize a simple string buffer (implemented by a list) to store the results
