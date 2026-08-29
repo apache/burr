@@ -606,6 +606,15 @@ class ApplicationGraph(Graph):
 
     entrypoint: Action
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-serializable application graph metadata.
+
+        :return: Graph metadata including the application's entrypoint.
+        """
+        graph_data = super().to_dict()
+        graph_data.update(type="application_graph", entrypoint=self.entrypoint.name)
+        return graph_data
+
 
 @dataclasses.dataclass
 class ApplicationIdentifiers:
