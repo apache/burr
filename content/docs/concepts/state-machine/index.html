@@ -530,7 +530,7 @@ Read about them in the <a class="reference internal" href="../streaming-actions/
 <p>The application exposes a graph API, allowing you to specify it as a graph separate from application concerns.
 While you likely won’t use this in your first few applications, it will become useful when you want to run it
 in a web-server (create a graph once, application many times), import the graph from another context, or run it in multiple contexts.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ApplicationBuilder</span><span class="p">,</span> <span class="n">default</span><span class="p">,</span> <span class="n">expr</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">ApplicationBuilder</span><span class="p">,</span> <span class="n">GraphBuilder</span>
 <span class="n">graph</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">GraphBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
@@ -542,7 +542,7 @@ in a web-server (create a graph once, application many times), import the graph 
 <span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ApplicationBuilder</span><span class="p">()</span>
     <span class="o">.</span><span class="n">with_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
-    <span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
+    <span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
     <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
     <span class="o">.</span><span class="n">build</span><span class="p">()</span>
 <span class="p">)</span>

@@ -172,7 +172,7 @@ in a web-server (create a graph once, application many times), import the graph 
 
 .. code-block:: python
 
-    from burr.core import ApplicationBuilder, default, expr
+    from burr.core import ApplicationBuilder, GraphBuilder
     graph = (
         GraphBuilder()
         .with_actions(human_input, ai_response)
@@ -184,7 +184,7 @@ in a web-server (create a graph once, application many times), import the graph 
     app = (
         ApplicationBuilder()
         .with_graph(graph)
-        with_state(chat_history=[])
+        .with_state(chat_history=[])
         .with_entrypoint("human_input")
         .build()
     )
