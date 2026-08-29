@@ -18,6 +18,7 @@
 """
 Class based action example.
 """
+
 import logging
 from typing import List, Optional
 

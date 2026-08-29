@@ -68,8 +68,7 @@ except ImportError as e:
 class StateToPromptMapper(Protocol):
     """Protocol for mapping Burr state to Bedrock prompt format."""
 
-    def __call__(self, state: State) -> dict[str, Any]:
-        ...  # noqa: E704
+    def __call__(self, state: State) -> dict[str, Any]: ...  # noqa: E704
 
 
 def _text_from_content_blocks(content_blocks: list[Any]) -> str:

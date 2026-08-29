@@ -23,6 +23,7 @@ This is an example test module showing how you can test an action in your applic
 To use this approach you need to do `from burr.testing import pytest_generate_tests  # noqa: F401`.
 
 """
+
 import pytest
 from application import prompt_for_more
 

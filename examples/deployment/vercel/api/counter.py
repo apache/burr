@@ -19,6 +19,7 @@
 Vercel Serverless Function for counter application
 Endpoint: /api/counter
 """
+
 import json
 from http.server import BaseHTTPRequestHandler
 

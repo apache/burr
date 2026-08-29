@@ -87,9 +87,9 @@ class PartialStep(pydantic.BaseModel):
     step_start_log: Optional[BeginEntryModel] = fields.Field(default_factory=lambda: None)
     step_end_log: Optional[EndEntryModel] = fields.Field(default_factory=lambda: None)
     spans: List[Span] = fields.Field(default_factory=list)
-    streaming_events: List[
-        Union[InitializeStreamModel, FirstItemStreamModel, EndStreamModel]
-    ] = fields.Field(default_factory=list)
+    streaming_events: List[Union[InitializeStreamModel, FirstItemStreamModel, EndStreamModel]] = (
+        fields.Field(default_factory=list)
+    )
 
 
 class Step(pydantic.BaseModel):

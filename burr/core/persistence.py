@@ -405,8 +405,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
     def create_table_if_not_exists(self, table_name: str):
         """Helper function to create the table where things are stored if it doesn't exist."""
         cursor = self.connection.cursor()
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 partition_key TEXT DEFAULT '{SQLitePersister.PARTITION_KEY_DEFAULT}',
                 app_id TEXT NOT NULL,
@@ -416,13 +415,10 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
                 state TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (partition_key, app_id, sequence_id, position)
-            )"""
-        )
-        cursor.execute(
-            f"""
+            )""")
+        cursor.execute(f"""
             CREATE INDEX IF NOT EXISTS {table_name}_created_at_index ON {table_name} (created_at);
-        """
-        )
+        """)
         self.connection.commit()
 
     def initialize(self):

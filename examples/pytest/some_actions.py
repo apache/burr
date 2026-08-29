@@ -20,6 +20,7 @@ This is an example module that defines a Burr application.
 
 It hypothetically transcribes audio and then runs a hypothesis on the transcription to determine a medical diagnosis.
 """
+
 from typing import Any, Callable, Dict, Generator, List, Tuple
 
 import openai

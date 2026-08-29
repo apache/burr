@@ -243,12 +243,10 @@ def build_application(
 
 
 if __name__ == "__main__":
-    print(
-        """Run
+    print("""Run
     > burr
     in another terminal to see the UI at http://localhost:7241
-    """
-    )
+    """)
     _client = openai.OpenAI()
     _db_client = FalkorDB(host="localhost", port=6379)
     _graph_name = "UFC"

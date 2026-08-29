@@ -220,21 +220,17 @@ def test_load_rat_xml_root_ignores_trailing_summary_lines():
 
 
 def test_rat_license_state_supports_old_and_new_xml_shapes():
-    old_resource = verify.ET.fromstring(
-        """
+    old_resource = verify.ET.fromstring("""
         <resource name="/tmp/old">
           <license-approval name="false" />
           <license-family name="Unknown license" />
         </resource>
-        """
-    )
-    new_resource = verify.ET.fromstring(
-        """
+        """)
+    new_resource = verify.ET.fromstring("""
         <resource name="/tmp/new">
           <license approval="false" family="Unknown license" name="Unknown license" />
         </resource>
-        """
-    )
+        """)
 
     assert verify._rat_license_state(old_resource) == ("false", "Unknown license")
     assert verify._rat_license_state(new_resource) == ("false", "Unknown license")

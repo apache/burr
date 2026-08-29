@@ -22,6 +22,7 @@ This also adds a tracer to the Langchain calls to trace the execution of the nod
 within the Action so that they also show up in the Burr UI. This is a
 very simple tracer, it could easily be extended to include more information.
 """
+
 import json
 import uuid
 from typing import Annotated, Any, Optional
