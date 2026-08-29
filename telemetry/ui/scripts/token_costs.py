@@ -21,7 +21,8 @@ url = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_c
 import requests
 import json
 
-response = requests.get(url)
+response = requests.get(url, timeout=30)
+response.raise_for_status()
 data = response.json()
 
 keys_wanted = ["input_cost_per_token", "output_cost_per_token", "max_tokens", "max_input_tokens", "max_output_tokens"]
@@ -34,5 +35,5 @@ for model_entry in data:
             del data[model_entry][key]
 
 # save the data
-with open("model_costs.json", "w") as f:
+with open("model_costs.json", "w", encoding="utf-8") as f:
     json.dump(data, f)
