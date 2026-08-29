@@ -3690,7 +3690,7 @@ async def test_aiterate_execute_hook_reports_action_exception_after_iteration_st
     assert not tracker.pre_run_execute_calls
     assert not tracker.post_run_execute_calls
     with pytest.raises(BrokenStepException):
-        await anext(iterator)
+        await iterator.__anext__()
 
     assert len(tracker.pre_run_execute_calls) == 1
     assert len(tracker.post_run_execute_calls) == 1
@@ -3715,11 +3715,11 @@ async def test_aiterate_execute_hook_finishes_after_iteration_ends():
     iterator = app.aiterate(halt_after=["counter"])
     assert not tracker.pre_run_execute_calls
     assert not tracker.post_run_execute_calls
-    await anext(iterator)
+    await iterator.__anext__()
     assert len(tracker.pre_run_execute_calls) == 1
     assert not tracker.post_run_execute_calls
     with pytest.raises(StopAsyncIteration):
-        await anext(iterator)
+        await iterator.__anext__()
 
     assert len(tracker.post_run_execute_calls) == 1
     post_kwargs = tracker.post_run_execute_calls[0][1]
