@@ -1296,10 +1296,12 @@ class Application(Generic[ApplicationStateType]):
 
         result = None
         prior_action: Optional[Action] = None
+        step_inputs = inputs
         while self.has_next_action():
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
-            prior_action, result, state = self.step(inputs=inputs)
+            prior_action, result, state = self.step(inputs=step_inputs)
             yield prior_action, result, state
+            step_inputs = {}
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
         return self._return_value_iterate(halt_before, halt_after, prior_action, result)
@@ -1328,10 +1330,12 @@ class Application(Generic[ApplicationStateType]):
             halt_before, halt_after, inputs
         )
         self._validate_halt_conditions(halt_before, halt_after)
+        step_inputs = inputs
         while self.has_next_action():
             # self.step will only return None if there is no next action, so we can rely on tuple unpacking
-            prior_action, result, state = await self.astep(inputs=inputs)
+            prior_action, result, state = await self.astep(inputs=step_inputs)
             yield prior_action, result, state
+            step_inputs = {}
             if self._should_halt_iterate(halt_before, halt_after, prior_action):
                 break
 
@@ -1951,14 +1955,16 @@ class Application(Generic[ApplicationStateType]):
             halt_before, halt_after, inputs
         )
         self._validate_halt_conditions(halt_before, halt_after)
+        step_inputs = inputs
         while self.has_next_action():
             next_action = self.get_next_action()
             _, streaming_result = self.stream_result(
-                halt_after=[next_action.name], halt_before=None, inputs=inputs
+                halt_after=[next_action.name], halt_before=None, inputs=step_inputs
             )
             yield next_action, streaming_result
             # We need to ensure it's fully exhausted before going to the next action
             streaming_result.get()
+            step_inputs = {}
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
@@ -1988,14 +1994,16 @@ class Application(Generic[ApplicationStateType]):
             halt_before, halt_after, inputs
         )
         self._validate_halt_conditions(halt_before, halt_after)
+        step_inputs = inputs
         while self.has_next_action():
             next_action = self.get_next_action()
             _, streaming_result = await self.astream_result(  # Use astream_result
-                halt_after=[next_action.name], halt_before=None, inputs=inputs
+                halt_after=[next_action.name], halt_before=None, inputs=step_inputs
             )
             yield next_action, streaming_result
             # We need to ensure it's fully exhausted before going to the next action
             await streaming_result.get()  # await the get call
+            step_inputs = {}
             if self._should_halt_iterate(halt_before, halt_after, next_action):
                 break
 
