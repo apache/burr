@@ -1,0 +1,42 @@
+{
+  "name": "@apache-burr/core",
+  "version": "0.1.0",
+  "description": "Core state machine library for Apache Burr (TypeScript)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:types": "jest src/__tests__/type-tests/runner.test.ts --no-coverage",
+    "test:types:single": "jest src/__tests__/type-tests/runner.test.ts --no-coverage",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "state-machine",
+    "workflow",
+    "llm",
+    "agent",
+    "burr"
+  ],
+  "author": "Apache Burr Contributors",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/burr.git",
+    "directory": "typescript/packages/burr-core"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.2.1"
+  }
+}
