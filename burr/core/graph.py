@@ -57,7 +57,7 @@ def _validate_actions(actions: Optional[List[Action]]):
 def _validate_transitions(
     transitions: Optional[List[Tuple[str, str, Condition]]], actions: Set[str]
 ):
-    exhausted = {}  # items for which we have seen a default transition
+    exhausted = set()  # sources for which we have seen a default transition
     for from_, to, condition in transitions:
         if from_ not in actions:
             raise ValueError(
@@ -69,14 +69,26 @@ def _validate_transitions(
                 f"Transition target: `{to}` not found in actions! "
                 f"Please add to actions using with_actions({to}=...)"
             )
-        if condition.name == "default":  # we have seen a default transition
-            if from_ in exhausted:
-                raise ValueError(
-                    f"Transition `{from_}` -> `{to}` is redundant -- "
-                    f"a default transition has already been set for `{from_}`"
-                )
-            exhausted[from_] = True
+        _validate_transition_order(from_, to, condition, exhausted)
     return True
+
+
+def _validate_transition_order(
+    from_: str, to: str, condition: Condition, exhausted: Set[str]
+) -> None:
+    """Ensure default transitions are terminal for each source action."""
+    if condition.name == "default":
+        if from_ in exhausted:
+            raise ValueError(
+                f"Transition `{from_}` -> `{to}` is redundant -- "
+                f"a default transition has already been set for `{from_}`"
+            )
+        exhausted.add(from_)
+    elif from_ in exhausted:
+        raise ValueError(
+            f"Transition `{from_}` -> `{to}` is unreachable -- "
+            f"a default transition has already been set for `{from_}`"
+        )
 
 
 def _render_graphviz(
@@ -328,6 +340,12 @@ class GraphBuilder:
         :param transitions: Transitions to add
         :return: The application builder for future chaining.
         """
+        exhausted = {
+            from_
+            for from_, _, existing_condition in self.transitions
+            if existing_condition.name == "default"
+        }
+        new_transitions = []
         for transition in transitions:
             from_, to_, *conditions = transition
             if len(conditions) > 0:
@@ -341,7 +359,9 @@ class GraphBuilder:
                     raise ValueError(f"Transition source must be a string, not {action}")
                 if not isinstance(to_, str):
                     raise ValueError(f"Transition target must be a string, not {to_}")
-                self.transitions.append((action, to_, condition))
+                _validate_transition_order(action, to_, condition, exhausted)
+                new_transitions.append((action, to_, condition))
+        self.transitions.extend(new_transitions)
         return self
 
     def with_graph(self, graph: Graph) -> "GraphBuilder":
@@ -356,11 +376,22 @@ class GraphBuilder:
             self.actions = []
         if self.transitions is None:
             self.transitions = []
+        exhausted = {
+            from_
+            for from_, _, existing_condition in self.transitions
+            if existing_condition.name == "default"
+        }
+        new_transitions = []
+        for transition in graph.transitions:
+            from_, to, condition = (
+                transition.from_.name,
+                transition.to.name,
+                transition.condition,
+            )
+            _validate_transition_order(from_, to, condition, exhausted)
+            new_transitions.append((from_, to, condition))
         self.actions.extend(graph.actions)
-        self.transitions.extend(
-            (transition.from_.name, transition.to.name, transition.condition)
-            for transition in graph.transitions
-        )
+        self.transitions.extend(new_transitions)
         return self
 
     def build(self) -> Graph:
