@@ -62,8 +62,8 @@ read from state; they come from the caller:
 
 If both could apply, ``halt_before`` wins. ``run`` always executes at least one action
 before it checks halt conditions, then ``inputs`` apply only to that first action. Later
-actions in the same ``run`` that also need ``inputs`` are undefined -- halt before those
-instead, and pass their values on the next ``run``.
+actions in the same ``run`` receive no external inputs -- halt before those instead, and
+pass their values on the next ``run``.
 
 You can pass action names or tags (``"@tag:needs_human"``). The same halt arguments work
 on ``iterate`` / ``arun`` / ``aiterate``. Details are in :ref:`Applications <applications>`.
