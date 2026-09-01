@@ -35,8 +35,8 @@ simply by running the command ``burr``. Up next we'll write our own application 
 
 .. note::
 
-    In version 0.43.0, the optional CLI requires Python 3.10 or newer. The core Burr library remains compatible with
-    Python 3.9.
+    Burr requires Python 3.10 or newer. (Since 0.43.0, the optional CLI already required Python 3.10 or newer; as of
+    the next release, Python 3.9 is no longer supported.)
 
 If you're using poetry, you can't install the ``start`` target directly, due to
 `this issue <https://github.com/python-poetry/poetry/issues/3369>`_.
