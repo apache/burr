@@ -15,28 +15,24 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pathlib import Path
+import asyncio
+from unittest.mock import AsyncMock
 
-from tortoise import Tortoise, run_async
+import pytest
 
-from burr.tracking.server.s3 import settings
-
-
-async def connect():
-    db_path = Path(settings.DB_PATH).expanduser()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    await Tortoise.init(
-        config=settings.TORTOISE_ORM,
-    )
+pytest.importorskip("tortoise")
+from burr.tracking.server.s3 import initialize_db, settings
 
 
-#
-async def first_time_init():
-    await connect()
-    # Generate the schema
-    await Tortoise.generate_schemas()
+def test_connect_uses_configured_database_path(tmp_path, monkeypatch):
+    db_path = tmp_path / "nested" / "custom.sqlite3"
+    tortoise_config = {"connections": {"default": f"sqlite:///{db_path}"}, "apps": {}}
+    tortoise_init = AsyncMock()
+    monkeypatch.setattr(settings, "DB_PATH", str(db_path))
+    monkeypatch.setattr(settings, "TORTOISE_ORM", tortoise_config)
+    monkeypatch.setattr(initialize_db.Tortoise, "init", tortoise_init)
 
+    asyncio.run(initialize_db.connect())
 
-if __name__ == "__main__":
-    # db_path = sys.argv[1]
-    run_async(first_time_init())
+    assert db_path.parent.is_dir()
+    tortoise_init.assert_awaited_once_with(config=tortoise_config)
