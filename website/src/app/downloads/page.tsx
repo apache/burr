@@ -293,9 +293,9 @@ export default function DownloadsPage() {
               </pre>
 
               <p className="mt-4 text-xs text-[var(--muted)]">
-                The core library supports Python 3.9+. In 0.43.0,
-                CLI-related extras require Python 3.10+ due to a known
-                compatibility issue. Burr has no required runtime dependencies
+                Burr requires Python 3.10+. (In 0.43.0,
+                CLI-related extras already required Python 3.10+ due to a known
+                compatibility issue; Python 3.9 is no longer supported.) Burr has no required runtime dependencies
                 — extras are opt-in.
               </p>
             </div>
