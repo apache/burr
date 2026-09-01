@@ -717,7 +717,7 @@ def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
         unpack_options: dict[str, Any] = {}
         if sys.version_info >= (3, 12):
             # This archive was just produced from our own Git repository. Be
-            # explicit on newer Python versions while retaining Python 3.9-3.11
+            # explicit on newer Python versions while retaining Python 3.10-3.11
             # compatibility, where shutil has no filter argument.
             unpack_options["filter"] = "fully_trusted"
         shutil.unpack_archive(str(source_archive), str(source_tree), format="tar", **unpack_options)
