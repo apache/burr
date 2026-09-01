@@ -68,3 +68,32 @@ def test_visualize_no_dot_output(graph, tmp_path: pathlib.Path):
     graph.visualize(output_file_path=None)
 
     assert not dot_file_path.exists()
+
+
+def test_visualize_mermaid(graph):
+    diagram = graph.visualize(engine="mermaid", include_conditions=True)
+
+    assert diagram == ("flowchart TD\n" '    action_0["counter"]\n' "    action_0 --> action_0\n")
+
+
+def test_visualize_mermaid_file(graph, tmp_path: pathlib.Path):
+    output_file = tmp_path / "graph.mmd"
+
+    diagram = graph.visualize(
+        engine="mermaid",
+        output_file_path=output_file,
+        direction="LR",
+    )
+
+    assert output_file.read_text(encoding="utf-8") == diagram
+    assert diagram.startswith("flowchart LR\n")
+
+
+def test_visualize_mermaid_rejects_graphviz_options(graph):
+    with pytest.raises(ValueError, match="does not support"):
+        graph.visualize(engine="mermaid", view=True)
+
+
+def test_visualize_mermaid_rejects_invalid_direction(graph):
+    with pytest.raises(ValueError, match="Invalid Mermaid direction"):
+        graph.visualize(engine="mermaid", direction="sideways")

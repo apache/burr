@@ -128,6 +128,17 @@ We can visualize the application (note you need ``burr[graphviz]`` installed):
 
     app.visualize("./graph", format="png")
 
+Mermaid text can be generated without installing Graphviz. It can be pasted into
+Markdown renderers that support Mermaid or saved directly to a file:
+
+.. code-block:: python
+
+    mermaid = app.visualize(
+        engine="mermaid",
+        include_conditions=True,
+        output_file_path="./graph.mmd",
+    )
+
 .. image:: ../_static/chatbot.png
     :align: center
 
