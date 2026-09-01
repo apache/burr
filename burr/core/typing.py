@@ -126,6 +126,21 @@ class ActionSchema(
     def intermediate_result_type() -> Type[IntermediateResultType]:
         pass
 
+    def convert_state_before_run(self, state: State) -> StateInputType:
+        """Convert Burr state into the value passed to ``Action.run``."""
+        return state  # type: ignore[return-value]
+
+    def convert_state_before_update(self, state: State) -> StateOutputType:
+        """Convert Burr state into the value passed to ``Action.update``."""
+        return state  # type: ignore[return-value]
+
+    def convert_state_after_update(
+        self, state: StateOutputType, original_state: State
+    ) -> State:
+        """Convert the value returned by ``Action.update`` back to Burr state."""
+        return state  # type: ignore[return-value]
+
+
 
 class DictBasedTypingSystem(TypingSystem[dict]):
     """Effectively a no-op. State is backed by a dictionary, which allows every state item
