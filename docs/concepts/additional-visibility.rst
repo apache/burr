@@ -106,7 +106,7 @@ This would create the following traces:
 #. ``call_llm`` as a causal dependent of ``create_prompt``
 
 Dependencies are used to express [dag](-style structures of spans within actions. This is useful for gaining visibility into the internal structure
-of an action, but is likely best used with integrations with micro-orchestration systems for implementating actions, such as Hamilton or Lanchain.
+of an action, but is likely best used with integrations with micro-orchestration systems for implementing actions, such as Hamilton or Lanchain.
 This maps to the `span link <https://opentelemetry.io/docs/concepts/signals/traces/#span-links>`_ concept in OpenTelemetry.
 
 Note that, on the surface, this doesn't actually *do* anything. It has to be paired with the appropriate hooks.
@@ -166,7 +166,7 @@ Tracing Functions
 
 You can observe non-burr functions, which will show up as part of your traces. To do this, you simply need to decorate the
 function with the :py:func:`@trace <burr.visibility.tracing.trace>` decorator. This will automatically create a span
-for the function (within the approprite context), and log as attributes the parameters + return value.
+for the function (within the appropriate context), and log as attributes the parameters + return value.
 
 For instance:
 
@@ -196,7 +196,7 @@ For instance:
         return state.update({'response': response})
 
 
-This will create spans for the ``_modify_prompt``, ``_fix``, and ``_query`` functions, and log the parameters and return values. You can opt out of logging paramers or return values and adding a filter to the decorator to exclude certain parameters.
+This will create spans for the ``_modify_prompt``, ``_fix``, and ``_query`` functions, and log the parameters and return values. You can opt out of logging parameters or return values and adding a filter to the decorator to exclude certain parameters.
 To contrast what you can instrument manually, the ``@trace`` decorator allows you to get more visibility and replace manual code such as the following (though you can happily combine the two approaches):
 
 .. code-block:: python
@@ -216,7 +216,7 @@ To contrast what you can instrument manually, the ``@trace`` decorator allows yo
 
 
 This will create spans for the ``_modify_prompt``, ``_fix``, and ``_query`` functions, and log the parameters and return values.
-You can opt out of logging paramers or return values and adding a filter to the decorator to exclude certain parameters.
+You can opt out of logging parameters or return values and adding a filter to the decorator to exclude certain parameters.
 
 .. _opentelref:
 

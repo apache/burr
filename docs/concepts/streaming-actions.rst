@@ -32,7 +32,7 @@ Actions can be implemented as streaming results. This enables a lower time-to-fi
 interface in the case of AI applications or streaming in of metrics in a model-training application. Broadly,
 this is a tool to enable quicker user interaction in longer running actions that require user focus.
 
-Like other actions, these can be implemented both as functions and as classes, and can use synchronous or asynchrounous APIs.
+Like other actions, these can be implemented both as functions and as classes, and can use synchronous or asynchronous APIs.
 
 They are used differently from regular actions -- the application wraps their result in a
 :py:class:`StreamingResultContainer <burr.core.action.StreamingResultContainer>`, or a
