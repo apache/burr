@@ -68,3 +68,34 @@ def test_visualize_no_dot_output(graph, tmp_path: pathlib.Path):
     graph.visualize(output_file_path=None)
 
     assert not dot_file_path.exists()
+
+
+@pytest.mark.parametrize(
+    "reads, writes, expected_label",
+    [
+        ([], [], "label=counter"),
+        (["count"], [], r"counter\lreads:\l  count\l"),
+        ([], ["count"], r"counter\lwrites:\l  count\l"),
+        (
+            ["count", "user_input"],
+            ["count"],
+            r"counter\lreads:\l  count\l  user_input\lwrites:\l  count\l",
+        ),
+    ],
+)
+def test_visualize_include_state_multiline_label(reads: list, writes: list, expected_label: str):
+    """Reads and writes should each be displayed on their own line (issue #402)"""
+    action = PassedInAction(
+        reads=reads,
+        writes=writes,
+        fn=lambda state: {"count": state.get("count", 0) + 1},
+        update_fn=lambda result, state: state.update(**result),
+        inputs=[],
+    )
+    graph = (
+        GraphBuilder().with_actions(counter=action).with_transitions(("counter", "counter")).build()
+    )
+
+    digraph = graph.visualize(include_state=True)
+
+    assert expected_label in digraph.source
