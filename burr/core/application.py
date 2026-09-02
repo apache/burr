@@ -2037,6 +2037,20 @@ class Application(Generic[ApplicationStateType]):
     def get_next_action(self) -> Optional[Action]:
         return self._graph.get_next_node(self._state.get(PRIOR_STEP), self._state, self.entrypoint)
 
+    def get_prior_action(self) -> Optional[Action]:
+        """Returns the action that was executed in the prior step.
+
+        This is the symmetric counterpart to :py:meth:`get_next_action`.
+        Returns ``None`` if no step has been executed yet (i.e. the application
+        is still at its entrypoint and has not run any action).
+
+        :return: The last-executed :py:class:`Action`, or ``None`` if no step has run.
+        """
+        prior_step = self._state.get(PRIOR_STEP)
+        if prior_step is None:
+            return None
+        return self._graph.get_action(prior_step)
+
     def update_state(self, new_state: State[ApplicationStateType]):
         """Updates state -- this is meant to be called if you need to do
         anything with the state. For example:
