@@ -73,6 +73,52 @@ async def test_async_persistence_lists_app_ids(async_persistence):
     assert set(app_ids) == set(["app_id1", "app_id2"])
 
 
+@pytest.mark.parametrize("partition_key", [None, "partition"])
+@pytest.mark.parametrize("latest_app,latest_sequence", [("a-app", 12), ("z-app", 0)])
+async def test_async_sqlite_load_latest_breaks_timestamp_ties(
+    tmp_path, partition_key, latest_app, latest_sequence
+):
+    db_path = str(tmp_path / "checkpoints.db")
+    async with AsyncSQLitePersister.from_values(
+        db_path=db_path, table_name="test_table"
+    ) as persister:
+        await persister.initialize()
+        await persister.save(partition_key, "a-app", 11, "first", State({"step": 1}), "completed")
+        await persister.save(
+            partition_key, latest_app, latest_sequence, "second", State({"step": 2}), "completed"
+        )
+        await persister.save("other-partition", "other-app", 999, "other", State({}), "completed")
+        # Model saves within the same second without depending on wall-clock timing.
+        await persister.connection.execute(
+            "UPDATE test_table SET created_at = '2026-01-01 00:00:00'"
+        )
+        await persister.connection.commit()
+
+    async with AsyncSQLitePersister.from_values(
+        db_path=db_path, table_name="test_table"
+    ) as persister:
+        loaded = await persister.load(partition_key, None)
+        assert loaded["app_id"] == latest_app
+        assert loaded["sequence_id"] == latest_sequence
+        assert loaded["position"] == "second"
+        assert loaded["state"] == State({"step": 2})
+        assert loaded["status"] == "completed"
+        assert (await persister.load(partition_key, "a-app", 11))["state"] == State({"step": 1})
+
+
+async def test_async_sqlite_load_latest_prioritizes_timestamp(async_persistence):
+    persister = async_persistence
+    await persister.initialize()
+    await persister.save("partition", "a-app", 1, "first", State({"step": 1}), "completed")
+    await persister.save("partition", "z-app", 0, "second", State({"step": 2}), "completed")
+    await persister.connection.execute(
+        "UPDATE test_table SET created_at = CASE app_id "
+        "WHEN 'a-app' THEN '2026-01-02 00:00:00' ELSE '2026-01-01 00:00:00' END"
+    )
+    await persister.connection.commit()
+    assert (await persister.load("partition", None))["state"] == State({"step": 1})
+
+
 @pytest.mark.parametrize(
     "method_name,kwargs",
     [
