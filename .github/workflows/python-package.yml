@@ -153,6 +153,12 @@ jobs:
         image: redis:7
         ports:
           - 6379:6379
+      aerospike:
+        image: aerospike/aerospike-server:latest
+        ports:
+          - 3000:3000
+          - 3001:3001
+          - 3002:3002
     strategy:
       fail-fast: false
       matrix:
