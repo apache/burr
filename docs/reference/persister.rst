@@ -42,6 +42,8 @@ We currently support the following database integrations:
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
     | MongoDB     | pymongo   | :ref:`MongoDBBasePersister <syncmongoref>`          | ❌            | ❌                                                  |
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
+    | Aerospike   | aerospike | :ref:`AerospikePersister <syncaerospikeref>`        | ❌            | ❌                                                  |
+    +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
 
 We follow the naming convention ``b_dependency-library``, where the ``b_`` is used to avoid name
 clashing with the underlying library. We chose the library name in case we implement the same database
@@ -128,6 +130,14 @@ Currently we support the following, although we highly recommend you contribute 
    :members:
 
    .. automethod:: __init__
+
+.. _syncaerospikeref:
+
+.. autoclass:: burr.integrations.persisters.b_aerospike.AerospikePersister
+   :members:
+
+   .. automethod:: __init__
+
 
 
 Note that the :py:class:`LocalTrackingClient <burr.tracking.client.LocalTrackingClient>` leverages the :py:class:`BaseStateLoader <burr.core.persistence.BaseStateLoader>` to allow loading state,

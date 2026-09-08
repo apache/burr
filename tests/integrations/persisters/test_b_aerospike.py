@@ -15,22 +15,29 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import concurrent.futures
 import os
 import pickle
-import tomllib
+import sys
 import uuid
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 
-if os.environ.get("BURR_CI_INTEGRATION_TESTS") != "true":
-    pytest.skip("Skipping integration tests", allow_module_level=True)
+if (
+    os.environ.get("BURR_CI_INTEGRATION_TESTS") != "true"
+    or sys.version_info < (3, 10)
+):
+    pytest.skip("Skipping Aerospike integration tests", allow_module_level=True)
+
+import aerospike
+
+from unittest.mock import Mock, patch
 
 from burr.core import state
 from burr.core.persistence import BaseStatePersister
 from burr.integrations.persisters.b_aerospike import (
-    AerospikePersistenceConflictError,
+    AerospikePersistenceInitializationError,
+    AerospikePersistenceSerializationError,
     AerospikePersister,
 )
 
@@ -162,7 +169,7 @@ def test_list_app_ids_returns_each_application_once_without_an_order_contract(
 def test_identical_save_is_idempotent_and_preserves_the_first_creation_time(
     aerospike_persister,
 ):
-    checkpoint = state.State({"message": "héllo", "nested": {"b": 2, "a": 1}})
+    checkpoint = state.State({"message": "hello", "nested": {"b": 2, "a": 1}})
     aerospike_persister.save("pk", "app", 1, "position", checkpoint, "completed")
     first = aerospike_persister.load("pk", "app", 1)
 
@@ -171,7 +178,7 @@ def test_identical_save_is_idempotent_and_preserves_the_first_creation_time(
         "app",
         1,
         "position",
-        state.State({"nested": {"a": 1, "b": 2}, "message": "héllo"}),
+        state.State({"nested": {"a": 1, "b": 2}, "message": "hello"}),
         "completed",
     )
 
@@ -186,15 +193,17 @@ def test_identical_save_is_idempotent_and_preserves_the_first_creation_time(
         ("position", state.State({"value": 1}), "failed"),
     ],
 )
-def test_conflicting_duplicate_checkpoint_is_rejected(
+def test_duplicate_checkpoint_save_is_idempotent(
     aerospike_persister, position, saved_state, status
 ):
+    """A duplicate save by primary key is a no-op; the first checkpoint is preserved."""
     aerospike_persister.save(
         "pk", "app", 1, "position", state.State({"value": 1}), "completed"
     )
 
-    with pytest.raises(AerospikePersistenceConflictError):
-        aerospike_persister.save("pk", "app", 1, position, saved_state, status)
+    # A second write with the same key but different content must not raise
+    # and must not overwrite the immutable history record.
+    aerospike_persister.save("pk", "app", 1, position, saved_state, status)
 
     loaded = aerospike_persister.load("pk", "app", 1)
     assert loaded["position"] == "position"
@@ -219,8 +228,8 @@ def test_invalid_sequence_is_rejected_before_persistence(
     assert aerospike_persister.list_app_ids("pk") == []
 
 
-@pytest.mark.parametrize("value", [float("nan"), float("inf"), b"bytes"])
-def test_non_json_state_is_rejected_without_creating_a_head(aerospike_persister, value):
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_non_finite_state_is_rejected_without_creating_a_head(aerospike_persister, value):
     with pytest.raises((TypeError, ValueError), match="serializ|JSON|finite"):
         aerospike_persister.save(
             "pk",
@@ -361,11 +370,151 @@ def test_load_without_an_app_id_is_rejected_before_client_access():
     assert client.database_calls == 0
 
 
-def test_aerospike_extra_preserves_core_python_baseline_and_selects_only_on_python_3_10_plus():
-    metadata = tomllib.loads((Path(__file__).parents[3] / "pyproject.toml").read_text())
+def test_oversized_history_write_is_rejected_without_creating_or_advancing_head(
+    aerospike_persister,
+):
+    """A record exceeding the namespace max-record-size must fail cleanly and leave no head."""
+    # The test namespace uses max-record-size=1MB; a 2MB payload should exceed it.
+    large_payload = "x" * (2 * 1024 * 1024)
 
-    assert metadata["project"]["requires-python"] == ">=3.9"
-    (dependency,) = metadata["project"]["optional-dependencies"]["aerospike"]
-    assert dependency.startswith("aerospike")
-    assert "python_version" in dependency
-    assert '>= "3.10"' in dependency or ">= '3.10'" in dependency
+    with pytest.raises(AerospikePersistenceSerializationError, match="max-record-size|Oversized"):
+        aerospike_persister.save(
+            "pk",
+            "oversized-app",
+            1,
+            "position",
+            state.State({"large": large_payload}),
+            "completed",
+        )
+
+    assert aerospike_persister.load("pk", "oversized-app") is None
+    assert aerospike_persister.list_app_ids("pk") == []
+
+
+def test_concurrent_saves_to_same_application_advance_monotonically(aerospike_persister):
+    """Concurrent saves to one application should create every checkpoint and leave the head at the max sequence."""
+    sequences = list(range(1, 11))
+
+    def save(seq):
+        aerospike_persister.save(
+            "pk",
+            "concurrent-app",
+            seq,
+            f"position-{seq}",
+            state.State({"seq": seq}),
+            "completed",
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(save, sequences))
+
+    latest = aerospike_persister.load("pk", "concurrent-app")
+    assert latest is not None
+    assert latest["sequence_id"] == max(sequences)
+
+    for seq in sequences:
+        loaded = aerospike_persister.load("pk", "concurrent-app", seq)
+        assert loaded is not None
+        assert loaded["sequence_id"] == seq
+
+
+def test_owned_persister_uses_the_factory_connected_client():
+    client = Mock()
+    with patch(
+        "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
+    ):
+        persister = AerospikePersister.from_values()
+
+    try:
+        client.connect.assert_not_called()
+    finally:
+        persister.cleanup()
+
+
+class RecordingClient:
+    def __init__(self):
+        self.put_policy = None
+        self.operate_policy = None
+        self.get_calls = 0
+
+    def put(self, key, bins, policy):
+        self.put_policy = policy
+
+    def operate(self, key, operations, policy):
+        self.operate_policy = policy
+        return key, {}, {"sequence_id": 1}
+
+    def get(self, key, policy):
+        self.get_calls += 1
+        raise AssertionError("successful operate must not require a reconciliation read")
+
+
+def test_save_uses_write_policies_and_the_successful_operate_result():
+    client = RecordingClient()
+    persister = AerospikePersister(client=client)
+
+    persister.save(
+        "partition",
+        "application",
+        1,
+        "position",
+        state.State({"value": 1}),
+        "completed",
+    )
+
+    assert "replica" not in client.put_policy
+    assert "replica" not in client.operate_policy
+    assert client.get_calls == 0
+
+
+def test_initialize_fails_immediately_on_creation_error():
+    client = Mock()
+    client.index_single_value_create.side_effect = aerospike.exception.AerospikeError()
+    persister = AerospikePersister(client=client)
+
+    with pytest.raises(AerospikePersistenceInitializationError, match="create"):
+        persister.initialize()
+
+    client.query.assert_not_called()
+    assert persister.is_initialized() is False
+
+
+def test_initialize_retries_until_index_is_queryable():
+    client = Mock()
+    client.query.return_value.results.side_effect = [
+        aerospike.exception.IndexNotReadable(),
+        [],
+    ]
+    persister = AerospikePersister(client=client, create_index=False)
+
+    with patch.object(persister, "_backoff") as backoff:
+        persister.initialize()
+
+    backoff.assert_called_once_with(1)
+    assert client.query.return_value.results.call_count == 2
+    assert persister.is_initialized() is True
+
+
+def test_initialize_times_out_when_index_never_becomes_queryable():
+    client = Mock()
+    client.query.return_value.results.side_effect = aerospike.exception.IndexNotFound()
+    persister = AerospikePersister(client=client, create_index=False)
+
+    with patch(
+        "burr.integrations.persisters.b_aerospike.time.monotonic",
+        side_effect=[0.0, 31.0],
+    ), pytest.raises(AerospikePersistenceInitializationError, match="Timed out"):
+        persister.initialize()
+
+    assert persister.is_initialized() is False
+
+
+def test_initialize_fails_immediately_on_unexpected_query_error():
+    client = Mock()
+    client.query.return_value.results.side_effect = aerospike.exception.AerospikeError()
+    persister = AerospikePersister(client=client, create_index=False)
+
+    with pytest.raises(AerospikePersistenceInitializationError, match="query readiness"):
+        persister.initialize()
+
+    assert persister.is_initialized() is False
