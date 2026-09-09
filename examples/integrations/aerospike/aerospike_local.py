@@ -36,10 +36,14 @@ def human_input(state: State, prompt: str) -> State:
 
 @action(reads=["chat_history"], writes=["response", "chat_history"])
 def ai_response(state: State) -> State:
-    content = client.chat.completions.create(
-        model=MODEL,
-        messages=state["chat_history"],
-    ).choices[0].message.content
+    content = (
+        client.chat.completions.create(
+            model=MODEL,
+            messages=state["chat_history"],
+        )
+        .choices[0]
+        .message.content
+    )
     chat_item = {"content": content, "role": "assistant"}
     chat_history = [*state["chat_history"], chat_item][-MAX_HISTORY_ITEMS:]
     return state.update(response=content, chat_history=chat_history)

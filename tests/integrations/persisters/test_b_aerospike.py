@@ -23,15 +23,12 @@ import uuid
 
 import pytest
 
-if (
-    os.environ.get("BURR_CI_INTEGRATION_TESTS") != "true"
-    or sys.version_info < (3, 10)
-):
+if os.environ.get("BURR_CI_INTEGRATION_TESTS") != "true" or sys.version_info < (3, 10):
     pytest.skip("Skipping Aerospike integration tests", allow_module_level=True)
 
-import aerospike
-
 from unittest.mock import Mock, patch
+
+import aerospike
 
 from burr.core import state
 from burr.core.persistence import BaseStatePersister
@@ -100,12 +97,8 @@ def test_owned_persister_pickle_round_trip_reconnects_and_loads_existing_state(
 def test_latest_load_returns_the_checkpoint_with_the_greatest_sequence(
     aerospike_persister,
 ):
-    aerospike_persister.save(
-        "pk", "app", 2, "second", state.State({"value": 2}), "completed"
-    )
-    aerospike_persister.save(
-        "pk", "app", 1, "first", state.State({"value": 1}), "completed"
-    )
+    aerospike_persister.save("pk", "app", 2, "second", state.State({"value": 2}), "completed")
+    aerospike_persister.save("pk", "app", 1, "first", state.State({"value": 1}), "completed")
 
     loaded = aerospike_persister.load("pk", "app")
 
@@ -134,15 +127,9 @@ def test_none_empty_and_literal_none_partitions_remain_distinct(aerospike_persis
             "completed",
         )
 
-    assert aerospike_persister.load(None, "app", 1)["state"].get_all() == {
-        "value": "null"
-    }
-    assert aerospike_persister.load("", "app", 1)["state"].get_all() == {
-        "value": "empty"
-    }
-    assert aerospike_persister.load("None", "app", 1)["state"].get_all() == {
-        "value": "literal"
-    }
+    assert aerospike_persister.load(None, "app", 1)["state"].get_all() == {"value": "null"}
+    assert aerospike_persister.load("", "app", 1)["state"].get_all() == {"value": "empty"}
+    assert aerospike_persister.load("None", "app", 1)["state"].get_all() == {"value": "literal"}
     assert set(aerospike_persister.list_app_ids(None)) == {"app"}
     assert set(aerospike_persister.list_app_ids("")) == {"app"}
     assert set(aerospike_persister.list_app_ids("None")) == {"app"}
@@ -151,15 +138,9 @@ def test_none_empty_and_literal_none_partitions_remain_distinct(aerospike_persis
 def test_list_app_ids_returns_each_application_once_without_an_order_contract(
     aerospike_persister,
 ):
-    aerospike_persister.save(
-        "pk", "app-a", 1, "one", state.State({"v": 1}), "completed"
-    )
-    aerospike_persister.save(
-        "pk", "app-a", 2, "two", state.State({"v": 2}), "completed"
-    )
-    aerospike_persister.save(
-        "pk", "app-b", 1, "one", state.State({"v": 3}), "completed"
-    )
+    aerospike_persister.save("pk", "app-a", 1, "one", state.State({"v": 1}), "completed")
+    aerospike_persister.save("pk", "app-a", 2, "two", state.State({"v": 2}), "completed")
+    aerospike_persister.save("pk", "app-b", 1, "one", state.State({"v": 3}), "completed")
 
     assert set(aerospike_persister.list_app_ids("pk")) == {"app-a", "app-b"}
     assert aerospike_persister.list_app_ids("another-partition") == []
@@ -196,9 +177,7 @@ def test_duplicate_checkpoint_save_is_idempotent(
     aerospike_persister, position, saved_state, status
 ):
     """A duplicate save by primary key is a no-op; the first checkpoint is preserved."""
-    aerospike_persister.save(
-        "pk", "app", 1, "position", state.State({"value": 1}), "completed"
-    )
+    aerospike_persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
 
     # A second write with the same key but different content must not raise
     # and must not overwrite the immutable history record.
@@ -211,9 +190,7 @@ def test_duplicate_checkpoint_save_is_idempotent(
 
 
 @pytest.mark.parametrize("sequence_id", [True, -(2**63) - 1, 2**63])
-def test_invalid_sequence_is_rejected_before_persistence(
-    aerospike_persister, sequence_id
-):
+def test_invalid_sequence_is_rejected_before_persistence(aerospike_persister, sequence_id):
     with pytest.raises(ValueError, match="sequence"):
         aerospike_persister.save(
             "pk",
@@ -259,9 +236,7 @@ def test_validation_only_accepts_the_existing_compatible_index(aerospike_persist
 def test_head_never_regresses_when_an_older_checkpoint_is_retried(aerospike_persister):
     old = state.State({"value": "old"})
     aerospike_persister.save("pk", "app", 1, "old", old, "completed")
-    aerospike_persister.save(
-        "pk", "app", 2, "new", state.State({"value": "new"}), "completed"
-    )
+    aerospike_persister.save("pk", "app", 2, "new", state.State({"value": "new"}), "completed")
     aerospike_persister.save("pk", "app", 1, "old", old, "completed")
 
     assert aerospike_persister.load("pk", "app")["sequence_id"] == 2
@@ -352,9 +327,7 @@ def test_invalid_sequence_is_rejected_before_client_access(sequence_id):
     persister = AerospikeBasePersister(client=client)
 
     with pytest.raises(ValueError, match="sequence"):
-        persister.save(
-            "pk", "app", sequence_id, "position", state.State({}), "completed"
-        )
+        persister.save("pk", "app", sequence_id, "position", state.State({}), "completed")
 
     assert client.database_calls == 0
 
@@ -398,9 +371,7 @@ def test_concurrent_saves_to_same_application_advance_monotonically(aerospike_pe
 
 def test_owned_persister_uses_the_factory_connected_client():
     client = Mock()
-    with patch(
-        "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
-    ):
+    with patch("burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client):
         persister = AerospikeBasePersister.from_values()
 
     try:

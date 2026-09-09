@@ -217,7 +217,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     def __setstate__(self, state: dict):
         client_config = state.get("_client_config")
         if client_config is None:
-            raise TypeError("Cannot unpickle an AerospikeBasePersister without client configuration")
+            raise TypeError(
+                "Cannot unpickle an AerospikeBasePersister without client configuration"
+            )
         self.__dict__.update(state)
         try:
             self._client = aerospike.client(client_config)
