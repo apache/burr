@@ -56,6 +56,9 @@ _CREATED_BIN = "created_at"
 _MAX_WRITE_ATTEMPTS = 3
 _RETRYABLE_CODES = {9, -10, 7, 14}  # Timeout, Connection, ClusterChange, KEY_BUSY
 
+# Bounded wait for the head-set secondary index to become queryable.
+_DEFAULT_INDEX_READY_TIMEOUT = 30.0
+
 
 class AerospikePersistenceError(Exception):
     """Base class for Aerospike persister errors."""
@@ -77,7 +80,7 @@ class AerospikePersistenceUncertainOutcomeError(AerospikePersistenceError):
     """Raised when a write retry budget is exhausted without a definitive result."""
 
 
-class AerospikePersister(persistence.BaseStatePersister):
+class AerospikeBasePersister(persistence.BaseStatePersister):
     """Synchronous Aerospike-backed implementation of Burr's ``BaseStatePersister``.
 
     The persister stores one immutable history record per ``(partition_key,
@@ -91,7 +94,7 @@ class AerospikePersister(persistence.BaseStatePersister):
     """
 
     @classmethod
-    def from_config(cls, config: dict) -> "AerospikePersister":
+    def from_config(cls, config: dict) -> "AerospikeBasePersister":
         """Create a persister from a configuration dictionary."""
         return cls.from_values(**config)
 
@@ -107,7 +110,8 @@ class AerospikePersister(persistence.BaseStatePersister):
         serde_kwargs: Optional[dict] = None,
         index_name: str = "burr_head_partition_idx",
         create_index: bool = True,
-    ) -> "AerospikePersister":
+        index_ready_timeout: float = _DEFAULT_INDEX_READY_TIMEOUT,
+    ) -> "AerospikeBasePersister":
         """Create a persister from seed hosts and client configuration.
 
         :param hosts: Aerospike seed hosts as ``[(host, port), ...]``.
@@ -119,6 +123,8 @@ class AerospikePersister(persistence.BaseStatePersister):
         :param serde_kwargs: Kwargs for Burr ``State`` serialization.
         :param index_name: Name of the secondary index on the head set.
         :param create_index: Whether ``initialize()`` may create the index.
+        :param index_ready_timeout: Seconds to wait for the head-set secondary
+            index to become queryable during ``initialize()``.
         """
         if hosts is None:
             hosts = [("127.0.0.1", 3000)]
@@ -137,6 +143,7 @@ class AerospikePersister(persistence.BaseStatePersister):
             serde_kwargs=serde_kwargs,
             index_name=index_name,
             create_index=create_index,
+            index_ready_timeout=index_ready_timeout,
             _client_config=aerospike_config,
             _owned=True,
         )
@@ -152,6 +159,7 @@ class AerospikePersister(persistence.BaseStatePersister):
         serde_kwargs: Optional[dict] = None,
         index_name: str = "burr_head_partition_idx",
         create_index: bool = True,
+        index_ready_timeout: float = _DEFAULT_INDEX_READY_TIMEOUT,
         _client_config: Optional[dict] = None,
         _owned: bool = False,
     ):
@@ -170,6 +178,7 @@ class AerospikePersister(persistence.BaseStatePersister):
         self.serde_kwargs = serde_kwargs or {}
         self.index_name = index_name
         self.create_index = create_index
+        self.index_ready_timeout = index_ready_timeout
         self._client_config = _client_config
         self._initialized = False
         self._closed = False
@@ -193,11 +202,11 @@ class AerospikePersister(persistence.BaseStatePersister):
     def __getstate__(self) -> dict:
         if not self._owned:
             raise TypeError(
-                "An AerospikePersister constructed with an injected client cannot be pickled"
+                "An AerospikeBasePersister constructed with an injected client cannot be pickled"
             )
         if self._client_config is None:
             raise TypeError(
-                "Cannot pickle an AerospikePersister without reconnectable client configuration"
+                "Cannot pickle an AerospikeBasePersister without reconnectable client configuration"
             )
         state = self.__dict__.copy()
         del state["_client"]
@@ -208,7 +217,7 @@ class AerospikePersister(persistence.BaseStatePersister):
     def __setstate__(self, state: dict):
         client_config = state.get("_client_config")
         if client_config is None:
-            raise TypeError("Cannot unpickle an AerospikePersister without client configuration")
+            raise TypeError("Cannot unpickle an AerospikeBasePersister without client configuration")
         self.__dict__.update(state)
         try:
             self._client = aerospike.client(client_config)
@@ -243,7 +252,7 @@ class AerospikePersister(persistence.BaseStatePersister):
                     f"Failed to create secondary index '{self.index_name}': {e}"
                 ) from e
 
-        deadline = time.monotonic() + 30.0
+        deadline = time.monotonic() + self.index_ready_timeout
         attempt = 0
         while True:
             try:
@@ -251,7 +260,8 @@ class AerospikePersister(persistence.BaseStatePersister):
             except (aerospike.exception.IndexNotFound, aerospike.exception.IndexNotReadable) as e:
                 if time.monotonic() >= deadline:
                     raise AerospikePersistenceInitializationError(
-                        "Timed out waiting for the secondary index to become queryable"
+                        f"Timed out waiting for the secondary index to become queryable "
+                        f"after {self.index_ready_timeout:.0f}s"
                     ) from e
                 attempt += 1
                 self._backoff(attempt)

@@ -20,7 +20,7 @@ import argparse
 import openai
 
 from burr.core import ApplicationBuilder, State, action
-from burr.integrations.persisters.b_aerospike import AerospikePersister
+from burr.integrations.persisters.b_aerospike import AerospikeBasePersister
 
 MODEL = "gpt-4o-mini"
 MAX_HISTORY_ITEMS = 20
@@ -45,7 +45,7 @@ def ai_response(state: State) -> State:
     return state.update(response=content, chat_history=chat_history)
 
 
-def build_application(persister: AerospikePersister, app_id: str, partition_key: str):
+def build_application(persister: AerospikeBasePersister, app_id: str, partition_key: str):
     return (
         ApplicationBuilder()
         .with_actions(human_input, ai_response)
@@ -72,7 +72,7 @@ def main():
     parser.add_argument("--prompt")
     args = parser.parse_args()
 
-    with AerospikePersister.from_values(
+    with AerospikeBasePersister.from_values(
         hosts=[("127.0.0.1", 3000)],
         namespace="test",
         key_prefix="aerospike-example",
