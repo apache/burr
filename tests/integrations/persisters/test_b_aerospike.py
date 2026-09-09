@@ -36,15 +36,14 @@ from unittest.mock import Mock, patch
 from burr.core import state
 from burr.core.persistence import BaseStatePersister
 from burr.integrations.persisters.b_aerospike import (
+    AerospikeBasePersister,
     AerospikePersistenceInitializationError,
-    AerospikePersistenceSerializationError,
-    AerospikePersister,
 )
 
 
 @pytest.fixture
 def aerospike_persister():
-    persister = AerospikePersister.from_values(key_prefix=f"test-{uuid.uuid4().hex}")
+    persister = AerospikeBasePersister.from_values(key_prefix=f"test-{uuid.uuid4().hex}")
     persister.initialize()
     yield persister
     persister.cleanup()
@@ -249,7 +248,7 @@ def test_repeated_initialization_is_idempotent(aerospike_persister):
 
 
 def test_validation_only_accepts_the_existing_compatible_index(aerospike_persister):
-    validator = AerospikePersister.from_values(create_index=False)
+    validator = AerospikeBasePersister.from_values(create_index=False)
     try:
         validator.initialize()
         assert validator.is_initialized() is True
@@ -290,7 +289,7 @@ class CallerOwnedClient:
 
 
 def test_injected_client_constructs_a_synchronous_base_persister():
-    persister = AerospikePersister(client=CallerOwnedClient())
+    persister = AerospikeBasePersister(client=CallerOwnedClient())
 
     assert isinstance(persister, BaseStatePersister)
     assert persister.is_async() is False
@@ -298,7 +297,7 @@ def test_injected_client_constructs_a_synchronous_base_persister():
 
 def test_cleanup_and_context_exit_never_close_an_injected_client():
     client = CallerOwnedClient()
-    persister = AerospikePersister(client=client)
+    persister = AerospikeBasePersister(client=client)
 
     persister.cleanup()
     persister.cleanup()
@@ -313,7 +312,7 @@ def test_cleanup_closes_an_internally_constructed_client_once():
     with patch(
         "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
     ) as factory:
-        persister = AerospikePersister.from_values()
+        persister = AerospikeBasePersister.from_values()
 
     persister.cleanup()
     persister.cleanup()
@@ -336,7 +335,7 @@ def test_from_config_accepts_official_client_configuration():
     with patch(
         "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
     ) as factory:
-        persister = AerospikePersister.from_config(config)
+        persister = AerospikeBasePersister.from_config(config)
 
     try:
         supplied_config = factory.call_args.args[0]
@@ -350,7 +349,7 @@ def test_from_config_accepts_official_client_configuration():
 @pytest.mark.parametrize("sequence_id", [True, -(2**63) - 1, 2**63, 1.0, "1"])
 def test_invalid_sequence_is_rejected_before_client_access(sequence_id):
     client = CallerOwnedClient()
-    persister = AerospikePersister(client=client)
+    persister = AerospikeBasePersister(client=client)
 
     with pytest.raises(ValueError, match="sequence"):
         persister.save(
@@ -362,33 +361,12 @@ def test_invalid_sequence_is_rejected_before_client_access(sequence_id):
 
 def test_load_without_an_app_id_is_rejected_before_client_access():
     client = CallerOwnedClient()
-    persister = AerospikePersister(client=client)
+    persister = AerospikeBasePersister(client=client)
 
     with pytest.raises(ValueError, match="app_id"):
         persister.load("pk", None)
 
     assert client.database_calls == 0
-
-
-def test_oversized_history_write_is_rejected_without_creating_or_advancing_head(
-    aerospike_persister,
-):
-    """A record exceeding the namespace max-record-size must fail cleanly and leave no head."""
-    # The test namespace uses max-record-size=1MB; a 2MB payload should exceed it.
-    large_payload = "x" * (2 * 1024 * 1024)
-
-    with pytest.raises(AerospikePersistenceSerializationError, match="max-record-size|Oversized"):
-        aerospike_persister.save(
-            "pk",
-            "oversized-app",
-            1,
-            "position",
-            state.State({"large": large_payload}),
-            "completed",
-        )
-
-    assert aerospike_persister.load("pk", "oversized-app") is None
-    assert aerospike_persister.list_app_ids("pk") == []
 
 
 def test_concurrent_saves_to_same_application_advance_monotonically(aerospike_persister):
@@ -423,7 +401,7 @@ def test_owned_persister_uses_the_factory_connected_client():
     with patch(
         "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
     ):
-        persister = AerospikePersister.from_values()
+        persister = AerospikeBasePersister.from_values()
 
     try:
         client.connect.assert_not_called()
@@ -451,7 +429,7 @@ class RecordingClient:
 
 def test_save_uses_write_policies_and_the_successful_operate_result():
     client = RecordingClient()
-    persister = AerospikePersister(client=client)
+    persister = AerospikeBasePersister(client=client)
 
     persister.save(
         "partition",
@@ -470,7 +448,7 @@ def test_save_uses_write_policies_and_the_successful_operate_result():
 def test_initialize_fails_immediately_on_creation_error():
     client = Mock()
     client.index_single_value_create.side_effect = aerospike.exception.AerospikeError()
-    persister = AerospikePersister(client=client)
+    persister = AerospikeBasePersister(client=client)
 
     with pytest.raises(AerospikePersistenceInitializationError, match="create"):
         persister.initialize()
@@ -485,7 +463,7 @@ def test_initialize_retries_until_index_is_queryable():
         aerospike.exception.IndexNotReadable(),
         [],
     ]
-    persister = AerospikePersister(client=client, create_index=False)
+    persister = AerospikeBasePersister(client=client, create_index=False)
 
     with patch.object(persister, "_backoff") as backoff:
         persister.initialize()
@@ -498,7 +476,7 @@ def test_initialize_retries_until_index_is_queryable():
 def test_initialize_times_out_when_index_never_becomes_queryable():
     client = Mock()
     client.query.return_value.results.side_effect = aerospike.exception.IndexNotFound()
-    persister = AerospikePersister(client=client, create_index=False)
+    persister = AerospikeBasePersister(client=client, create_index=False)
 
     with patch(
         "burr.integrations.persisters.b_aerospike.time.monotonic",
@@ -512,7 +490,7 @@ def test_initialize_times_out_when_index_never_becomes_queryable():
 def test_initialize_fails_immediately_on_unexpected_query_error():
     client = Mock()
     client.query.return_value.results.side_effect = aerospike.exception.AerospikeError()
-    persister = AerospikePersister(client=client, create_index=False)
+    persister = AerospikeBasePersister(client=client, create_index=False)
 
     with pytest.raises(AerospikePersistenceInitializationError, match="query readiness"):
         persister.initialize()

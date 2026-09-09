@@ -42,7 +42,7 @@ Start a local Aerospike Community Edition database with Docker:
 ```bash
 docker run --name burr-aerospike -d \
   -p 3000:3000 \
-  aerospike/aerospike-server
+  aerospike/aerospike-server:8.1.2.4
 ```
 
 The example uses the default `test` namespace. Aerospike creates the `burr_state` and `burr_head` sets on the first write.

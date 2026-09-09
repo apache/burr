@@ -42,7 +42,7 @@ We currently support the following database integrations:
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
     | MongoDB     | pymongo   | :ref:`MongoDBBasePersister <syncmongoref>`          | ❌            | ❌                                                  |
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
-    | Aerospike   | aerospike | :ref:`AerospikePersister <syncaerospikeref>`        | ❌            | ❌                                                  |
+    | Aerospike   | aerospike | :ref:`AerospikeBasePersister <syncaerospikeref>`    | ❌            | ❌                                                  |
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
 
 We follow the naming convention ``b_dependency-library``, where the ``b_`` is used to avoid name
@@ -133,7 +133,7 @@ Currently we support the following, although we highly recommend you contribute 
 
 .. _syncaerospikeref:
 
-.. autoclass:: burr.integrations.persisters.b_aerospike.AerospikePersister
+.. autoclass:: burr.integrations.persisters.b_aerospike.AerospikeBasePersister
    :members:
 
    .. automethod:: __init__
