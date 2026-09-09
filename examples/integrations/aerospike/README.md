@@ -116,4 +116,3 @@ docker run --rm \
   aerospike/aerospike-tools \
   aql -h 127.0.0.1 -c "SELECT * FROM test.burr_state"
 ```
-
