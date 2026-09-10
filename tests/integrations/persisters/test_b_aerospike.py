@@ -34,7 +34,9 @@ from burr.core import state
 from burr.core.persistence import BaseStatePersister
 from burr.integrations.persisters.b_aerospike import (
     AerospikeBasePersister,
-    AerospikePersistenceInitializationError,
+    AerospikePersistenceConsistencyError,
+    AerospikePersistenceError,
+    AerospikePersistenceUncertainOutcomeError,
 )
 
 
@@ -92,6 +94,18 @@ def test_owned_persister_pickle_round_trip_reconnects_and_loads_existing_state(
         assert loaded["state"].get_all() == {"restored": True}
     finally:
         reconstructed.cleanup()
+
+
+def test_owned_persister_pickle_preserves_membership_set():
+    persister = AerospikeBasePersister.from_values(
+        membership_set=f"membership_{uuid.uuid4().hex[:12]}"
+    )
+    reconstructed = pickle.loads(pickle.dumps(persister))
+    try:
+        assert reconstructed.membership_set == persister.membership_set
+    finally:
+        reconstructed.cleanup()
+        persister.cleanup()
 
 
 def test_latest_load_returns_the_checkpoint_with_the_greatest_sequence(
@@ -219,18 +233,27 @@ def test_non_finite_state_is_rejected_without_creating_a_head(aerospike_persiste
     assert aerospike_persister.load("pk", "invalid-state") is None
 
 
+def test_oversized_membership_preserves_existing_membership_and_loadable_state(
+    aerospike_persister,
+):
+    partition = f"oversized-membership-{uuid.uuid4().hex}"
+    first_app = "a" * 600_000
+    second_app = "b" * 600_000
+    aerospike_persister.save(partition, first_app, 1, "first", state.State({"v": 1}), "completed")
+
+    with pytest.raises(AerospikePersistenceError, match="max-record-size"):
+        aerospike_persister.save(
+            partition, second_app, 1, "second", state.State({"v": 2}), "completed"
+        )
+
+    assert aerospike_persister.list_app_ids(partition) == [first_app]
+    assert aerospike_persister.load(partition, first_app)["sequence_id"] == 1
+    assert aerospike_persister.load(partition, second_app)["sequence_id"] == 1
+
+
 def test_repeated_initialization_is_idempotent(aerospike_persister):
     aerospike_persister.initialize()
     assert aerospike_persister.is_initialized() is True
-
-
-def test_validation_only_accepts_the_existing_compatible_index(aerospike_persister):
-    validator = AerospikeBasePersister.from_values(create_index=False)
-    try:
-        validator.initialize()
-        assert validator.is_initialized() is True
-    finally:
-        validator.cleanup()
 
 
 def test_head_never_regresses_when_an_older_checkpoint_is_retried(aerospike_persister):
@@ -304,8 +327,8 @@ def test_from_config_accepts_official_client_configuration():
         "namespace": "test",
         "history_set": "history",
         "head_set": "heads",
+        "membership_set": "applications",
         "key_prefix": "service-a",
-        "index_name": "service_a_partition_idx",
     }
     with patch(
         "burr.integrations.persisters.b_aerospike.aerospike.client", return_value=client
@@ -317,6 +340,7 @@ def test_from_config_accepts_official_client_configuration():
         assert supplied_config["hosts"] == [("aerospike.internal", 3000)]
         assert supplied_config["user"] == "service-user"
         assert supplied_config["password"] == "secret"
+        assert persister.membership_set == "applications"
     finally:
         persister.cleanup()
 
@@ -362,6 +386,7 @@ def test_concurrent_saves_to_same_application_advance_monotonically(aerospike_pe
     latest = aerospike_persister.load("pk", "concurrent-app")
     assert latest is not None
     assert latest["sequence_id"] == max(sequences)
+    assert aerospike_persister.list_app_ids("pk") == ["concurrent-app"]
 
     for seq in sequences:
         loaded = aerospike_persister.load("pk", "concurrent-app", seq)
@@ -383,15 +408,23 @@ def test_owned_persister_uses_the_factory_connected_client():
 class RecordingClient:
     def __init__(self):
         self.put_policy = None
-        self.operate_policy = None
+        self.operate_policies = []
         self.get_calls = 0
+        self.head_operates = 0
+        self.membership_operations = None
 
     def put(self, key, bins, policy):
         self.put_policy = policy
 
     def operate(self, key, operations, policy):
-        self.operate_policy = policy
-        return key, {}, {"sequence_id": 1}
+        self.operate_policies.append(policy)
+        if key[1] == "burr_head":
+            self.head_operates += 1
+            if self.head_operates == 1:
+                return key, {}, {"sequence_id": 1}
+            return key, {}, {"sequence_id": 1, "member_confirm": True}
+        self.membership_operations = operations
+        return key, {}, {}
 
     def get(self, key, policy):
         self.get_calls += 1
@@ -412,58 +445,256 @@ def test_save_uses_write_policies_and_the_successful_operate_result():
     )
 
     assert "replica" not in client.put_policy
-    assert "replica" not in client.operate_policy
+    assert all("replica" not in policy for policy in client.operate_policies)
+    assert all(
+        policy["commit_level"] == aerospike.POLICY_COMMIT_LEVEL_ALL
+        for policy in client.operate_policies
+    )
+    assert all(policy["ttl"] == aerospike.TTL_NEVER_EXPIRE for policy in client.operate_policies)
+    assert client.operate_policies[-1]["max_retries"] == 0
+    assert len(client.membership_operations) == 1
+    assert client.membership_operations[0]["bin"] == "app_ids"
     assert client.get_calls == 0
 
 
-def test_initialize_fails_immediately_on_creation_error():
-    client = Mock()
-    client.index_single_value_create.side_effect = aerospike.exception.AerospikeError()
+class ConditionalMembershipClient:
+    def __init__(self, confirmation_error=None):
+        self.confirmed = False
+        self.sequence_id = None
+        self.membership = {}
+        self.membership_accesses = 0
+        self.confirmation_error = confirmation_error
+
+    def put(self, key, bins, policy):
+        return None
+
+    def operate(self, key, operations, policy):
+        if key[1] == "burr_apps":
+            self.membership_accesses += 1
+            self.membership["app"] = 1
+            return key, {}, {}
+        if self.sequence_id is None or not self.confirmed:
+            if self.sequence_id is None:
+                self.sequence_id = 1
+                return key, {}, {"sequence_id": self.sequence_id}
+            if self.confirmation_error is not None:
+                error, self.confirmation_error = self.confirmation_error, None
+                self.confirmed = True
+                raise error
+            self.confirmed = True
+            return key, {}, {"sequence_id": self.sequence_id, "member_confirm": True}
+        self.sequence_id = max(self.sequence_id, 2)
+        return key, {}, {"sequence_id": self.sequence_id, "member_confirm": True}
+
+    def get(self, key, policy):
+        return (
+            key,
+            {},
+            {
+                "partition": '"pk"',
+                "key_prefix": '""',
+                "app_id": "app",
+                "sequence_id": self.sequence_id,
+                **({"member_confirm": True} if self.confirmed else {}),
+            },
+        )
+
+    def select(self, key, bins, policy):
+        self.membership_accesses += 1
+        return (
+            key,
+            {},
+            {
+                "partition": '"pk"',
+                "key_prefix": '""',
+                "app_ids": self.membership,
+            },
+        )
+
+
+def test_first_save_confirms_membership_and_subsequent_save_skips_membership_access():
+    client = ConditionalMembershipClient()
     persister = AerospikeBasePersister(client=client)
 
-    with pytest.raises(AerospikePersistenceInitializationError, match="create"):
-        persister.initialize()
+    persister.save("pk", "app", 1, "one", state.State({"value": 1}), "completed")
+    assert persister.list_app_ids("pk") == ["app"]
+    accesses_after_first_save_and_list = client.membership_accesses
 
-    client.query.assert_not_called()
-    assert persister.is_initialized() is False
+    persister.save("pk", "app", 2, "two", state.State({"value": 2}), "completed")
+
+    assert client.confirmed is True
+    assert client.membership_accesses == accesses_after_first_save_and_list
 
 
-def test_initialize_retries_until_index_is_queryable():
-    client = Mock()
-    client.query.return_value.results.side_effect = [
-        aerospike.exception.IndexNotReadable(),
-        [],
-    ]
-    persister = AerospikeBasePersister(client=client, create_index=False)
+def test_ambiguous_confirmation_is_reconciled_from_the_head():
+    client = ConditionalMembershipClient(aerospike.exception.TimeoutError())
+    persister = AerospikeBasePersister(client=client)
+
+    persister.save("pk", "app", 1, "one", state.State({"value": 1}), "completed")
+
+    assert client.confirmed is True
+    assert persister.list_app_ids("pk") == ["app"]
+
+
+def test_save_rejects_a_stored_false_membership_confirmation_without_membership_access():
+    client = ConditionalMembershipClient()
+    client.sequence_id = 1
+    client.operate = Mock(side_effect=aerospike.exception.FilteredOut())
+    client.get = Mock(
+        return_value=(
+            ("test", "burr_head", "key"),
+            {},
+            {
+                "partition": '"pk"',
+                "key_prefix": '""',
+                "app_id": "app",
+                "sequence_id": 1,
+                "member_confirm": False,
+            },
+        )
+    )
+    persister = AerospikeBasePersister(client=client)
+
+    with pytest.raises(AerospikePersistenceConsistencyError, match="must be true"):
+        persister.save("pk", "app", 1, "one", state.State({"value": 1}), "completed")
+
+    assert client.membership_accesses == 0
+
+
+class MembershipRetryClient:
+    def __init__(self, membership_results, select_results):
+        self.membership_results = iter(membership_results)
+        self.select_results = iter(select_results)
+        self.operate_calls = 0
+
+    def put(self, key, bins, policy):
+        return None
+
+    def operate(self, key, operations, policy):
+        self.operate_calls += 1
+        if self.operate_calls == 1:
+            return key, {}, {"sequence_id": 1}
+        if key[1] == "burr_head":
+            return key, {}, {"sequence_id": 1, "member_confirm": True}
+        result = next(self.membership_results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def select(self, key, bins, policy):
+        result = next(self.select_results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def test_membership_registration_retries_after_unobserved_timeout():
+    client = MembershipRetryClient(
+        [aerospike.exception.TimeoutError(), (("test", "burr_apps", "key"), {}, {})],
+        [aerospike.exception.RecordNotFound()],
+    )
+    persister = AerospikeBasePersister(client=client)
 
     with patch.object(persister, "_backoff") as backoff:
-        persister.initialize()
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
 
+    assert client.operate_calls == 4
     backoff.assert_called_once_with(1)
-    assert client.query.return_value.results.call_count == 2
+
+
+def test_membership_registration_reconciles_observed_timeout():
+    client = MembershipRetryClient(
+        [aerospike.exception.TimeoutError()],
+        [
+            (
+                ("test", "burr_apps", "key"),
+                {},
+                {"partition": '"pk"', "key_prefix": '""', "app_ids": {"app": 1}},
+            )
+        ],
+    )
+    persister = AerospikeBasePersister(client=client)
+
+    persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    assert client.operate_calls == 3
+
+
+def test_membership_registration_exhausts_uncertain_retry_budget():
+    client = MembershipRetryClient(
+        [aerospike.exception.TimeoutError()] * 3,
+        [aerospike.exception.RecordNotFound()] * 3,
+    )
+    persister = AerospikeBasePersister(client=client)
+
+    with patch.object(persister, "_backoff"), pytest.raises(
+        AerospikePersistenceUncertainOutcomeError, match="Membership"
+    ):
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    assert client.operate_calls == 4
+
+
+def test_list_app_ids_uses_one_membership_primary_key_read():
+    client = Mock()
+    client.select.return_value = (
+        ("test", "burr_apps", "digest"),
+        {},
+        {"app_ids": {"a": 1, "b": 1}, "unknown": "ignored"},
+    )
+    persister = AerospikeBasePersister(client=client)
+
+    assert set(persister.list_app_ids("pk")) == {"a", "b"}
+
+    client.select.assert_called_once()
+    key, bins = client.select.call_args.args
+    assert key == (
+        "test",
+        "burr_apps",
+        "aeb3748692d1637fc73dba70cd2887713db3fa6c26ca6ce8a01240d426228c5b",
+    )
+    assert bins == ["app_ids"]
+    client.query.assert_not_called()
+
+
+def test_list_app_ids_treats_an_absent_membership_record_as_empty():
+    client = Mock()
+    client.select.side_effect = aerospike.exception.RecordNotFound()
+    persister = AerospikeBasePersister(client=client)
+
+    assert persister.list_app_ids("pk") == []
+    client.query.assert_not_called()
+
+
+def test_list_app_ids_propagates_missing_membership_map():
+    client = Mock()
+    client.select.return_value = (("test", "burr_apps", "digest"), {}, {})
+    persister = AerospikeBasePersister(client=client)
+
+    with pytest.raises(KeyError, match="app_ids"):
+        persister.list_app_ids("pk")
+
+
+def test_list_app_ids_propagates_non_iterable_membership_map():
+    client = Mock()
+    client.select.return_value = (
+        ("test", "burr_apps", "digest"),
+        {},
+        {"app_ids": None},
+    )
+    persister = AerospikeBasePersister(client=client)
+
+    with pytest.raises(TypeError):
+        persister.list_app_ids("pk")
+
+
+def test_initialize_is_idempotent_without_remote_calls():
+    client = Mock()
+    persister = AerospikeBasePersister(client=client)
+
+    persister.initialize()
+    persister.initialize()
+
     assert persister.is_initialized() is True
-
-
-def test_initialize_times_out_when_index_never_becomes_queryable():
-    client = Mock()
-    client.query.return_value.results.side_effect = aerospike.exception.IndexNotFound()
-    persister = AerospikeBasePersister(client=client, create_index=False)
-
-    with patch(
-        "burr.integrations.persisters.b_aerospike.time.monotonic",
-        side_effect=[0.0, 31.0],
-    ), pytest.raises(AerospikePersistenceInitializationError, match="Timed out"):
-        persister.initialize()
-
-    assert persister.is_initialized() is False
-
-
-def test_initialize_fails_immediately_on_unexpected_query_error():
-    client = Mock()
-    client.query.return_value.results.side_effect = aerospike.exception.AerospikeError()
-    persister = AerospikeBasePersister(client=client, create_index=False)
-
-    with pytest.raises(AerospikePersistenceInitializationError, match="query readiness"):
-        persister.initialize()
-
-    assert persister.is_initialized() is False
+    client.assert_not_called()
+    assert client.method_calls == []

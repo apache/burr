@@ -35,6 +35,7 @@ if sys.version_info < (3, 10):
 try:
     import aerospike
     import aerospike_helpers.expressions as expr
+    from aerospike_helpers.operations import map_operations as map_ops
     from aerospike_helpers.operations import operations as aero_ops
 except ImportError as e:
     base.require_plugin(e, "aerospike")
@@ -45,8 +46,9 @@ _SYSTEM = "burr-as"
 # Aerospike bin names are capped at 15 characters.
 _PART_BIN = "partition"
 _PREFIX_BIN = "key_prefix"
-_TOKEN_BIN = "part_token"
 _APP_BIN = "app_id"
+_APPS_BIN = "app_ids"
+_MEMBERSHIP_BIN = "member_confirm"
 _SEQ_BIN = "sequence_id"
 _POS_BIN = "position"
 _STATE_BIN = "state"
@@ -56,9 +58,6 @@ _CREATED_BIN = "created_at"
 _MAX_WRITE_ATTEMPTS = 3
 _RETRYABLE_CODES = {9, -10, 7, 14}  # Timeout, Connection, ClusterChange, KEY_BUSY
 
-# Bounded wait for the head-set secondary index to become queryable.
-_DEFAULT_INDEX_READY_TIMEOUT = 30.0
-
 
 class AerospikePersistenceError(Exception):
     """Base class for Aerospike persister errors."""
@@ -66,10 +65,6 @@ class AerospikePersistenceError(Exception):
 
 class AerospikePersistenceConsistencyError(AerospikePersistenceError):
     """Raised when stored data violates the persister's invariants."""
-
-
-class AerospikePersistenceInitializationError(AerospikePersistenceError):
-    """Raised when secondary index initialization fails."""
 
 
 class AerospikePersistenceSerializationError(AerospikePersistenceError, ValueError):
@@ -86,8 +81,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     The persister stores one immutable history record per ``(partition_key,
     app_id, sequence_id)`` and a small mutable head record per ``(partition_key,
     app_id)`` that points to the latest sequence. Application IDs within a
-    partition are listed through a string secondary index on the head set's
-    fixed-size partition token.
+    partition are listed through one materialized membership record per
+    logical partition.
 
     This optional integration requires Python 3.10+ and the official Aerospike
     Python client. Burr core remains compatible with Python 3.9+.
@@ -106,11 +101,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         namespace: str = "test",
         history_set: str = "burr_state",
         head_set: str = "burr_head",
+        membership_set: str = "burr_apps",
         key_prefix: Optional[str] = "",
         serde_kwargs: Optional[dict] = None,
-        index_name: str = "burr_head_partition_idx",
-        create_index: bool = True,
-        index_ready_timeout: float = _DEFAULT_INDEX_READY_TIMEOUT,
     ) -> "AerospikeBasePersister":
         """Create a persister from seed hosts and client configuration.
 
@@ -119,12 +112,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         :param namespace: Aerospike namespace.
         :param history_set: Set for immutable checkpoint records.
         :param head_set: Set for mutable latest-sequence heads.
+        :param membership_set: Set for per-partition application membership.
         :param key_prefix: Optional logical prefix for key isolation.
         :param serde_kwargs: Kwargs for Burr ``State`` serialization.
-        :param index_name: Name of the secondary index on the head set.
-        :param create_index: Whether ``initialize()`` may create the index.
-        :param index_ready_timeout: Seconds to wait for the head-set secondary
-            index to become queryable during ``initialize()``.
         """
         if hosts is None:
             hosts = [("127.0.0.1", 3000)]
@@ -139,11 +129,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             namespace=namespace,
             history_set=history_set,
             head_set=head_set,
+            membership_set=membership_set,
             key_prefix=key_prefix if key_prefix is not None else "",
             serde_kwargs=serde_kwargs,
-            index_name=index_name,
-            create_index=create_index,
-            index_ready_timeout=index_ready_timeout,
             _client_config=aerospike_config,
             _owned=True,
         )
@@ -155,11 +143,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         namespace: str = "test",
         history_set: str = "burr_state",
         head_set: str = "burr_head",
+        membership_set: str = "burr_apps",
         key_prefix: Optional[str] = "",
         serde_kwargs: Optional[dict] = None,
-        index_name: str = "burr_head_partition_idx",
-        create_index: bool = True,
-        index_ready_timeout: float = _DEFAULT_INDEX_READY_TIMEOUT,
         _client_config: Optional[dict] = None,
         _owned: bool = False,
     ):
@@ -174,11 +160,9 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         self.namespace = namespace
         self.history_set = history_set
         self.head_set = head_set
+        self.membership_set = membership_set
         self.key_prefix = key_prefix if key_prefix is not None else ""
         self.serde_kwargs = serde_kwargs or {}
-        self.index_name = index_name
-        self.create_index = create_index
-        self.index_ready_timeout = index_ready_timeout
         self._client_config = _client_config
         self._initialized = False
         self._closed = False
@@ -235,45 +219,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         self.serde_kwargs = serde_kwargs
 
     def initialize(self):
-        """Create the head-set secondary index if configured and wait for query readiness."""
-        self._initialized = False
-        if self.create_index:
-            try:
-                self._client.index_single_value_create(
-                    self.namespace,
-                    self.head_set,
-                    _TOKEN_BIN,
-                    aerospike.INDEX_STRING,
-                    self.index_name,
-                    {},
-                )
-            except aerospike.exception.IndexFoundError:
-                pass
-            except aerospike.exception.AerospikeError as e:
-                raise AerospikePersistenceInitializationError(
-                    f"Failed to create secondary index '{self.index_name}': {e}"
-                ) from e
-
-        deadline = time.monotonic() + self.index_ready_timeout
-        attempt = 0
-        while True:
-            try:
-                self._app_id_query("").results()
-            except (aerospike.exception.IndexNotFound, aerospike.exception.IndexNotReadable) as e:
-                if time.monotonic() >= deadline:
-                    raise AerospikePersistenceInitializationError(
-                        f"Timed out waiting for the secondary index to become queryable "
-                        f"after {self.index_ready_timeout:.0f}s"
-                    ) from e
-                attempt += 1
-                self._backoff(attempt)
-                continue
-            except aerospike.exception.AerospikeError as e:
-                raise AerospikePersistenceInitializationError(
-                    f"Failed to verify secondary-index query readiness: {e}"
-                ) from e
-            self._initialized = True
-            return
+        """Mark the dynamically provisioned persister ready for use."""
+        self._initialized = True
 
     def is_initialized(self) -> bool:
         return self._initialized
@@ -301,7 +248,10 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         key_prefix = self.key_prefix
         partition_canonical = self._canonical_partition(partition_key)
         key_prefix_canonical = self._canonical_key_prefix()
-        part_token = self._derive_partition_token(key_prefix, partition_key)
+        membership_key = self._key(
+            self.membership_set,
+            self._derive_membership_key(key_prefix, partition_key),
+        )
 
         history_key = self._key(
             self.history_set,
@@ -329,11 +279,18 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         head_bins = {
             _PART_BIN: partition_canonical,
             _PREFIX_BIN: key_prefix_canonical,
-            _TOKEN_BIN: part_token,
             _APP_BIN: app_id,
             _SEQ_BIN: sequence_id,
         }
-        self._advance_head(head_key, head_bins)
+        _, membership_registered = self._advance_head(head_key, head_bins)
+        if membership_registered is not True:
+            self._register_membership(membership_key, app_id)
+            self._confirm_membership(
+                head_key,
+                partition_canonical,
+                key_prefix_canonical,
+                app_id,
+            )
 
     def load(
         self,
@@ -382,12 +339,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         head_record = self._read_head(head_key)
         if head_record is None:
             return None
-        stored_seq = self._validate_head_identity(
+        stored_seq, _ = self._validate_head_identity(
             head_record,
             partition_canonical,
             key_prefix_canonical,
             app_id,
-            self._derive_partition_token(key_prefix, partition_key),
         )
         history_key = self._key(
             self.history_set,
@@ -404,18 +360,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return self._build_persisted_data(history_record, partition_key, app_id, stored_seq)
 
     def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
-        part_token = self._derive_partition_token(self.key_prefix, partition_key)
-        try:
-            results = self._app_id_query(part_token).results()
-        except (aerospike.exception.IndexNotFound, aerospike.exception.IndexNotReadable) as e:
-            raise AerospikePersistenceInitializationError(
-                "The head-set secondary index is not ready; call initialize()"
-            ) from e
-        except aerospike.exception.AerospikeError as e:
-            raise AerospikePersistenceError(f"Application listing query failed: {e}") from e
-
-        app_ids = {bins[_APP_BIN] for _, _, bins in results}
-        return list(app_ids)
+        membership_key = self._key(
+            self.membership_set,
+            self._derive_membership_key(self.key_prefix, partition_key),
+        )
+        return list(self._read_membership(membership_key))
 
     def _canonical_json(self, value: Any) -> str:
         """Deterministic JSON encoding used for canonical identities and state snapshots."""
@@ -452,11 +401,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             app_id,
         ]
 
-    def _identity_partition(self, key_prefix: Optional[str], partition_key: Optional[str]) -> list:
+    def _identity_membership(self, key_prefix: Optional[str], partition_key: Optional[str]) -> list:
         return [
             _SYSTEM,
             _CODE_VERSION,
-            "partition",
+            "membership",
             key_prefix,
             partition_key,
         ]
@@ -480,11 +429,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             self._canonical_json(self._identity_head(key_prefix, partition_key, app_id))
         )
 
-    def _derive_partition_token(
+    def _derive_membership_key(
         self, key_prefix: Optional[str], partition_key: Optional[str]
     ) -> str:
         return self._sha256_hex(
-            self._canonical_json(self._identity_partition(key_prefix, partition_key))
+            self._canonical_json(self._identity_membership(key_prefix, partition_key))
         )
 
     def _validate_sequence_id(self, sequence_id: Any) -> None:
@@ -530,6 +479,46 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
 
     def _read_head(self, key):
         return self._read_history(key)
+
+    def _read_membership(self, key):
+        try:
+            _, _, bins = self._client.select(
+                key,
+                [_APPS_BIN],
+                policy={"replica": aerospike.POLICY_REPLICA_MASTER},
+            )
+            return bins[_APPS_BIN]
+        except aerospike.exception.RecordNotFound:
+            return {}
+        except aerospike.exception.AerospikeError as e:
+            raise AerospikePersistenceError(f"Membership read failed: {e}") from e
+
+    def _register_membership(self, membership_key, app_id: str) -> None:
+        operations = [map_ops.map_put(_APPS_BIN, app_id, 1)]
+        policy = {
+            "commit_level": aerospike.POLICY_COMMIT_LEVEL_ALL,
+            "ttl": aerospike.TTL_NEVER_EXPIRE,
+            "max_retries": 0,
+        }
+        for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
+            try:
+                self._client.operate(membership_key, operations, policy=policy)
+                return
+            except aerospike.exception.RecordTooBig as e:
+                raise AerospikePersistenceError(
+                    "Membership record exceeds the namespace max-record-size"
+                ) from e
+            except aerospike.exception.AerospikeError as e:
+                if not self._is_retryable(e):
+                    raise AerospikePersistenceError(f"Membership registration failed: {e}") from e
+                app_ids = self._read_membership(membership_key)
+                if app_id in app_ids:
+                    return
+                if attempt == _MAX_WRITE_ATTEMPTS:
+                    raise AerospikePersistenceUncertainOutcomeError(
+                        "Membership registration failed with an uncertain outcome"
+                    ) from e
+                self._backoff(attempt)
 
     def _write_history_once(self, history_key, bins):
         """Attempt one create-only history write."""
@@ -578,7 +567,6 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         partition_canonical: str,
         key_prefix_canonical: str,
         app_id: str,
-        part_token: str,
         sequence_id: int,
     ):
         """Build a conditional expression for the head operate().
@@ -592,7 +580,6 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 expr.Eq(expr.StrBin(_PART_BIN), partition_canonical),
                 expr.Eq(expr.StrBin(_PREFIX_BIN), key_prefix_canonical),
                 expr.Eq(expr.StrBin(_APP_BIN), app_id),
-                expr.Eq(expr.StrBin(_TOKEN_BIN), part_token),
                 expr.LT(expr.IntBin(_SEQ_BIN), sequence_id),
             ),
         ).compile()
@@ -602,10 +589,10 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return [
             aero_ops.write(_PART_BIN, bins[_PART_BIN]),
             aero_ops.write(_PREFIX_BIN, bins[_PREFIX_BIN]),
-            aero_ops.write(_TOKEN_BIN, bins[_TOKEN_BIN]),
             aero_ops.write(_APP_BIN, bins[_APP_BIN]),
             aero_ops.write(_SEQ_BIN, bins[_SEQ_BIN]),
             aero_ops.read(_SEQ_BIN),
+            aero_ops.read(_MEMBERSHIP_BIN),
         ]
 
     def _validate_head_identity(
@@ -614,12 +601,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         partition_canonical: str,
         key_prefix_canonical: str,
         app_id: str,
-        part_token: str,
-    ) -> int:
-        """Validate that a head record's identity matches the request.
-
-        Returns the stored sequence_id or raises AerospikePersistenceConsistencyError.
-        """
+    ) -> tuple[int, Optional[bool]]:
+        """Validate head identity and return its sequence and optional membership confirmation."""
         if bins.get(_PART_BIN) != partition_canonical:
             raise AerospikePersistenceConsistencyError(
                 "Head record partition identity does not match the requested identity"
@@ -628,15 +611,18 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             raise AerospikePersistenceConsistencyError(
                 "Head record key_prefix does not match the requested key_prefix"
             )
-        if bins.get(_TOKEN_BIN) != part_token:
-            raise AerospikePersistenceConsistencyError("Head record partition token is corrupted")
         if bins.get(_APP_BIN) != app_id:
             raise AerospikePersistenceConsistencyError(
                 "Head record app_id does not match the requested app_id"
             )
         stored_seq = bins[_SEQ_BIN]
         self._validate_sequence_id(stored_seq)
-        return stored_seq
+        membership_registered = bins.get(_MEMBERSHIP_BIN)
+        if membership_registered is not None and membership_registered is not True:
+            raise AerospikePersistenceConsistencyError(
+                "Head membership confirmation must be true when present"
+            )
+        return stored_seq, membership_registered
 
     def _advance_head(
         self,
@@ -653,11 +639,10 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         partition_canonical = head_bins[_PART_BIN]
         key_prefix_canonical = head_bins[_PREFIX_BIN]
         app_id = head_bins[_APP_BIN]
-        part_token = head_bins[_TOKEN_BIN]
 
         ops = self._head_ops(head_bins)
         filter_expr = self._head_filter_expression(
-            partition_canonical, key_prefix_canonical, app_id, part_token, sequence_id
+            partition_canonical, key_prefix_canonical, app_id, sequence_id
         )
 
         for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
@@ -681,11 +666,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                         )
                     self._backoff(attempt)
                     continue
-                stored_seq = self._validate_head_identity(
-                    existing, partition_canonical, key_prefix_canonical, app_id, part_token
+                stored_seq, membership_registered = self._validate_head_identity(
+                    existing, partition_canonical, key_prefix_canonical, app_id
                 )
                 if stored_seq >= sequence_id:
-                    return existing
+                    return stored_seq, membership_registered
                 # Stored sequence is lower than requested but filter was false:
                 # a concurrent writer may have changed the record, retry.
                 if attempt == _MAX_WRITE_ATTEMPTS:
@@ -698,15 +683,14 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 if self._is_retryable(e):
                     existing = self._read_head(head_key)
                     if existing is not None:
-                        stored_seq = self._validate_head_identity(
+                        stored_seq, membership_registered = self._validate_head_identity(
                             existing,
                             partition_canonical,
                             key_prefix_canonical,
                             app_id,
-                            part_token,
                         )
                         if stored_seq >= sequence_id:
-                            return existing
+                            return stored_seq, membership_registered
                     if attempt == _MAX_WRITE_ATTEMPTS:
                         raise AerospikePersistenceUncertainOutcomeError(
                             "Head update failed with an uncertain outcome"
@@ -721,9 +705,70 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 raise AerospikePersistenceConsistencyError(
                     "Head operate returned a sequence lower than the requested sequence"
                 )
-            return result_bins
+            membership_registered = result_bins.get(_MEMBERSHIP_BIN)
+            if membership_registered is not None and membership_registered is not True:
+                raise AerospikePersistenceConsistencyError(
+                    "Head membership confirmation must be true when present"
+                )
+            return stored_seq, membership_registered
 
         raise AerospikePersistenceUncertainOutcomeError("Head update retry budget exhausted")
+
+    def _confirm_membership(
+        self,
+        head_key,
+        partition_canonical: str,
+        key_prefix_canonical: str,
+        app_id: str,
+    ) -> None:
+        """Monotonically mark an application head's membership as confirmed."""
+        filter_expr = expr.And(
+            expr.Eq(expr.StrBin(_PART_BIN), partition_canonical),
+            expr.Eq(expr.StrBin(_PREFIX_BIN), key_prefix_canonical),
+            expr.Eq(expr.StrBin(_APP_BIN), app_id),
+            expr.Not(expr.BinExists(_MEMBERSHIP_BIN)),
+        ).compile()
+        operations = [
+            aero_ops.write(_MEMBERSHIP_BIN, True),
+            aero_ops.read(_SEQ_BIN),
+            aero_ops.read(_MEMBERSHIP_BIN),
+        ]
+        policy = {
+            "commit_level": aerospike.POLICY_COMMIT_LEVEL_ALL,
+            "expressions": filter_expr,
+            "ttl": aerospike.TTL_NEVER_EXPIRE,
+            "max_retries": 0,
+        }
+
+        for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
+            try:
+                _, _, result_bins = self._client.operate(head_key, operations, policy=policy)
+                self._validate_sequence_id(result_bins[_SEQ_BIN])
+                if result_bins.get(_MEMBERSHIP_BIN) is not True:
+                    raise AerospikePersistenceConsistencyError(
+                        "Head confirmation operation did not return true"
+                    )
+                return
+            except (
+                aerospike.exception.FilteredOut,
+                aerospike.exception.AerospikeError,
+            ) as e:
+                if not isinstance(e, aerospike.exception.FilteredOut) and not self._is_retryable(e):
+                    raise AerospikePersistenceError(
+                        f"Head membership confirmation failed: {e}"
+                    ) from e
+                existing = self._read_head(head_key)
+                if existing is not None:
+                    _, membership_registered = self._validate_head_identity(
+                        existing, partition_canonical, key_prefix_canonical, app_id
+                    )
+                    if membership_registered is True:
+                        return
+                if attempt == _MAX_WRITE_ATTEMPTS:
+                    raise AerospikePersistenceUncertainOutcomeError(
+                        "Head membership confirmation failed with an uncertain outcome"
+                    ) from e
+                self._backoff(attempt)
 
     def _validate_history_identity(
         self,
@@ -771,9 +816,3 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             "created_at": history_bins[_CREATED_BIN],
             "status": history_bins[_STATUS_BIN],
         }
-
-    def _app_id_query(self, part_token: str):
-        query = self._client.query(self.namespace, self.head_set)
-        query.select(_APP_BIN)
-        query.where(aerospike.predicates.equals(_TOKEN_BIN, part_token))
-        return query
