@@ -491,11 +491,11 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         cursor = self.connection.cursor()
         try:
             if app_id is None:
-                # get latest for all app_ids
+                # CURRENT_TIMESTAMP has second precision; break ties by insertion order.
                 cursor.execute(
                     f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
                     f"WHERE partition_key = ? "
-                    f"ORDER BY CREATED_AT DESC LIMIT 1",
+                    f"ORDER BY created_at DESC, rowid DESC LIMIT 1",
                     (partition_key,),
                 )
             elif sequence_id is None:

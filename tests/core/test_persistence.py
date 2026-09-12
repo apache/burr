@@ -131,6 +131,46 @@ def test_sqlite_persister_list_app_ids_without_initialize_raises_runtime_error()
         persister.cleanup()
 
 
+@pytest.mark.parametrize("partition_key", [None, "partition"])
+@pytest.mark.parametrize("latest_app,latest_sequence", [("a-app", 12), ("z-app", 0)])
+def test_sqlite_load_latest_breaks_timestamp_ties(
+    tmp_path, partition_key, latest_app, latest_sequence
+):
+    db_path = str(tmp_path / "checkpoints.db")
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        persister.initialize()
+        persister.save(partition_key, "a-app", 11, "first", State({"step": 1}), "completed")
+        persister.save(
+            partition_key, latest_app, latest_sequence, "second", State({"step": 2}), "completed"
+        )
+        persister.save("other-partition", "other-app", 999, "other", State({}), "completed")
+        # Model saves within the same second without depending on wall-clock timing.
+        persister.connection.execute("UPDATE test_table SET created_at = '2026-01-01 00:00:00'")
+        persister.connection.commit()
+
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        loaded = persister.load(partition_key, None)
+        assert loaded["app_id"] == latest_app
+        assert loaded["sequence_id"] == latest_sequence
+        assert loaded["position"] == "second"
+        assert loaded["state"] == State({"step": 2})
+        assert loaded["status"] == "completed"
+        assert persister.load(partition_key, "a-app", 11)["state"] == State({"step": 1})
+
+
+def test_sqlite_load_latest_prioritizes_timestamp(initializing_persistence):
+    persister = initializing_persistence
+    persister.initialize()
+    persister.save("partition", "a-app", 1, "first", State({"step": 1}), "completed")
+    persister.save("partition", "z-app", 0, "second", State({"step": 2}), "completed")
+    persister.connection.execute(
+        "UPDATE test_table SET created_at = CASE app_id "
+        "WHEN 'a-app' THEN '2026-01-02 00:00:00' ELSE '2026-01-01 00:00:00' END"
+    )
+    persister.connection.commit()
+    assert persister.load("partition", None)["state"] == State({"step": 1})
+
+
 @pytest.mark.parametrize(
     "method_name,kwargs",
     [
