@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Assign milestone to merged PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create or open upcoming release milestones
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           INPUT_VERSIONS: ${{ github.event.inputs.versions }}
         with:

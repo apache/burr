@@ -48,6 +48,11 @@ Install from `pypi`:
 pip install "apache-burr[start]"
 ```
 
+> [!NOTE]
+> In version 0.43.0, the optional CLI included with `[start]`, `[learn]`, and
+> `[cli]` requires Python 3.10+. Core library usage remains compatible with
+> Python 3.9.
+
 (see [the docs](https://burr.apache.org/getting_started/install/) if you're using poetry)
 
 Then run the UI server:

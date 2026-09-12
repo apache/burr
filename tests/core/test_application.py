@@ -63,10 +63,12 @@ from burr.core.application import (
 from burr.core.graph import Graph, GraphBuilder, Transition
 from burr.core.persistence import (
     AsyncDevNullPersister,
+    AsyncInMemoryPersister,
     BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
     PersistedStateData,
+    PersisterHookAsync,
     SQLLitePersister,
 )
 from burr.core.typing import TypingSystem
@@ -1898,6 +1900,60 @@ async def test_app_astep():
     assert action.name == "counter_async"
     assert result == {"count": 1}
     assert state[PRIOR_STEP] == "counter_async"  # internal contract, not part of the public API
+
+
+async def test_app_astep_sync_action_persists_executed_state():
+    persister = AsyncInMemoryPersister()
+    tracker = ActionTrackerAsync()
+    counter_action = base_counter_action.with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(counter_action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0)
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister), tracker)
+        .abuild()
+    )
+
+    action, result, state = await app.astep()
+
+    persisted_state = await persister.load("pk", "app")
+    assert action.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert app.state["count"] == 1
+    assert tracker.post_called[0][1]["result"] == {"count": 1}
+    assert tracker.post_called[0][1]["state"]["count"] == 1
+    assert tracker.post_called[0][1]["exception"] is None
+    assert persisted_state["state"]["count"] == 1
+    assert persisted_state["status"] == "completed"
+
+
+async def test_app_astep_sync_single_step_action_persists_executed_state():
+    persister = AsyncInMemoryPersister()
+    counter_action = base_single_step_counter.with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(counter_action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister))
+        .abuild()
+    )
+
+    _, result, state = await app.astep()
+
+    persisted_state = await persister.load("pk", "app")
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert state["tracker"] == [1]
+    assert persisted_state["state"]["count"] == 1
+    assert persisted_state["state"]["tracker"] == [1]
+    assert persisted_state["status"] == "completed"
 
 
 def test_app_step_context():

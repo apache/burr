@@ -1113,27 +1113,30 @@ class Application(Generic[ApplicationStateType]):
                     # but that's safer than assuming its OK to launch a thread
                     # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
                     # which this is supposed to be its OK).
-                    # this delegates hooks to the synchronous version, so we'll call all of them as well
                     # In this case we allow the self._step to do input processing
-                    return self._step(
-                        inputs=inputs, _run_hooks=False
-                    )  # Skip hooks as we already ran all of them/will run all of them in this function's finally
+                    # Execute the synchronous step without hooks here. Async hooks still run
+                    # afterward so async persisters can save the completed state of synchronous steps.
+                    output = self._step(inputs=inputs, _run_hooks=False)
+                    if output is None:
+                        return None
+                    next_action, result, new_state = output
                 # In this case we want to process inputs because we run the function directly
-                action_inputs = self._process_inputs(inputs, next_action)
-                if next_action.single_step:
-                    result, new_state = await _arun_single_step_action(
-                        next_action, self._state, inputs=action_inputs
-                    )
                 else:
-                    result = await _arun_function(
-                        next_action,
-                        self._state,
-                        inputs=action_inputs,
-                        name=next_action.name,
-                    )
-                    new_state = _run_reducer(next_action, self._state, result, next_action.name)
-                new_state = self._update_internal_state_value(new_state, next_action)
-                self._set_state(new_state)
+                    action_inputs = self._process_inputs(inputs, next_action)
+                    if next_action.single_step:
+                        result, new_state = await _arun_single_step_action(
+                            next_action, self._state, inputs=action_inputs
+                        )
+                    else:
+                        result = await _arun_function(
+                            next_action,
+                            self._state,
+                            inputs=action_inputs,
+                            name=next_action.name,
+                        )
+                        new_state = _run_reducer(next_action, self._state, result, next_action.name)
+                    new_state = self._update_internal_state_value(new_state, next_action)
+                    self._set_state(new_state)
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))

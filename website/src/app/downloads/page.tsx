@@ -86,11 +86,16 @@ const ARTIFACT_TEMPLATES: ArtifactTemplate[] = [
 
 // To add a release, prepend an entry. The first entry is rendered as "Latest".
 const RELEASES: Release[] = [
+  {
+    version: "0.43.0",
+    date: "August 25, 2026",
+    note: "Known issue: the optional CLI functionality ([cli], [learn], and [start] extras) requires Python 3.10+. Core library usage remains compatible with Python 3.9.",
+  },
   { version: "0.42.0", date: "May 9, 2026" },
   {
     version: "0.41.0",
     date: "January 2026",
-    note: "The PyPI wheel for 0.41.0 had packaging issues. Build from the source release if you need this version, or just use 0.42.0.",
+    note: "The PyPI wheel for 0.41.0 had packaging issues. Build from the source release if you need this version, or just use the latest.",
   },
 ];
 
@@ -288,8 +293,10 @@ export default function DownloadsPage() {
               </pre>
 
               <p className="mt-4 text-xs text-[var(--muted)]">
-                Requires Python 3.10+. Burr has no required runtime
-                dependencies — extras are opt-in.
+                The core library supports Python 3.9+. In 0.43.0,
+                CLI-related extras require Python 3.10+ due to a known
+                compatibility issue. Burr has no required runtime dependencies
+                — extras are opt-in.
               </p>
             </div>
           </section>

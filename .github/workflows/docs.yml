@@ -38,8 +38,8 @@ jobs:
       PR_PATH: pull/${{github.event.number}}
       BASE_URL: https://burr.apache.org/pull/${{github.event.number}}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Install dependencies
@@ -50,7 +50,7 @@ jobs:
           sphinx-build docs -b dirhtml _build
           echo "burr.apache.org" > _build/CNAME # keep the cname file which this clobbers -- todo, unhardcode
       - name: Comment on PR
-        uses: hasura/comment-progress@v2.2.0
+        uses: hasura/comment-progress@v2.3.0
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -59,14 +59,14 @@ jobs:
           id: deploy-preview
           message: "Starting deployment of preview ⏳..."
       - name: Build PR preview website
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: _build/
           destination_dir: ${{ env.PR_PATH }} # TODO you need to set this if you're using a custom domain. Otherwise you can remove it.
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         with:
           publish_branch: gh-pages
@@ -74,7 +74,7 @@ jobs:
           publish_dir: _build/
           keep_files: true # Add this line to keep existing files in the gh-pages branch
       - name: Update comment
-        uses: hasura/comment-progress@v2.2.0
+        uses: hasura/comment-progress@v2.3.0
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

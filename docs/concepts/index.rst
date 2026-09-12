@@ -33,6 +33,7 @@ Overview of the concepts -- read these to get a mental model for how Burr works.
     actions
     state
     state-machine
+    human-in-the-loop
     transitions
     tracking
     s3-tracking-aws
