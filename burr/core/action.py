@@ -24,6 +24,19 @@ import sys
 import textwrap
 import types
 import typing
+
+# types.UnionType was added in Python 3.10 to represent PEP 604 `X | Y`
+# syntax. Burr supports Python >= 3.9, so on 3.9 we fall back to a sentinel
+# type that keeps Union annotations well-formed. No PEP 604 union can ever
+# exist on 3.9, so isinstance() checks against it simply never match.
+if sys.version_info >= (3, 10):
+    UnionType = types.UnionType
+else:  # pragma: no cover - exercised on Python 3.9 CI only
+
+    class UnionType:  # type: ignore[no-redef]
+        """Placeholder for ``types.UnionType`` on Python < 3.10."""
+
+
 from collections.abc import AsyncIterator
 from typing import (
     TYPE_CHECKING,
@@ -1919,7 +1932,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict]],
+        stream_type: Union[Type["BaseModel"], Type[dict], UnionType],
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.
