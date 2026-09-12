@@ -1008,11 +1008,14 @@ class Condition(Function):
         """Combines two conditions with an OR operator. This will return a new condition
         that is the OR of the two conditions.
 
-        To check if either foo is bar or baz is qux:
+        To check if either ``foo`` is ``"bar"`` or ``baz`` is ``"qux"``:
 
-        .. code-block:: python
-
-            condition = Condition.when(foo="bar") | Condition.when(baz="qux")
+        >>> from burr.core import Condition, State
+        >>> condition = Condition.when(foo="bar") | Condition.when(baz="qux")
+        >>> condition.resolver(State({"foo": "bar", "baz": "nope"}))
+        True
+        >>> condition.resolver(State({"foo": "nope", "baz": "nope"}))
+        False
 
         :param other: Other condition to OR with
         :return: A new condition that is the OR of the two conditions
