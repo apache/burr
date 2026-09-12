@@ -576,9 +576,28 @@ Things we will consider after the initial release:
 
 - Customizing execution on a per-action basis -- likely a parameter to ``RunnableGraph``
 - Customizing tracking keys for parallelism
-- Streaming -- interleaving parallel streaming actions and giving results as they come
 - More examples for inter-graph communication/cancellation of one action based on the result of another
 - Graceful failure of sub-actions
+
+
+Parallel Streaming
+------------------
+
+``TaskBasedParallelAction`` can now act as a lower-level streaming primitive for subgraphs that
+contain streaming nodes. When you call :py:meth:`burr.core.application.Application.stream_result`
+or :py:meth:`burr.core.application.Application.astream_result` on a parallel action, Burr will:
+
+1. Execute subgraphs in parallel
+2. Emit :py:class:`burr.core.parallelism.StreamItem` events as results arrive
+3. Preserve the original task ordering when calling ``reduce(...)`` to build the final state
+
+Each ``StreamItem`` includes the emitted result, any completed state update for the node,
+the action that produced it, a task key, and the sub-application ID.
+
+You can control how much intermediate output is surfaced by constructing the action with:
+
+- ``intermediate_stream_outputs=False`` to suppress token-by-token events from streaming nodes
+- ``intermediate_nodes=False`` to suppress non-terminal node completion events and only emit the terminal node per task
 
 Under the hood
 ==============
