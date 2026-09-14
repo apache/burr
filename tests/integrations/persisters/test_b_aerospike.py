@@ -35,7 +35,6 @@ from burr.core.persistence import BaseStatePersister
 from burr.integrations.persisters.b_aerospike import (
     AerospikeBasePersister,
     AerospikePersistenceConsistencyError,
-    AerospikePersistenceError,
     AerospikePersistenceUncertainOutcomeError,
 )
 
@@ -241,12 +240,9 @@ def test_oversized_membership_preserves_existing_membership_and_loadable_state(
     second_app = "b" * 600_000
     aerospike_persister.save(partition, first_app, 1, "first", state.State({"v": 1}), "completed")
 
-    with pytest.raises(AerospikePersistenceError, match="max-record-size"):
-        aerospike_persister.save(
-            partition, second_app, 1, "second", state.State({"v": 2}), "completed"
-        )
+    aerospike_persister.save(partition, second_app, 1, "second", state.State({"v": 2}), "completed")
 
-    assert aerospike_persister.list_app_ids(partition) == [first_app]
+    assert set(aerospike_persister.list_app_ids(partition)) == {first_app, second_app}
     assert aerospike_persister.load(partition, first_app)["sequence_id"] == 1
     assert aerospike_persister.load(partition, second_app)["sequence_id"] == 1
 
@@ -452,8 +448,10 @@ def test_save_uses_write_policies_and_the_successful_operate_result():
     )
     assert all(policy["ttl"] == aerospike.TTL_NEVER_EXPIRE for policy in client.operate_policies)
     assert client.operate_policies[-1]["max_retries"] == 0
-    assert len(client.membership_operations) == 1
-    assert client.membership_operations[0]["bin"] == "app_ids"
+    assert len(client.membership_operations) == 2
+    assert client.membership_operations[0]["bin"] == "tail_page"
+    assert client.membership_operations[0]["val"] == 0
+    assert client.membership_operations[1]["bin"] == "app_ids"
     assert client.get_calls == 0
 
 
@@ -508,6 +506,7 @@ class ConditionalMembershipClient:
                 "partition": '"pk"',
                 "key_prefix": '""',
                 "app_ids": self.membership,
+                "tail_page": 0,
             },
         )
 
@@ -640,7 +639,7 @@ def test_list_app_ids_uses_one_membership_primary_key_read():
     client.select.return_value = (
         ("test", "burr_apps", "digest"),
         {},
-        {"app_ids": {"a": 1, "b": 1}, "unknown": "ignored"},
+        {"app_ids": {"a": 1, "b": 1}, "tail_page": 0, "unknown": "ignored"},
     )
     persister = AerospikeBasePersister(client=client)
 
@@ -653,7 +652,7 @@ def test_list_app_ids_uses_one_membership_primary_key_read():
         "burr_apps",
         "aeb3748692d1637fc73dba70cd2887713db3fa6c26ca6ce8a01240d426228c5b",
     )
-    assert bins == ["app_ids"]
+    assert bins == ["app_ids", "tail_page"]
     client.query.assert_not_called()
 
 
@@ -671,7 +670,7 @@ def test_list_app_ids_propagates_missing_membership_map():
     client.select.return_value = (("test", "burr_apps", "digest"), {}, {})
     persister = AerospikeBasePersister(client=client)
 
-    with pytest.raises(KeyError, match="app_ids"):
+    with pytest.raises(AerospikePersistenceConsistencyError, match="application-ID map"):
         persister.list_app_ids("pk")
 
 
@@ -684,7 +683,7 @@ def test_list_app_ids_propagates_non_iterable_membership_map():
     )
     persister = AerospikeBasePersister(client=client)
 
-    with pytest.raises(TypeError):
+    with pytest.raises(AerospikePersistenceConsistencyError, match="application-ID map"):
         persister.list_app_ids("pk")
 
 
