@@ -221,6 +221,24 @@ This object is effectively a cached iterator. You can use it as follows:
     result, state = await async_streaming_result.get()
     print(result) #  all at once
 
+Streaming failures fail closed by default. If a streaming action raises, Burr propagates the original
+exception and does not apply the action's state update, even if the action already produced partial
+results. Applications that intentionally accept partial results must opt in for that execution:
+
+.. code-block:: python
+
+    from burr.core import StreamingFailurePolicy
+
+    action, streaming_result = application.stream_result(
+        halt_after="streaming_response",
+        inputs={"prompt": prompt},
+        failure_policy=StreamingFailurePolicy.COMMIT_PARTIAL,
+    )
+
+The same policy is available on ``astream_result()``, ``stream_iterate()``, and
+``astream_iterate()``. ``COMMIT_PARTIAL`` runs the reducer with the last available result, so use it
+only when partial output is valid application state.
+
 
 Thus you can run this in a web-service, a streamlit app, etc...
 
@@ -228,9 +246,10 @@ Thus you can run this in a web-service, a streamlit app, etc...
 Considerations
 --------------
 
-All hooks/state update will be called once the iterator completes, or an exception interrupts the iterator
-and it has to be cleaned up. You can call ``.stream_result()`` or ``.astream_result()`` on non-streaming
-results, and it will return a ``StreamingResultContainer`` with an empty iterator that returns the result.
+Hooks are called once the iterator completes, or an exception interrupts the iterator and it has to be
+cleaned up. State is updated only after successful completion, unless ``COMMIT_PARTIAL`` was explicitly
+selected. You can call ``.stream_result()`` or ``.astream_result()`` on non-streaming results, and it
+will return a ``StreamingResultContainer`` with an empty iterator that returns the result.
 If streaming items are run as intermediate nodes in the graph, they will be run as normal actions
 (effectively fully exhausted), and the result will be returned as a single item. Currently
 you cannot use synchronous streaming actions as asynchronous streaming actions, but we will likely be
