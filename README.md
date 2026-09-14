@@ -49,9 +49,9 @@ pip install "apache-burr[start]"
 ```
 
 > [!NOTE]
-> In version 0.43.0, the optional CLI included with `[start]`, `[learn]`, and
-> `[cli]` requires Python 3.10+. Core library usage remains compatible with
-> Python 3.9.
+> Burr requires Python 3.10+. (Since 0.43.0, the optional CLI included with
+> `[start]`, `[learn]`, and `[cli]` already required Python 3.10+; as of the
+> next release, Python 3.9 is no longer supported anywhere.)
 
 (see [the docs](https://burr.apache.org/getting_started/install/) if you're using poetry)
 

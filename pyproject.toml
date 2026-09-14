@@ -23,7 +23,7 @@ build-backend = "flit_core.buildapi"
 name = "apache-burr"
 version = "0.43.0"
 dependencies = [] # yes, there are none
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   {name = "Elijah ben Izzy", email = "elijah@apache.org"},
   {name = "Stefan Krawczyk", email = "stefan@apache.org"},
