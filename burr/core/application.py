@@ -60,6 +60,7 @@ from burr.core.action import (
     StreamingAction,
     StreamingResultContainer,
 )
+from burr.core.artifacts import ArtifactStore
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.persistence import (
     AsyncBaseStateLoader,
@@ -642,6 +643,7 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
     state_initializer: Optional[BaseStateLoader]
     state_persister: Optional[BaseStateSaver]
     action_name: Optional[str]  # Store just the action name
+    object_store: Optional[ArtifactStore] = None
 
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
@@ -849,6 +851,7 @@ class Application(Generic[ApplicationStateType]):
         parallel_executor_factory: Optional[Executor] = None,
         state_persister: Union[BaseStateSaver, LifecycleAdapter, None] = None,
         state_initializer: Union[BaseStateLoader, LifecycleAdapter, None] = None,
+        object_store: Optional[ArtifactStore] = None,
     ):
         """Instantiates an Application. This is an internal API -- use the builder!
 
@@ -900,6 +903,7 @@ class Application(Generic[ApplicationStateType]):
         self._spawning_parent_pointer = spawning_parent_pointer
         self._state_initializer = state_initializer
         self._state_persister = state_persister
+        self._object_store = object_store
         self._adapter_set.call_all_lifecycle_hooks_sync(
             "post_application_create",
             state=self._state,
@@ -943,6 +947,7 @@ class Application(Generic[ApplicationStateType]):
             parallel_executor_factory=self._parallel_executor_factory,
             state_initializer=self._state_initializer,
             state_persister=self._state_persister,
+            object_store=self._object_store,
             action_name=action.name if action else None,  # Pass just the action name
         )
 
@@ -2224,6 +2229,7 @@ class ApplicationBuilder(Generic[StateType]):
         self.typing_system = None
         self.parallel_executor_factory = None
         self.state_persister = None
+        self.object_store = None
         self._is_async: bool = False
 
     def with_identifiers(
@@ -2544,6 +2550,39 @@ class ApplicationBuilder(Generic[StateType]):
         self.state_persister = persister  # tracks for later; validates in build / abuild
         return self
 
+    def with_object_store(self, object_store: ArtifactStore) -> "ApplicationBuilder[StateType]":
+        """Adds an object/blob store to the application, for storing large values (files,
+        dataframes, images, etc...) outside of ``State`` -- see :py:mod:`burr.core.artifacts`.
+
+        Unlike :py:meth:`with_state_persister`, this does not add a lifecycle hook -- Burr never
+        reads from or writes to the store on its own. It is purely made available to actions
+        through :py:class:`ApplicationContext` (``__context.object_store``) so they don't each
+        need to construct/import their own store, and so it can be swapped (e.g. local disk in
+        dev, S3 in prod) in one place.
+
+        .. code-block:: python
+
+            from burr.core import action, State, ApplicationContext
+            from burr.core.artifacts import ArtifactStore
+
+            @action(reads=[], writes=["pdf_doc"])
+            def ingest_pdf(state: State, pdf_bytes: bytes, __context: ApplicationContext) -> State:
+                ref = __context.object_store.put_artifact(pdf_bytes, media_type="application/pdf")
+                return state.update(pdf_doc=ref)
+
+            app = (
+                ApplicationBuilder()
+                .with_actions(ingest_pdf, ...)
+                .with_object_store(LocalFileSystemArtifactStore(root_dir="./blobs"))
+                .build()
+            )
+
+        :param object_store: The artifact store to make available to actions.
+        :return: The application builder for future chaining.
+        """
+        self.object_store = object_store
+        return self
+
     def with_spawning_parent(
         self, app_id: str, sequence_id: int, partition_key: Optional[str] = None
     ) -> "ApplicationBuilder[StateType]":
@@ -2785,6 +2824,7 @@ class ApplicationBuilder(Generic[StateType]):
             parallel_executor_factory=self.parallel_executor_factory,
             state_persister=self.state_persister,
             state_initializer=self.state_initializer,
+            object_store=self.object_store,
         )
 
     def build(self) -> Application[StateType]:

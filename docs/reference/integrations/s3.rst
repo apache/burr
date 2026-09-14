@@ -1,0 +1,90 @@
+..
+   Licensed to the Apache Software Foundation (ASF) under one
+   or more contributor license agreements.  See the NOTICE file
+   distributed with this work for additional information
+   regarding copyright ownership.  The ASF licenses this file
+   to you under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+
+
+.. _s3-artifacts-integration:
+
+===================
+S3 Artifact Storage
+===================
+
+An :py:class:`ArtifactStore <burr.core.artifacts.ArtifactStore>` backed by an
+`AWS S3 <https://aws.amazon.com/s3/>`_ bucket. See :doc:`../../concepts/artifact-storage` for
+background on artifact storage in general.
+
+Install the optional extra (pulls ``boto3``):
+
+.. code-block:: bash
+
+   pip install "apache-burr[s3]"
+
+-------------
+Quick Example
+-------------
+
+.. code-block:: python
+
+    from burr.core import ApplicationBuilder
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    object_store = S3ArtifactStore.from_values(
+        bucket="my-bucket",
+        prefix="burr-artifacts",  # optional
+    )
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(...)
+        .with_transitions(...)
+        .with_state(...)
+        .with_entrypoint(...)
+        .with_object_store(object_store)
+        .build()
+    )
+
+If you already have a boto3 client (e.g. reusing a connection, custom endpoint for testing with
+`moto <https://github.com/getmoto/moto>`_ or a local S3-compatible server), construct the store
+directly and pass it in:
+
+.. code-block:: python
+
+    import boto3
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    client = boto3.client("s3", region_name="us-east-1")
+    object_store = S3ArtifactStore(bucket="my-bucket", prefix="burr-artifacts", client=client)
+
+---------------
+IAM Permissions
+---------------
+
+At minimum, the runtime identity used by Burr needs permission to read/write/check objects in
+the target bucket (optionally scoped to the configured prefix):
+
+* ``s3:PutObject``
+* ``s3:GetObject``
+* ``s3:HeadObject``
+
+----------------
+API Reference
+----------------
+
+.. autoclass:: burr.integrations.artifacts.s3.S3ArtifactStore
+   :members:
+
+   .. automethod:: __init__
