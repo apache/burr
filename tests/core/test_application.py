@@ -17,6 +17,7 @@
 
 import asyncio
 import collections
+import concurrent.futures
 import datetime
 import logging
 import typing
@@ -4210,6 +4211,24 @@ def test_without_object_store_application_context_has_none():
 
     *_, state = app.run(halt_after=["terminal"])
     assert state["ran"] is True
+
+
+def test_application_context_backwards_compatible_without_object_store_kwarg():
+    """ApplicationContext is public, exported API. Constructing it the way code did before
+    `object_store` was added (i.e. omitting the kwarg entirely) must keep working -- the field
+    must have a trailing `None` default, not become a newly-required positional/keyword arg."""
+    context = ApplicationContext(
+        app_id="app_id",
+        partition_key=None,
+        sequence_id=0,
+        tracker=None,
+        parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
+        state_initializer=None,
+        state_persister=None,
+        action_name="some_action",
+        # note: no object_store kwarg passed at all
+    )
+    assert context.object_store is None
 
 
 class ActionWithoutContext(Action):

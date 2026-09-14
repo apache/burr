@@ -30,6 +30,7 @@ state serialization interacts with this module.
 import abc
 import hashlib
 import os
+import tempfile
 from dataclasses import dataclass
 from typing import Optional
 
@@ -103,15 +104,35 @@ class ArtifactStore(abc.ABC):
         fully-formed :py:class:`ArtifactRef`. This is the recommended way to write artifacts --
         it ensures every backend computes/verifies digests the same way.
 
+        With the default content-addressed ``key`` (the hex digest), writing identical content
+        twice is always a safe no-op -- the key can only match if the bytes match.
+
+        With an explicit ``key``, a write is only skipped if the *existing* content stored under
+        that key has the same digest as ``data``. If the key already exists with *different*
+        content, this raises -- it never silently returns a ref that doesn't describe what's
+        actually stored.
+
         :param data: The raw bytes to store.
         :param media_type: Optional MIME type to record on the returned ref.
         :param key: Optional explicit key to store under. If not provided, a content-addressed
             key (the hex digest) is used -- so writing identical content twice is a no-op.
+        :raises ValueError: If ``key`` is explicitly provided and already exists with content
+            that does not match the digest of ``data``.
         :return: An :py:class:`ArtifactRef` describing the stored artifact.
         """
         digest = hashlib.sha256(data).hexdigest()
         resolved_key = key if key is not None else digest
-        self.put(data, resolved_key)
+        if key is not None and self.exists(resolved_key):
+            existing_digest = hashlib.sha256(self.get(resolved_key)).hexdigest()
+            if existing_digest != digest:
+                raise ValueError(
+                    f"Key '{resolved_key}' already exists with different content (existing "
+                    f"digest {existing_digest}, new digest {digest}). Use a different explicit "
+                    f"key, or omit `key` to use content-addressed storage."
+                )
+            # Identical content is already stored under this key -- nothing to do.
+        else:
+            self.put(data, resolved_key)
         return ArtifactRef(
             key=resolved_key, size_bytes=len(data), digest=digest, media_type=media_type
         )
@@ -150,8 +171,12 @@ class LocalFileSystemArtifactStore(ArtifactStore):
         os.makedirs(root_dir, exist_ok=True)
 
     def _path_for_key(self, key: str) -> str:
-        root = os.path.abspath(self.root_dir)
-        path = os.path.abspath(os.path.join(root, key))
+        # Resolve symlinks (os.path.realpath) rather than just normalizing (os.path.abspath) --
+        # otherwise a symlink inside root_dir pointing outside of it would let a key escape the
+        # store undetected. realpath resolves symlinks in existing path components even when the
+        # final path segment (e.g. a not-yet-written artifact file) does not exist yet.
+        root = os.path.realpath(self.root_dir)
+        path = os.path.realpath(os.path.join(root, key))
         if os.path.commonpath([root, path]) != root:
             raise ValueError(
                 f"Invalid artifact key '{key}': resolves outside of the store's root directory."
@@ -163,9 +188,24 @@ class LocalFileSystemArtifactStore(ArtifactStore):
         if os.path.exists(path):
             # content-addressed keys make writes idempotent -- skip re-writing existing data.
             return
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "wb") as f:
-            f.write(data)
+        directory = os.path.dirname(path)
+        os.makedirs(directory, exist_ok=True)
+        # Write to a temp file in the same directory and atomically rename it into place, so
+        # concurrent readers/crashes never observe a partial/truncated file at `path` -- either
+        # `path` doesn't exist yet, or it's fully written.
+        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".tmp-artifact-")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def get(self, key: str) -> bytes:
         path = self._path_for_key(key)

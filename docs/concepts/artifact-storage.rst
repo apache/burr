@@ -104,6 +104,18 @@ the store and compares it to ``ref.digest`` by default, raising a ``ValueError``
 match -- this catches corrupted or overwritten data early rather than silently returning bad
 bytes.
 
+If you pass an explicit ``key`` (rather than relying on content-addressing), reusing that key is
+only safe if the content is the same: if the key already exists with *different* content,
+``put_artifact`` raises a ``ValueError`` instead of silently overwriting or returning a ref that
+doesn't match what's actually stored. Stick to content-addressed (default) keys unless you have a
+specific reason to name your own -- e.g. a stable "latest" pointer you intend to update
+out-of-band.
+
+:py:class:`LocalFileSystemArtifactStore <burr.core.artifacts.LocalFileSystemArtifactStore>` writes
+are atomic (via a temp file + rename) and reject keys that would resolve outside ``root_dir``
+(including through symlinks), so concurrent writers/readers never observe partial files and
+artifacts can't be written outside the configured store directory.
+
 Making a store available to actions
 ------------------------------------
 

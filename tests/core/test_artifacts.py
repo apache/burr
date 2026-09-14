@@ -16,6 +16,9 @@
 # under the License.
 
 import hashlib
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -67,6 +70,57 @@ def test_get_rejects_keys_that_escape_root_dir(store):
         store.get("../escape.txt")
 
 
+def test_put_rejects_symlinked_escape(store, tmp_path):
+    outside_dir = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside_dir.mkdir()
+    (tmp_path / "link").symlink_to(outside_dir)
+
+    with pytest.raises(ValueError):
+        store.put(b"malicious", key="link/escape.txt")
+    assert not (outside_dir / "escape.txt").exists()
+
+
+def test_get_rejects_symlinked_escape(store, tmp_path):
+    outside_dir = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside_dir.mkdir()
+    (outside_dir / "escape.txt").write_bytes(b"outside data")
+    (tmp_path / "link").symlink_to(outside_dir)
+
+    with pytest.raises(ValueError):
+        store.get("link/escape.txt")
+
+
+def test_exists_rejects_symlinked_escape(store, tmp_path):
+    outside_dir = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside_dir.mkdir()
+    (tmp_path / "link").symlink_to(outside_dir)
+
+    with pytest.raises(ValueError):
+        store.exists("link/escape.txt")
+
+
+def test_put_writes_atomically_and_recovers_from_interrupted_write(store, tmp_path, monkeypatch):
+    def failing_fsync(fd):
+        raise OSError("simulated crash mid-write")
+
+    monkeypatch.setattr("os.fsync", failing_fsync)
+
+    with pytest.raises(OSError):
+        store.put(b"x" * 1000, key="flaky-key")
+
+    # the destination must not exist -- the write failed before the atomic rename into place
+    assert not store.exists("flaky-key")
+    # no leftover temp files should be left behind in the store directory
+    leftovers = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-artifact-")]
+    assert leftovers == []
+
+    monkeypatch.undo()
+
+    # a subsequent, uninterrupted write for the same key must succeed normally
+    store.put(b"good data", key="flaky-key")
+    assert store.get("flaky-key") == b"good data"
+
+
 def test_put_artifact_computes_digest_and_size(store):
     data = b"some binary content"
     ref = store.put_artifact(data, media_type="application/octet-stream")
@@ -85,6 +139,25 @@ def test_put_artifact_with_explicit_key(store):
 
     assert ref.key == "explicit-key"
     assert store.get("explicit-key") == data
+
+
+def test_put_artifact_explicit_key_identical_content_is_noop(store):
+    data = b"same content, written twice"
+    ref1 = store.put_artifact(data, key="stable-key")
+    ref2 = store.put_artifact(data, key="stable-key")
+
+    assert ref1 == ref2
+    assert store.get("stable-key") == data
+
+
+def test_put_artifact_explicit_key_conflicting_content_raises(store):
+    store.put_artifact(b"first", key="mutable")
+
+    with pytest.raises(ValueError, match="already exists with different content"):
+        store.put_artifact(b"second", key="mutable")
+
+    # the original content must be left untouched -- a rejected write must not corrupt the key
+    assert store.get("mutable") == b"first"
 
 
 def test_put_artifact_is_idempotent_for_identical_content(store):
@@ -171,3 +244,45 @@ def test_state_deserialize_restores_ref_without_fetching_bytes(store):
     assert restored_ref == ref
     # deserializing state must not read artifact bytes -- only .read()/get_artifact() should
     restored_ref.read(store)  # exercised separately/explicitly, proving it's a distinct step
+
+
+def test_artifact_ref_deserializes_in_fresh_process_without_explicit_import():
+    """Regression test: the ArtifactRef (de)serializer must be registered as a side effect of
+    importing ``burr.core`` (transitively, e.g. via ``burr.core.state``) -- not only when a
+    caller happens to import ``burr.core.artifacts`` directly first. Runs in a fresh subprocess
+    so no other test in this process can have already triggered the registration."""
+    script = textwrap.dedent(
+        """
+        import sys
+        assert "burr.core.artifacts" not in sys.modules, (
+            "burr.core.artifacts must not already be imported for this to be a valid regression "
+            "test"
+        )
+
+        from burr.core import serde
+        from burr.core.state import State
+
+        serialized = {
+            "document": {
+                serde.KEY: "ArtifactRef",
+                "key": "abc123",
+                "size_bytes": 5,
+                "digest": "abc123",
+                "media_type": "text/plain",
+            }
+        }
+        restored = State.deserialize(serialized)
+        ref = restored["document"]
+        assert type(ref).__name__ == "ArtifactRef"
+        assert ref.key == "abc123"
+        print("OK")
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout

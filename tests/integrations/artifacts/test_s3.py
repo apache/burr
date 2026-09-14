@@ -172,3 +172,53 @@ def test_put_artifact_and_get_artifact_end_to_end(store, s3_client):
     )
     assert store.get_artifact(ref) == data
     stubber.assert_no_pending_responses()
+
+
+def test_put_artifact_explicit_key_identical_content_is_noop(store, s3_client):
+    """Same collision-safety guarantee as the local backend: re-`put_artifact`-ing identical
+    content under an explicit key that already exists must not re-upload."""
+    _client, stubber = s3_client
+    data = b"same content"
+
+    stubber.add_response(
+        "head_object",
+        {},
+        expected_params={"Bucket": "my-bucket", "Key": "artifacts/stable-key"},
+    )
+    stubber.add_response(
+        "get_object",
+        {"Body": _streaming_body(data)},
+        expected_params={"Bucket": "my-bucket", "Key": "artifacts/stable-key"},
+    )
+    # no put_object stubbed -- if the store tried to re-upload, Stubber would raise.
+
+    ref = store.put_artifact(data, key="stable-key")
+
+    assert ref.key == "stable-key"
+    stubber.assert_no_pending_responses()
+
+
+def test_put_artifact_explicit_key_conflicting_content_raises(store, s3_client):
+    """An explicit key that already holds *different* content must not be silently overwritten
+    or skipped -- put_artifact must surface a clear conflict instead of returning a ref that
+    doesn't describe what's actually stored."""
+    _client, stubber = s3_client
+    existing_data = b"first"
+    new_data = b"second"
+
+    stubber.add_response(
+        "head_object",
+        {},
+        expected_params={"Bucket": "my-bucket", "Key": "artifacts/mutable"},
+    )
+    stubber.add_response(
+        "get_object",
+        {"Body": _streaming_body(existing_data)},
+        expected_params={"Bucket": "my-bucket", "Key": "artifacts/mutable"},
+    )
+    # no put_object stubbed -- the conflicting write must be rejected before any upload attempt.
+
+    with pytest.raises(ValueError, match="already exists with different content"):
+        store.put_artifact(new_data, key="mutable")
+
+    stubber.assert_no_pending_responses()

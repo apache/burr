@@ -60,6 +60,7 @@ from burr.core.action import (
     StreamingAction,
     StreamingResultContainer,
 )
+from burr.core.artifacts import ArtifactStore
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.persistence import (
     AsyncBaseStateLoader,
@@ -78,7 +79,6 @@ from burr.visibility.tracing import tracer_factory_context_var
 if TYPE_CHECKING:
     # TODO --  figure out whether we want to just do if TYPE_CHECKING
     # for all first-class imports as Ruff suggests...
-    from burr.core.artifacts import ArtifactStore
     from burr.tracking.base import TrackingClient
 
 logger = logging.getLogger(__name__)
@@ -642,8 +642,8 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
     parallel_executor_factory: Callable[[], Executor]
     state_initializer: Optional[BaseStateLoader]
     state_persister: Optional[BaseStateSaver]
-    object_store: Optional["ArtifactStore"]
     action_name: Optional[str]  # Store just the action name
+    object_store: Optional[ArtifactStore] = None
 
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
@@ -851,7 +851,7 @@ class Application(Generic[ApplicationStateType]):
         parallel_executor_factory: Optional[Executor] = None,
         state_persister: Union[BaseStateSaver, LifecycleAdapter, None] = None,
         state_initializer: Union[BaseStateLoader, LifecycleAdapter, None] = None,
-        object_store: Optional["ArtifactStore"] = None,
+        object_store: Optional[ArtifactStore] = None,
     ):
         """Instantiates an Application. This is an internal API -- use the builder!
 
@@ -2550,7 +2550,7 @@ class ApplicationBuilder(Generic[StateType]):
         self.state_persister = persister  # tracks for later; validates in build / abuild
         return self
 
-    def with_object_store(self, object_store: "ArtifactStore") -> "ApplicationBuilder[StateType]":
+    def with_object_store(self, object_store: ArtifactStore) -> "ApplicationBuilder[StateType]":
         """Adds an object/blob store to the application, for storing large values (files,
         dataframes, images, etc...) outside of ``State`` -- see :py:mod:`burr.core.artifacts`.
 
