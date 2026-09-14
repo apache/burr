@@ -19,7 +19,9 @@ import hashlib
 import json
 import random
 import sys
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -48,6 +50,7 @@ _PART_BIN = "partition"
 _PREFIX_BIN = "key_prefix"
 _APP_BIN = "app_id"
 _APPS_BIN = "app_ids"
+_TAIL_BIN = "tail_page"
 _MEMBERSHIP_BIN = "member_confirm"
 _SEQ_BIN = "sequence_id"
 _POS_BIN = "position"
@@ -56,6 +59,9 @@ _STATUS_BIN = "status"
 _CREATED_BIN = "created_at"
 
 _MAX_WRITE_ATTEMPTS = 3
+_MAX_TAIL_HINTS = 128
+_MEMBERSHIP_BATCH_SIZE = 1000
+_RECORD_NOT_FOUND_CODE = 2
 _RETRYABLE_CODES = {9, -10, 7, 14}  # Timeout, Connection, ClusterChange, KEY_BUSY
 
 
@@ -166,6 +172,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         self._client_config = _client_config
         self._initialized = False
         self._closed = False
+        self._tail_hints = OrderedDict()
+        self._tail_hints_lock = threading.Lock()
 
     def __enter__(self):
         return self
@@ -194,6 +202,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             )
         state = self.__dict__.copy()
         del state["_client"]
+        del state["_tail_hints"]
+        del state["_tail_hints_lock"]
         state["_initialized"] = False
         state["_closed"] = False
         return state
@@ -214,6 +224,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         self._owned = True
         self._initialized = False
         self._closed = False
+        self._tail_hints = OrderedDict()
+        self._tail_hints_lock = threading.Lock()
 
     def set_serde_kwargs(self, serde_kwargs: dict):
         self.serde_kwargs = serde_kwargs
@@ -284,7 +296,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         }
         _, membership_registered = self._advance_head(head_key, head_bins)
         if membership_registered is not True:
-            self._register_membership(membership_key, app_id)
+            self._register_membership(membership_key, partition_key, app_id)
             self._confirm_membership(
                 head_key,
                 partition_canonical,
@@ -360,11 +372,46 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return self._build_persisted_data(history_record, partition_key, app_id, stored_seq)
 
     def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
-        membership_key = self._key(
-            self.membership_set,
-            self._derive_membership_key(self.key_prefix, partition_key),
-        )
-        return list(self._read_membership(membership_key))
+        membership_key = self._membership_page_key(partition_key, 0)
+        root = self._read_membership_root(membership_key)
+        if root is None:
+            return []
+        app_ids, tail_page = root
+        if tail_page == 0:
+            return list(app_ids)
+        combined = set(app_ids)
+        for first_page in range(1, tail_page + 1, _MEMBERSHIP_BATCH_SIZE):
+            keys = [
+                self._membership_page_key(partition_key, page)
+                for page in range(
+                    first_page,
+                    min(first_page + _MEMBERSHIP_BATCH_SIZE, tail_page + 1),
+                )
+            ]
+            try:
+                results = self._client.batch_read(
+                    keys,
+                    bins=[_APPS_BIN],
+                    policy={"replica": aerospike.POLICY_REPLICA_MASTER},
+                )
+            except aerospike.exception.AerospikeError as e:
+                raise AerospikePersistenceError(f"Membership batch read failed: {e}") from e
+            membership_pages = results.batch_records
+            if len(membership_pages) != len(keys):
+                raise AerospikePersistenceConsistencyError("Membership batch read was incomplete")
+            for membership_page in membership_pages:
+                if membership_page.result == _RECORD_NOT_FOUND_CODE:
+                    continue
+                if membership_page.result != 0:
+                    raise AerospikePersistenceError(
+                        f"Membership batch entry failed with result code {membership_page.result}"
+                    )
+                if membership_page.record is None:
+                    raise AerospikePersistenceConsistencyError(
+                        "Successful membership batch entry lacks a record"
+                    )
+                combined.update(self._validate_membership_map(membership_page.record[2]))
+        return list(combined)
 
     def _canonical_json(self, value: Any) -> str:
         """Deterministic JSON encoding used for canonical identities and state snapshots."""
@@ -410,6 +457,18 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             partition_key,
         ]
 
+    def _identity_membership_page(
+        self, key_prefix: Optional[str], partition_key: Optional[str], page: int
+    ) -> list:
+        return [
+            _SYSTEM,
+            _CODE_VERSION,
+            "membership-page",
+            key_prefix,
+            partition_key,
+            page,
+        ]
+
     def _sha256_hex(self, data: str) -> str:
         return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
@@ -435,6 +494,23 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return self._sha256_hex(
             self._canonical_json(self._identity_membership(key_prefix, partition_key))
         )
+
+    def _derive_membership_page_key(
+        self, key_prefix: Optional[str], partition_key: Optional[str], page: int
+    ) -> str:
+        if type(page) is not int or isinstance(page, bool) or page <= 0:
+            raise ValueError("membership overflow page must be a positive integer")
+        return self._sha256_hex(
+            self._canonical_json(self._identity_membership_page(key_prefix, partition_key, page))
+        )
+
+    def _membership_page_key(self, partition_key: Optional[str], page: int):
+        user_key = (
+            self._derive_membership_key(self.key_prefix, partition_key)
+            if page == 0
+            else self._derive_membership_page_key(self.key_prefix, partition_key, page)
+        )
+        return self._key(self.membership_set, user_key)
 
     def _validate_sequence_id(self, sequence_id: Any) -> None:
         if type(sequence_id) is not int or isinstance(sequence_id, bool):
@@ -480,45 +556,164 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     def _read_head(self, key):
         return self._read_history(key)
 
-    def _read_membership(self, key):
+    def _validate_membership_map(self, bins: dict) -> dict:
+        app_ids = bins.get(_APPS_BIN)
+        if not isinstance(app_ids, dict):
+            raise AerospikePersistenceConsistencyError(
+                "Membership page lacks a usable application-ID map"
+            )
+        return app_ids
+
+    def _validate_tail_page(self, value: Any) -> int:
+        if type(value) is not int or isinstance(value, bool) or value < 0 or value > 2**63 - 1:
+            raise AerospikePersistenceConsistencyError(
+                "Membership root tail_page must be a non-negative signed integer"
+            )
+        return value
+
+    def _read_membership_page(self, key) -> Optional[dict]:
         try:
             _, _, bins = self._client.select(
                 key,
                 [_APPS_BIN],
                 policy={"replica": aerospike.POLICY_REPLICA_MASTER},
             )
-            return bins[_APPS_BIN]
+            return self._validate_membership_map(bins)
         except aerospike.exception.RecordNotFound:
-            return {}
+            return None
         except aerospike.exception.AerospikeError as e:
             raise AerospikePersistenceError(f"Membership read failed: {e}") from e
 
-    def _register_membership(self, membership_key, app_id: str) -> None:
+    def _read_membership_root(self, key) -> Optional[tuple[dict, int]]:
+        try:
+            _, _, bins = self._client.select(
+                key,
+                [_APPS_BIN, _TAIL_BIN],
+                policy={"replica": aerospike.POLICY_REPLICA_MASTER},
+            )
+            return self._validate_membership_map(bins), self._validate_tail_page(
+                bins.get(_TAIL_BIN)
+            )
+        except aerospike.exception.RecordNotFound:
+            return None
+        except aerospike.exception.AerospikeError as e:
+            raise AerospikePersistenceError(f"Membership read failed: {e}") from e
+
+    def _advance_membership_tail(self, root_key, expected: int) -> int:
+        policy = {
+            "commit_level": aerospike.POLICY_COMMIT_LEVEL_ALL,
+            "expressions": expr.Eq(expr.IntBin(_TAIL_BIN), expected).compile(),
+            "ttl": aerospike.TTL_NEVER_EXPIRE,
+            "max_retries": 0,
+        }
+        operations = [aero_ops.write(_TAIL_BIN, expected + 1), aero_ops.read(_TAIL_BIN)]
+        for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
+            try:
+                _, _, bins = self._client.operate(root_key, operations, policy=policy)
+                return self._validate_tail_page(bins[_TAIL_BIN])
+            except (aerospike.exception.FilteredOut, aerospike.exception.AerospikeError) as e:
+                if not isinstance(e, aerospike.exception.FilteredOut) and not self._is_retryable(e):
+                    raise AerospikePersistenceError(
+                        f"Membership tail allocation failed: {e}"
+                    ) from e
+                root = self._read_membership_root(root_key)
+                if root is not None and root[1] > expected:
+                    return root[1]
+                if attempt == _MAX_WRITE_ATTEMPTS:
+                    raise AerospikePersistenceUncertainOutcomeError(
+                        "Membership tail allocation failed with an uncertain outcome"
+                    ) from e
+                self._backoff(attempt)
+
+    def _put_membership_page(self, key, app_id: str, root: bool = False) -> None:
         operations = [map_ops.map_put(_APPS_BIN, app_id, 1)]
         policy = {
             "commit_level": aerospike.POLICY_COMMIT_LEVEL_ALL,
             "ttl": aerospike.TTL_NEVER_EXPIRE,
             "max_retries": 0,
         }
-        for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
+        if root:
+            operations.insert(0, aero_ops.write(_TAIL_BIN, 0))
+            policy["expressions"] = expr.Or(
+                expr.Not(expr.BinExists(_TAIL_BIN)), expr.Eq(expr.IntBin(_TAIL_BIN), 0)
+            ).compile()
+        self._client.operate(key, operations, policy=policy)
+
+    def _get_tail_hint(self, membership_key) -> Optional[int]:
+        with self._tail_hints_lock:
+            tail_page = self._tail_hints.get(membership_key)
+            if tail_page is not None:
+                self._tail_hints.move_to_end(membership_key)
+            return tail_page
+
+    def _set_tail_hint(self, membership_key, tail_page: int) -> None:
+        if tail_page <= 0:
+            return
+        with self._tail_hints_lock:
+            existing = self._tail_hints.get(membership_key, 0)
+            self._tail_hints[membership_key] = max(existing, tail_page)
+            self._tail_hints.move_to_end(membership_key)
+            while len(self._tail_hints) > _MAX_TAIL_HINTS:
+                self._tail_hints.popitem(last=False)
+
+    def _register_membership(
+        self, membership_key, partition_key: Optional[str], app_id: str
+    ) -> None:
+        hinted_page = self._get_tail_hint(membership_key)
+        current_page = hinted_page if hinted_page is not None else 0
+        current_key = self._membership_page_key(partition_key, current_page)
+        uncertain_attempt = 1
+        rollovers = 0
+        while True:
             try:
-                self._client.operate(membership_key, operations, policy=policy)
+                self._put_membership_page(current_key, app_id, root=current_page == 0)
+                self._set_tail_hint(membership_key, current_page)
                 return
+            except aerospike.exception.FilteredOut:
+                root = self._read_membership_root(membership_key)
+                if root is None:
+                    raise AerospikePersistenceConsistencyError(
+                        "Membership root disappeared after filtering"
+                    )
+                current_page = root[1]
+                self._set_tail_hint(membership_key, current_page)
+                current_key = self._membership_page_key(partition_key, current_page)
+                uncertain_attempt = 1
             except aerospike.exception.RecordTooBig as e:
-                raise AerospikePersistenceError(
-                    "Membership record exceeds the namespace max-record-size"
-                ) from e
+                root = self._read_membership_root(membership_key)
+                if root is None:
+                    raise AerospikePersistenceConsistencyError(
+                        "Membership root disappeared during rollover"
+                    )
+                authoritative_tail = root[1]
+                self._set_tail_hint(membership_key, authoritative_tail)
+                if current_page < authoritative_tail:
+                    current_page = authoritative_tail
+                    current_key = self._membership_page_key(partition_key, current_page)
+                    uncertain_attempt = 1
+                    continue
+                rollovers += 1
+                if rollovers > _MAX_WRITE_ATTEMPTS:
+                    raise AerospikePersistenceUncertainOutcomeError(
+                        "Membership rollover retry budget exhausted"
+                    ) from e
+                current_page = self._advance_membership_tail(membership_key, authoritative_tail)
+                self._set_tail_hint(membership_key, current_page)
+                current_key = self._membership_page_key(partition_key, current_page)
+                uncertain_attempt = 1
             except aerospike.exception.AerospikeError as e:
                 if not self._is_retryable(e):
                     raise AerospikePersistenceError(f"Membership registration failed: {e}") from e
-                app_ids = self._read_membership(membership_key)
-                if app_id in app_ids:
+                app_ids = self._read_membership_page(current_key)
+                if app_ids is not None and app_id in app_ids:
+                    self._set_tail_hint(membership_key, current_page)
                     return
-                if attempt == _MAX_WRITE_ATTEMPTS:
+                if uncertain_attempt == _MAX_WRITE_ATTEMPTS:
                     raise AerospikePersistenceUncertainOutcomeError(
                         "Membership registration failed with an uncertain outcome"
                     ) from e
-                self._backoff(attempt)
+                self._backoff(uncertain_attempt)
+                uncertain_attempt += 1
 
     def _write_history_once(self, history_key, bins):
         """Attempt one create-only history write."""
@@ -654,6 +849,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                         "commit_level": aerospike.POLICY_COMMIT_LEVEL_ALL,
                         "expressions": filter_expr,
                         "ttl": aerospike.TTL_NEVER_EXPIRE,
+                        "max_retries": 0,
                     },
                 )
             except aerospike.exception.FilteredOut:
