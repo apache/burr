@@ -19,6 +19,13 @@ from functools import singledispatch
 from typing import Any, Union
 
 KEY = "__burr_serde__"
+# Marker used to wrap an ordinary dictionary that itself contains KEY. Without
+# it, such a dictionary is indistinguishable from a serde envelope and
+# `deserialize` fails -- or dispatches to an unrelated deserializer -- when the
+# value is read back.
+ESCAPED_DICT = "burr.dict"
+# Key an escaped dictionary stores its contents under.
+PAYLOAD_KEY = "value"
 
 
 class StringDispatch:
@@ -116,7 +123,16 @@ def serialize_primitive(value, **kwargs) -> Union[str, int, float, bool]:
 
 @serialize.register(dict)
 def serialize_dict(value: dict, **kwargs) -> dict[str, Any]:
-    return {k: serialize(v, **kwargs) for k, v in value.items()}
+    serialized = {k: serialize(v, **kwargs) for k, v in value.items()}
+    if KEY in value:
+        return {KEY: ESCAPED_DICT, PAYLOAD_KEY: serialized}
+    return serialized
+
+
+@deserializer.register(ESCAPED_DICT)
+def deserialize_escaped_dict(value: dict, **kwargs) -> dict[str, Any]:
+    """Deserializes an ordinary dictionary that carries the serde marker key."""
+    return {k: deserialize(v, **kwargs) for k, v in value[PAYLOAD_KEY].items()}
 
 
 @serialize.register(list)
