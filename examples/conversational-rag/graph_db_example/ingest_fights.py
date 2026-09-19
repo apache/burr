@@ -18,6 +18,7 @@
 """
 Hamilton module to ingest fight data into FalkorDB.
 """
+
 import falkordb
 import pandas as pd
 import utils

@@ -65,9 +65,7 @@ class SocialMediaPost(BaseModel):
         formatted_concepts = "CONCEPTS\n" + "\n".join([c.display() for c in self.concepts])
         link = f"link: {self.youtube_url}\n\n" if self.youtube_url else ""
 
-        return (
-            textwrap.dedent(
-                f"""\
+        return textwrap.dedent(f"""\
             TOPIC: {self.topic}
 
             {self.hook}
@@ -76,11 +74,7 @@ class SocialMediaPost(BaseModel):
 
             {formatted_takeways}
 
-            """
-            )
-            + link
-            + formatted_concepts
-        )
+            """) + link + formatted_concepts
 
 
 @action(reads=[], writes=["transcript"])

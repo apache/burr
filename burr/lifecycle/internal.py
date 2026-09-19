@@ -17,6 +17,7 @@
 
 """Base tooling, internal-facing, for lifecycle hooks. This is stolen from the
 hamilton implementation, but significantly simplified."""
+
 import asyncio
 import collections
 import inspect

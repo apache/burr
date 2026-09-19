@@ -18,6 +18,7 @@
 """
 Hamilton pipeline to load fighter data into FalkorDB.
 """
+
 import falkordb
 import pandas as pd
 import utils

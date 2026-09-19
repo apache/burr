@@ -21,6 +21,7 @@ Hamilton version of the multi-agent collaboration example.
 This also adds a tracer to the Hamilton DAG to trace the execution of the nodes
 within the Action so that they also show up in the Burr UI.
 """
+
 import json
 from typing import Any, Dict, Optional
 

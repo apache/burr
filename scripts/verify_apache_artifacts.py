@@ -1016,8 +1016,7 @@ def render_vote_email(artifacts_dir: str, summary: VerificationSummary) -> str:
             f"- [{result.status}] {result.name}" + (f": {result.details}" if result.details else "")
         )
 
-    return textwrap.dedent(
-        f"""\
+    return textwrap.dedent(f"""\
         Subject: [{vote}] Release Apache Burr (incubating) {version}
 
         I verified the Apache Burr (incubating) {version} release artifacts.
@@ -1032,8 +1031,7 @@ def render_vote_email(artifacts_dir: str, summary: VerificationSummary) -> str:
 
         Vote:
         {vote} approve the release based on the checks above.
-        """
-    ).strip()
+        """).strip()
 
 
 def _maybe_output_vote_email(args: argparse.Namespace, summary: VerificationSummary) -> None:

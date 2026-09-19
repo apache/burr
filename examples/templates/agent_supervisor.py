@@ -21,6 +21,7 @@ Template for agent supervisor with multiple agents.
 This example is similar to the multi_agent_collaboration.py example, but that
 instead a supervisor agent is used to manage it all and whether to stop or continue.
 """
+
 from burr import core
 from burr.core import ApplicationBuilder, State, action, default
 from burr.tracking import client as burr_tclient

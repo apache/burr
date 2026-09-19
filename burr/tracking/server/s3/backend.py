@@ -137,9 +137,7 @@ class DataFile:
         file_type = (
             "graph"
             if filename.endswith("graph.json")
-            else "metadata"
-            if filename.endswith("_metadata.json")
-            else "log"
+            else "metadata" if filename.endswith("_metadata.json") else "log"
         )
 
         # # Validate the date parts
@@ -397,12 +395,14 @@ class SQLiteS3Backend(
                 spawning_parent_pointer_raw = response["Metadata"].get("spawning_parent_pointer")
                 return dict(
                     partition_key=metadata_file.partition_key,
-                    parent_pointer=json.loads(parent_pointer_raw)
-                    if parent_pointer_raw != "None"
-                    else None,
-                    spawning_parent_pointer=json.loads(spawning_parent_pointer_raw)
-                    if spawning_parent_pointer_raw != "None"
-                    else None,
+                    parent_pointer=(
+                        json.loads(parent_pointer_raw) if parent_pointer_raw != "None" else None
+                    ),
+                    spawning_parent_pointer=(
+                        json.loads(spawning_parent_pointer_raw)
+                        if spawning_parent_pointer_raw != "None"
+                        else None
+                    ),
                 )
 
         out = await utils.gather_with_concurrency(
@@ -654,9 +654,11 @@ class SQLiteS3Backend(
                     name=project.name,
                     id=project.name,
                     uri=project.uri if project.uri is not None else "TODO",
-                    last_written=latest_logfile.created_at
-                    if latest_logfile is not None
-                    else project.created_at,
+                    last_written=(
+                        latest_logfile.created_at
+                        if latest_logfile is not None
+                        else project.created_at
+                    ),
                     created=project.created_at,
                     num_apps=await Application.filter(project=project).count(),
                 )
@@ -704,9 +706,9 @@ class SQLiteS3Backend(
                     partition_key=application.partition_key,
                     first_written=application.created_at,
                     last_written=last_written,
-                    num_steps=application.logfile_count
-                    if application.logfile_count is not None
-                    else 0,
+                    num_steps=(
+                        application.logfile_count if application.logfile_count is not None else 0
+                    ),
                     tags={},
                 )
             )
@@ -871,12 +873,16 @@ class SQLiteS3Backend(
                     status=indexing_job.status,
                     records_processed=indexing_job.records_processed,
                     metadata={
-                        "project": indexing_job.index_status.project.name
-                        if indexing_job.index_status
-                        else "unknown",
-                        "s3_highwatermark": indexing_job.index_status.s3_highwatermark
-                        if indexing_job.index_status
-                        else "unknown",
+                        "project": (
+                            indexing_job.index_status.project.name
+                            if indexing_job.index_status
+                            else "unknown"
+                        ),
+                        "s3_highwatermark": (
+                            indexing_job.index_status.s3_highwatermark
+                            if indexing_job.index_status
+                            else "unknown"
+                        ),
                     },
                 )
             )

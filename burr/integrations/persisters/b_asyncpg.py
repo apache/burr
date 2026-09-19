@@ -242,8 +242,7 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         conn, acquired = await self._get_connection()
         try:
             async with conn.transaction():
-                await conn.execute(
-                    f"""
+                await conn.execute(f"""
                     CREATE TABLE IF NOT EXISTS {table_name} (
                         partition_key TEXT DEFAULT '{self.PARTITION_KEY_DEFAULT}',
                         app_id TEXT NOT NULL,
@@ -253,13 +252,10 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
                         state JSONB NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (partition_key, app_id, sequence_id, position)
-                    )"""
-                )
-                await conn.execute(
-                    f"""
+                    )""")
+                await conn.execute(f"""
                     CREATE INDEX IF NOT EXISTS {table_name}_created_at_index ON {table_name} (created_at);
-                """
-                )
+                """)
         finally:
             await self._release_connection(conn, acquired)
 

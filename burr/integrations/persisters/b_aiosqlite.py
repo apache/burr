@@ -146,8 +146,7 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
     async def create_table_if_not_exists(self, table_name: str):
         """Helper function to create the table where things are stored if it doesn't exist."""
         cursor = await self.connection.cursor()
-        await cursor.execute(
-            f"""
+        await cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 partition_key TEXT DEFAULT '{AsyncSQLitePersister.PARTITION_KEY_DEFAULT}',
                 app_id TEXT NOT NULL,
@@ -157,13 +156,10 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
                 state TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (partition_key, app_id, sequence_id, position)
-            )"""
-        )
-        await cursor.execute(
-            f"""
+            )""")
+        await cursor.execute(f"""
             CREATE INDEX IF NOT EXISTS {table_name}_created_at_index ON {table_name} (created_at);
-        """
-        )
+        """)
         await self.connection.commit()
 
     async def initialize(self):

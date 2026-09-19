@@ -341,12 +341,16 @@ class S3TrackingClient(SyncTrackingClient):
             *metadata_path,
             data=metadata,
             metadata={
-                "parent_pointer": json.dumps(dataclasses.asdict(parent_pointer))
-                if parent_pointer is not None
-                else "None",
-                "spawning_parent_pointer": json.dumps(dataclasses.asdict(spawning_parent_pointer))
-                if spawning_parent_pointer is not None
-                else "None",
+                "parent_pointer": (
+                    json.dumps(dataclasses.asdict(parent_pointer))
+                    if parent_pointer is not None
+                    else "None"
+                ),
+                "spawning_parent_pointer": (
+                    json.dumps(dataclasses.asdict(spawning_parent_pointer))
+                    if spawning_parent_pointer is not None
+                    else "None"
+                ),
             },
         )
 

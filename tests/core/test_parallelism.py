@@ -391,11 +391,9 @@ def test_map_actions_default_state():
     class MapActionsAllApproaches(MapActions):
         def actions(
             self, state: State, inputs: Dict[str, Any], context: ApplicationContext
-        ) -> Generator[Union[Action, Callable, RunnableGraph], None, None]:
-            ...
+        ) -> Generator[Union[Action, Callable, RunnableGraph], None, None]: ...
 
-        def reduce(self, state: State, states: Generator[State, None, None]) -> State:
-            ...
+        def reduce(self, state: State, states: Generator[State, None, None]) -> State: ...
 
         @property
         def writes(self) -> list[str]:

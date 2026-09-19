@@ -110,8 +110,7 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
     def create_table(self, table_name: str):
         """Helper function to create the table where things are stored."""
         cursor = self.connection.cursor()
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 partition_key TEXT DEFAULT '{self.PARTITION_KEY_DEFAULT}',
                 app_id TEXT NOT NULL,
@@ -121,13 +120,10 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
                 state JSONB NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (partition_key, app_id, sequence_id, position)
-            )"""
-        )
-        cursor.execute(
-            f"""
+            )""")
+        cursor.execute(f"""
             CREATE INDEX IF NOT EXISTS {table_name}_created_at_index ON {table_name} (created_at);
-        """
-        )
+        """)
         self.connection.commit()
 
     def initialize(self):
