@@ -1466,7 +1466,7 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         streaming_result_generator: GeneratorReturnType,
         initial_state: State[StateType],
         process_result: Callable[[dict, State], tuple[dict, State]],
-        callback: Callable[[Optional[dict], State, Optional[Exception]], None],
+        callback: Callable[[Optional[dict], State, Optional[BaseException]], None],
     ):
         """Initializes a streaming result container. User will never call directly.
 
@@ -1557,7 +1557,7 @@ class AsyncStreamingResultContainer(
             [StreamResultType, State[StateType]], tuple[StreamResultType, State[StateType]]
         ],
         callback: Callable[
-            [Optional[StreamResultType], State[StateType], Optional[Exception]],
+            [Optional[StreamResultType], State[StateType], Optional[BaseException]],
             typing.Coroutine[None, None, None],
         ],
     ):
@@ -1628,7 +1628,7 @@ class AsyncStreamingResultContainer(
             yield results, final_state
 
         async def empty_callback(
-            result: Optional[StreamResultType], state: State, exc: Optional[Exception]
+            result: Optional[StreamResultType], state: State, exc: Optional[BaseException]
         ):
             pass
 

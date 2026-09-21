@@ -354,7 +354,7 @@ class PostApplicationExecuteCallHook(abc.ABC):
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         pass
@@ -372,7 +372,7 @@ class PostApplicationExecuteCallHookAsync(abc.ABC):
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         pass
