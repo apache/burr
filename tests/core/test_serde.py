@@ -17,7 +17,8 @@
 
 import pytest
 
-from burr.core.serde import StringDispatch, deserialize, serialize
+from burr.core import State
+from burr.core.serde import KEY, StringDispatch, deserialize, serialize
 
 
 def test_serialize_primitive_types():
@@ -73,4 +74,33 @@ def test_string_dispatch_no_key_informative_message():
         dispatch.call("nonexistent_key")
     assert "nonexistent_key" in str(exc_info.value)
     assert "known_key" in str(exc_info.value)
+    assert "imported" in str(exc_info.value)
+
+
+def test_dict_with_serde_key_round_trips():
+    """An ordinary dict carrying the serde marker must survive a round trip.
+
+    It used to be read back as a serde envelope, which raised "No deserializer
+    registered for key" instead of returning the value.
+    """
+    value = {KEY: "hello", "nested": {KEY: {"deep": 1}}, "list": [{KEY: 1}]}
+
+    assert deserialize(serialize(value)) == value
+
+
+def test_state_with_serde_key_round_trips():
+    """State containing such a dict deserializes instead of failing."""
+    state = State({"payload": {KEY: "hello", "count": 2}})
+
+    restored = State.deserialize(state.serialize())
+
+    assert restored["payload"] == {KEY: "hello", "count": 2}
+
+
+def test_envelope_without_imported_deserializer_still_raises():
+    """A real envelope whose module was not imported keeps its helpful error."""
+    with pytest.raises(ValueError) as exc_info:
+        deserialize({KEY: "some.serde.that.is.not.imported"})
+
+    assert "some.serde.that.is.not.imported" in str(exc_info.value)
     assert "imported" in str(exc_info.value)
