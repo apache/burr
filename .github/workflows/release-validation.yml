@@ -180,8 +180,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is skipped because burr/cli/__main__.py uses PEP 604 union syntax
-        # (dict | None) which requires Python 3.10+. Tracked separately.
         python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v7

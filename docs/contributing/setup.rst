@@ -63,7 +63,7 @@ The latter command will automatically create and install virtual env if one does
 automatically install the project in editable mode with all developer dependencies defined in dev
 dependency group.
 
-This will install all potential dependencies. Burr will work with ``python >=3.9``.
+This will install all potential dependencies. Burr will work with ``python >=3.10``.
 
 ------------------
 Linting/Pre-Commit
