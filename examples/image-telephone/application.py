@@ -42,6 +42,8 @@ from burr.core import Action, ApplicationBuilder, State, default, expr
 from burr.core.action import action
 from burr.lifecycle import PostRunStepHook
 
+IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 30
+
 # import hamilton modules that define the DAGs for image captioning and image generation
 caption_images = dataflows.import_module("caption_images", "elijahbenizzy")
 generate_images = dataflows.import_module("generate_images", "elijahbenizzy")
@@ -67,7 +69,11 @@ class ImageSaverHook(PostRunStepHook):
             image_url = state["current_image_location"]
             image_name = "image_" + str(state["__SEQUENCE_ID"]) + ".png"
             with open(os.path.join(self.path, image_name), "wb") as f:
-                f.write(requests.get(image_url).content)
+                response = requests.get(
+                    image_url, timeout=IMAGE_DOWNLOAD_TIMEOUT_SECONDS
+                )
+                response.raise_for_status()
+                f.write(response.content)
                 print(f"Saved image to {self.path}/{image_name}")
 
 
