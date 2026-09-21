@@ -40,6 +40,7 @@ from burr.common.async_utils import SyncOrAsyncGenerator, SyncOrAsyncGeneratorOr
 from burr.core import Action, ApplicationBuilder, ApplicationContext, Graph, State
 from burr.core.action import SingleStepAction
 from burr.core.application import ApplicationIdentifiers
+from burr.core.artifacts import ArtifactStore
 from burr.core.graph import GraphBuilder
 from burr.core.persistence import BaseStateLoader, BaseStateSaver
 from burr.lifecycle import LifecycleAdapter
@@ -102,6 +103,7 @@ class SubGraphTask:
     tracker: Optional[TrackingClient] = None
     state_persister: Optional[BaseStateSaver] = None
     state_initializer: Optional[BaseStateLoader] = None
+    object_store: Optional[ArtifactStore] = None
 
     def _create_app_builder(self, parent_context: ApplicationIdentifiers) -> ApplicationBuilder:
         builder = (
@@ -120,6 +122,9 @@ class SubGraphTask:
         )
         if self.tracker is not None:
             builder = builder.with_tracker(self.tracker)  # TODO -- move this into the adapter
+
+        if self.object_store is not None:
+            builder = builder.with_object_store(self.object_store)
 
         # In this case we want to persist the state for the app
         if self.state_persister is not None:
@@ -513,6 +518,7 @@ class MapActionsAndStates(TaskBasedParallelAction):
                 tracker=tracker,
                 state_persister=state_persister,
                 state_initializer=state_initializer,
+                object_store=context.object_store,
             )
 
         def _tasks() -> Generator[SubGraphTask, None, None]:

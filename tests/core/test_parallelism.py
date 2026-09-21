@@ -19,6 +19,7 @@ import asyncio
 import concurrent.futures
 import dataclasses
 import datetime
+import tempfile
 from random import random
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Literal, Optional, Union
 
@@ -34,6 +35,8 @@ from burr.core import (
     action,
 )
 from burr.core.action import Input, Result
+from burr.core.application import ApplicationIdentifiers
+from burr.core.artifacts import LocalFileSystemArtifactStore
 from burr.core.graph import GraphBuilder
 from burr.core.parallelism import (
     MapActions,
@@ -1217,6 +1220,7 @@ def test_map_actions_and_states_uses_same_persister_as_loader():
             tracker=tracker,
             state_persister=persister,
             state_initializer=persister,
+            object_store=None,
             parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
             action_name=action.name,
         ),
@@ -1227,3 +1231,64 @@ def test_map_actions_and_states_uses_same_persister_as_loader():
     assert task.state_initializer is not None
     assert task.tracker is not None
     assert task.state_persister is task.state_initializer  # This ensures they're the same
+
+
+def test_map_actions_and_states_cascades_object_store():
+    """Tests that the object_store on the parent ApplicationContext is cascaded to the
+    SubGraphTask created for each sub-application, so actions running inside a parallel
+    task can still access it through __context.object_store."""
+
+    class SimpleMapStates(MapActionsAndStates):
+        def actions(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[Union[Action, Callable, RunnableGraph], None, None]:
+            for graph_ in [
+                simple_single_fn_subgraph.bind(identifying_number=1000),
+            ]:
+                yield graph_
+
+        def states(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[State, None, None]:
+            yield state.update(input_number=0, number_to_add=0)
+
+        def reduce(self, state: State, states: Generator[State, None, None]) -> State:
+            new_state = state
+            for output_state in states:
+                new_state = new_state.append(output_numbers_in_state=output_state["output_number"])
+            return new_state
+
+        @property
+        def writes(self) -> list[str]:
+            return ["output_numbers_in_state"]
+
+        @property
+        def reads(self) -> list[str]:
+            return ["input_numbers_in_state"]
+
+    action = SimpleMapStates()
+    object_store = LocalFileSystemArtifactStore(tempfile.mkdtemp())
+
+    task_generator = action.tasks(
+        state=State(),
+        context=ApplicationContext(
+            app_id="app_id",
+            partition_key="partition_key",
+            sequence_id=0,
+            tracker=None,
+            state_persister=None,
+            state_initializer=None,
+            object_store=object_store,
+            parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
+            action_name=action.name,
+        ),
+        inputs={},
+    )
+    (task,) = task_generator  # one task
+    assert task.object_store is object_store
+
+    # And ensure it's actually threaded into the built sub-application's context
+    builder = task._create_app_builder(
+        ApplicationIdentifiers(app_id="app_id", partition_key="partition_key", sequence_id=0)
+    )
+    assert builder.object_store is object_store

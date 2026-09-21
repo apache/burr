@@ -83,6 +83,10 @@ redis = [
   "redis"
 ]
 
+s3 = [
+  "boto3"
+]
+
 release = [
   "jinja2",
 ]
@@ -105,12 +109,14 @@ tests = [
   "apache-burr[opentelemetry]",
   "apache-burr[langfuse]",
   "apache-burr[haystack]",
-  "apache-burr[ray]"
+  "apache-burr[ray]",
+  "apache-burr[s3]"
 ]
 
 documentation = [
   "apache-burr[tests]",
   "apache-burr[bedrock]",
+  "apache-burr[s3]",
   "sphinx<9",
   "sphinx-autobuild",
   "myst-nb",
