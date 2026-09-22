@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import inspect
+import sys
 import types
 import typing
 from typing import (
@@ -269,7 +270,10 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+if sys.version_info >= (3, 10):
+    PartialType = Union[Type[pydantic.BaseModel], Type[dict], types.UnionType]  # noqa: E501
+else:
+    PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -288,9 +292,35 @@ PydanticStreamingActionFunctionVar = TypeVar(
 )
 
 
+def _is_valid_stream_type(stream_type: typing.Any) -> bool:
+    """Return whether ``stream_type`` is a valid intermediate-result type for a
+    streaming pydantic action.
+
+    A valid ``stream_type`` is one of:
+
+    - a ``pydantic.BaseModel`` subclass,
+    - ``dict`` (or a ``dict`` subclass), used when the partial result is untyped,
+    - a union of the above, written either as ``typing.Union[A, B]`` or with the
+      PEP 604 ``A | B`` syntax (Python 3.10+).
+
+    Unions are validated recursively so that a union with an invalid member
+    (e.g. ``ModelA | int``) is rejected at decoration time rather than silently
+    accepted and surfacing later during streaming. This also answers the
+    per-member question raised on issue #607: each member is checked
+    individually rather than assuming they are all the same.
+    """
+    origin = typing.get_origin(stream_type)
+    union_type = getattr(types, "UnionType", None)
+    is_union = origin is Union or (union_type is not None and origin is union_type)
+    if is_union:
+        args = typing.get_args(stream_type)
+        return len(args) > 0 and all(_is_valid_stream_type(arg) for arg in args)
+    return isinstance(stream_type, type) and issubclass(stream_type, (pydantic.BaseModel, dict))
+
+
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[PartialType],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
@@ -299,6 +329,12 @@ def _validate_and_extract_signature_types_streaming(
     if stream_type is None:
         # TODO -- derive from the signature
         raise ValueError(f"stream_type is required for function: {fn.__qualname__}")
+    if not _is_valid_stream_type(stream_type):
+        raise ValueError(
+            f"stream_type for function: {fn.__qualname__} must be a pydantic.BaseModel "
+            f"subclass, dict, or a union of those types (e.g. ModelA | ModelB). "
+            f"Got: {stream_type!r}."
+        )
     if state_input_type is None:
         # TODO -- derive from the signature
         raise ValueError(f"state_input_type is required for function: {fn.__qualname__}")
