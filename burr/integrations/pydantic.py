@@ -269,7 +269,22 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+# 'object' broadens the annotation to accept union forms (Model1 | Model2 / Union[...])
+# which the type system cannot express more narrowly; _is_valid_stream_type enforces the real constraint.
+PartialType = Union[Type[pydantic.BaseModel], Type[dict], object]
+
+
+def _is_valid_stream_type(t: object) -> bool:
+    if t is dict or (isinstance(t, type) and issubclass(t, pydantic.BaseModel)):
+        return True
+    if typing.get_origin(t) is Union:
+        return all(_is_valid_stream_type(arg) for arg in typing.get_args(t))
+    # Python 3.10+ `X | Y` syntax produces types.UnionType
+    _UnionType = getattr(types, "UnionType", None)
+    if _UnionType is not None and isinstance(t, _UnionType):
+        return all(_is_valid_stream_type(arg) for arg in t.__args__)
+    return False
+
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -290,15 +305,19 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[PartialType],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel], Type[pydantic.BaseModel], PartialType
 ]:
     if stream_type is None:
         # TODO -- derive from the signature
         raise ValueError(f"stream_type is required for function: {fn.__qualname__}")
+    if not _is_valid_stream_type(stream_type):
+        raise ValueError(
+            f"stream_type must be a Pydantic BaseModel subclass, dict, or a union of those. Got: {stream_type!r}"
+        )
     if state_input_type is None:
         # TODO -- derive from the signature
         raise ValueError(f"state_input_type is required for function: {fn.__qualname__}")
