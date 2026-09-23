@@ -153,6 +153,17 @@ jobs:
         image: redis:7
         ports:
           - 6379:6379
+      aerospike:
+        image: aerospike/aerospike-server:8.1.2.4
+        ports:
+          - 3000:3000
+          - 3001:3001
+          - 3002:3002
+        options: >-
+          --health-cmd "asinfo -v build"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     strategy:
       fail-fast: false
       matrix:
