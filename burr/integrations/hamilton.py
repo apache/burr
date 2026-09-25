@@ -25,7 +25,6 @@ try:
 except ImportError as e:
     require_plugin(
         e,
-        ["sf-hamilton"],
         "hamilton",
     )
 
