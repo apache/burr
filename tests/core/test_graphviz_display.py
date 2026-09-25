@@ -99,3 +99,19 @@ def test_visualize_include_state_multiline_label(reads: list, writes: list, expe
     digraph = graph.visualize(include_state=True)
 
     assert expected_label in digraph.source
+
+
+def test_visualize_engine_kwargs_attr_dicts(graph):
+    """Attribute dicts passed through ``engine_kwargs`` reach the graphviz.Digraph,
+    including ones (like ``edge_attr``) that have no Burr default to merge into."""
+    digraph = graph.visualize(
+        graph_attr={"rankdir": "LR"},
+        node_attr={"fontname": "Courier"},
+        edge_attr={"color": "red"},
+    )
+
+    assert digraph.graph_attr["rankdir"] == "LR"
+    assert digraph.graph_attr["ranksep"] == "0.4"  # Burr default is kept
+    assert digraph.node_attr["fontname"] == "Courier"
+    assert digraph.node_attr["fillcolor"] == "#b4d8e4"  # Burr default is kept
+    assert digraph.edge_attr == {"color": "red"}
