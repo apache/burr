@@ -21,7 +21,7 @@
 #   $ cd /PATH/TO/REPO
 #   $ pre-commit install
 
-exclude: '^telemetry/ui|^burr/tracking/server/demo_data(/|$)'
+exclude: '^telemetry/ui|^typescript/|^burr/tracking/server/demo_data(/|$)'
 repos:
   - repo: https://github.com/ambv/black
     rev: 23.11.0
@@ -68,6 +68,26 @@ repos:
     rev: 6.1.0
     hooks:
       - id: flake8
+  # ESLint for TypeScript
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: ^typescript/.*\.[jt]sx?$
+        types: [file]
+        args: ['--fix']
+        additional_dependencies:
+          - eslint@8.56.0
+          - '@typescript-eslint/parser@6.21.0'
+          - '@typescript-eslint/eslint-plugin@6.21.0'
+          - typescript@5.3.3
+  # Prettier for TypeScript
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        files: ^typescript/.*\.(ts|tsx|js|jsx|json|md)$
+        args: ['--write']
   - repo: local
     # This is a bit of a hack, but its the easiest way to get it to all run together
     # https://stackoverflow.com/questions/64001471/pylint-with-pre-commit-and-esllint-with-husky
