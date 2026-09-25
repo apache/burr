@@ -158,6 +158,14 @@ def _remap_dunder_parameters(
     return inputs
 
 
+def _remap_injected_inputs(method: Callable, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Remaps the framework-injected ``__context``/``__tracer`` inputs to the name-mangled
+    parameter names a class-based action's method may use. See ``_remap_dunder_parameters``."""
+    if "__context" in inputs or "__tracer" in inputs:
+        return _remap_dunder_parameters(method, inputs, ["__context", "__tracer"])
+    return inputs
+
+
 def _run_function(function: Function, state: State, inputs: Dict[str, Any], name: str) -> dict:
     """Runs a function, returning the result of running the function.
     Note this restricts the keys in the state to only those that the
@@ -176,9 +184,7 @@ def _run_function(function: Function, state: State, inputs: Dict[str, Any], name
         )
     state_to_use = state.subset(*function.reads)
     function.validate_inputs(inputs)
-    if "__context" in inputs or "__tracer" in inputs:
-        # potentially need to remap the __context & __tracer variables
-        inputs = _remap_dunder_parameters(function.run, inputs, ["__context", "__tracer"])
+    inputs = _remap_injected_inputs(function.run, inputs)
     result = function.run(state_to_use, **inputs)
     _validate_result(result, name)
     return result
@@ -191,6 +197,7 @@ async def _arun_function(
     Async version of the above."""
     state_to_use = state.subset(*function.reads)
     function.validate_inputs(inputs)
+    inputs = _remap_injected_inputs(function.run, inputs)
     result = await function.run(state_to_use, **inputs)
     _validate_result(result, name)
     return result
@@ -477,7 +484,7 @@ def _run_multi_step_streaming_action(
     """
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
-    generator = action.stream_run(state, **inputs)
+    generator = action.stream_run(state, **_remap_injected_inputs(action.stream_run, inputs))
     result = None
     first_stream_start_time = None
     count = 0
@@ -535,7 +542,7 @@ async def _arun_multi_step_streaming_action(
     """Runs a multi-step streaming action in async. See the synchronous version for more details."""
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
-    generator = action.stream_run(state, **inputs)
+    generator = action.stream_run(state, **_remap_injected_inputs(action.stream_run, inputs))
     result = None
     first_stream_start_time = None
     count = 0
