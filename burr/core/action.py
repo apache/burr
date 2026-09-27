@@ -517,8 +517,9 @@ class _SafeExprValidator(ast.NodeVisitor):
 
     def visit_Dict(self, node: ast.Dict) -> None:
         for k in node.keys:
-            if k is not None:
-                self.visit(k)
+            if k is None:
+                self._reject(node, "dictionary unpacking")
+            self.visit(k)
         for v in node.values:
             self.visit(v)
 
@@ -810,7 +811,7 @@ class Condition(Function):
         - ``BoolOp``: ``and``, ``or``.
         - ``UnaryOp``: ``not``, unary ``-``, unary ``+``.
         - ``BinOp`` arithmetic: ``+``, ``-``, ``*``, ``/``, ``//``, ``%``, ``**``.
-        - Literal containers: tuple, list, set, dict.
+        - Literal containers: tuple, list, set, dict. Unpacking is not supported.
         - ``Call`` only to a tight allowlist of safe builtins by name:
           ``len``, ``abs``, ``min``, ``max``, ``sum``, ``all``, ``any``, ``str``,
           ``int``, ``float``, ``bool``. All other calls are rejected.

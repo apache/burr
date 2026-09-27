@@ -418,6 +418,26 @@ def test_safe_expr_literal_containers():
     assert _eval_value(Condition.safe_expr("{'a': 1, 'b': 2}"), {}) == {"a": 1, "b": 2}
 
 
+def test_safe_expr_dict_with_none_key():
+    cond = Condition.safe_expr("{None: 'fallback', 'allowed': True}[None] == 'fallback'")
+    assert cond.run(State({})) == {Condition.KEY: True}
+
+
+@pytest.mark.parametrize(
+    "expr_str",
+    [
+        "{**mapping}",
+        "{'allowed': True, **mapping}",
+        "{**first, **second}",
+        "[{**mapping}]",
+        "False and {**mapping}",
+    ],
+)
+def test_safe_expr_rejects_dict_unpacking_at_call_time(expr_str):
+    with pytest.raises(ValueError, match="dictionary unpacking"):
+        Condition.safe_expr(expr_str)
+
+
 def test_safe_expr_all_allowed_builtins():
     pairs = [
         ("len(items)", {"items": [1, 2, 3]}, 3),
