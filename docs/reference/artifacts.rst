@@ -42,11 +42,20 @@ We currently support the following backends:
     * - AWS S3
       - :ref:`S3ArtifactStore <s3-artifacts-integration>`
       - ``pip install "apache-burr[s3]"``
+    * - AWS S3 (async)
+      - :ref:`AsyncS3ArtifactStore <s3-artifacts-integration>`
+      - ``pip install "apache-burr[s3]"``
 
 If you want to implement your own artifact store (to bridge it with a new backend), you should
-implement the ``ArtifactStore`` interface.
+implement the ``ArtifactStore`` interface -- or ``AsyncArtifactStore`` if your backend's I/O is
+itself async (e.g. a cloud SDK with a native async client) and you want to use it from async
+actions without blocking the event loop.
 
 .. autoclass:: burr.core.artifacts.ArtifactStore
+   :members:
+   :show-inheritance:
+
+.. autoclass:: burr.core.artifacts.AsyncArtifactStore
    :members:
    :show-inheritance:
 

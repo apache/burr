@@ -84,7 +84,8 @@ redis = [
 ]
 
 s3 = [
-  "boto3"
+  "boto3",
+  "aiobotocore"
 ]
 
 release = [

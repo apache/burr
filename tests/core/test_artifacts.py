@@ -23,7 +23,7 @@ import textwrap
 import pytest
 
 from burr.core import serde, state
-from burr.core.artifacts import ArtifactRef, LocalFileSystemArtifactStore
+from burr.core.artifacts import ArtifactRef, AsyncArtifactStore, LocalFileSystemArtifactStore
 
 
 @pytest.fixture
@@ -286,3 +286,86 @@ def test_artifact_ref_deserializes_in_fresh_process_without_explicit_import():
     )
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout
+
+
+class InMemoryAsyncArtifactStore(AsyncArtifactStore):
+    """Minimal in-memory `AsyncArtifactStore` used to exercise the async base-class contract
+    (digest computation, explicit-key collision semantics, verification) without needing a real
+    I/O-bound backend."""
+
+    def __init__(self):
+        self._data: dict = {}
+
+    async def put(self, data: bytes, key: str) -> None:
+        self._data[key] = data
+
+    async def get(self, key: str) -> bytes:
+        if key not in self._data:
+            raise FileNotFoundError(key)
+        return self._data[key]
+
+    async def exists(self, key: str) -> bool:
+        return key in self._data
+
+
+@pytest.fixture
+def async_store():
+    return InMemoryAsyncArtifactStore()
+
+
+def test_artifact_store_is_async_false(store):
+    assert store.is_async() is False
+
+
+def test_async_artifact_store_is_async_true(async_store):
+    assert async_store.is_async() is True
+
+
+async def test_async_put_artifact_computes_digest_and_size(async_store):
+    data = b"async payload"
+    ref = await async_store.put_artifact(data)
+
+    assert ref.digest == hashlib.sha256(data).hexdigest()
+    assert ref.size_bytes == len(data)
+    assert ref.key == ref.digest  # content-addressed by default
+
+
+async def test_async_put_artifact_explicit_key_identical_content_is_noop(async_store):
+    data = b"same bytes"
+    first = await async_store.put_artifact(data, key="mutable")
+    second = await async_store.put_artifact(data, key="mutable")
+
+    assert first == second
+    assert await async_store.get("mutable") == data
+
+
+async def test_async_put_artifact_explicit_key_conflicting_content_raises(async_store):
+    await async_store.put_artifact(b"first", key="mutable")
+
+    with pytest.raises(ValueError, match="already exists with different content"):
+        await async_store.put_artifact(b"second", key="mutable")
+
+    # the original content must be untouched after the rejected write
+    assert await async_store.get("mutable") == b"first"
+
+
+async def test_async_get_artifact_roundtrip(async_store):
+    data = b"async roundtrip"
+    ref = await async_store.put_artifact(data)
+
+    assert await async_store.get_artifact(ref) == data
+
+
+async def test_async_get_artifact_verifies_digest_by_default(async_store):
+    ref = await async_store.put_artifact(b"original")
+    await async_store.put(b"tampered", ref.key)  # simulate corruption/overwrite out-of-band
+
+    with pytest.raises(ValueError, match="Digest mismatch"):
+        await async_store.get_artifact(ref)
+
+
+async def test_artifact_ref_aread_delegates_to_async_store(async_store):
+    data = b"delegate aread"
+    ref = await async_store.put_artifact(data)
+
+    assert await ref.aread(async_store) == data

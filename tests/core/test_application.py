@@ -4231,6 +4231,75 @@ def test_application_context_backwards_compatible_without_object_store_kwarg():
     assert context.object_store is None
 
 
+def _make_in_memory_async_store():
+    """Builds a minimal `AsyncArtifactStore` test double -- in-memory, so tests don't need
+    network/disk. Imported lazily to match this file's convention of importing
+    `burr.core.artifacts` within individual tests rather than at module scope."""
+    from burr.core.artifacts import AsyncArtifactStore
+
+    class InMemoryAsyncArtifactStore(AsyncArtifactStore):
+        def __init__(self):
+            self._data: Dict[str, bytes] = {}
+
+        async def put(self, data: bytes, key: str) -> None:
+            self._data[key] = data
+
+        async def get(self, key: str) -> bytes:
+            if key not in self._data:
+                raise FileNotFoundError(key)
+            return self._data[key]
+
+        async def exists(self, key: str) -> bool:
+            return key in self._data
+
+    return InMemoryAsyncArtifactStore()
+
+
+def test_build_rejects_async_object_store():
+    """A sync `.build()` can't await an async store's `put`/`get`/`exists` -- using one should
+    fail fast at build time with a clear error, not silently produce a broken sync app."""
+    store = _make_in_memory_async_store()
+    builder = (
+        ApplicationBuilder()
+        .with_actions(terminal=Result())
+        .with_transitions()
+        .with_entrypoint("terminal")
+        .with_state()
+        .with_object_store(store)
+    )
+    with pytest.raises(ValueError, match="async object store"):
+        builder.build()
+
+
+async def test_abuild_exposes_async_object_store_through_application_context():
+    store = _make_in_memory_async_store()
+    seen_context: Dict[str, Optional[ApplicationContext]] = {"context": None}
+
+    @action(reads=[], writes=["doc"])
+    async def ingest(state: State, __context: ApplicationContext) -> State:
+        seen_context["context"] = __context
+        ref = await __context.object_store.put_artifact(b"hello async world")
+        return state.update(doc=ref)
+
+    app = await (
+        ApplicationBuilder()
+        .with_actions(ingest=ingest, terminal=Result("doc"))
+        .with_transitions(("ingest", "terminal"))
+        .with_entrypoint("ingest")
+        .with_state()
+        .with_object_store(store)
+        .abuild()
+    )
+
+    *_, state = await app.arun(halt_after=["terminal"])
+
+    assert seen_context["context"] is not None
+    assert seen_context["context"].object_store is store
+
+    ref = state["doc"]
+    assert await ref.aread(store) == b"hello async world"
+
+
 class ActionWithoutContext(Action):
     def run(self, other_param, foo):
         pass

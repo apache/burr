@@ -42,8 +42,9 @@ Burr's artifact storage API solves this by giving you a place to write the blob 
 content-addressed handle to keep in state instead (an
 :py:class:`ArtifactRef <burr.core.artifacts.ArtifactRef>`). The ref serializes/deserializes like
 any other state value, but loading it back does **not** eagerly fetch the underlying bytes --
-you explicitly call :py:meth:`ArtifactRef.read <burr.core.artifacts.ArtifactRef.read>` (or
-``store.get_artifact(ref)``) when you actually need them.
+you explicitly call :py:meth:`ArtifactRef.read <burr.core.artifacts.ArtifactRef.read>` (or its
+async counterpart, :py:meth:`ArtifactRef.aread <burr.core.artifacts.ArtifactRef.aread>`, for an
+``AsyncArtifactStore``) when you actually need them.
 
 This is an opt-in, explicit mechanism. Burr never reads from or writes to an artifact store on
 its own -- your actions are always the ones calling ``put_artifact``/``get_artifact``.
@@ -151,6 +152,44 @@ you can swap implementations (local disk in dev, S3 in prod) in one place.
     ``__context`` is only injected if it appears in your action's signature -- see
     :ref:`State Persistence <state-persistence>` for more on ``ApplicationContext``.
 
+Using an artifact store from async actions
+--------------------------------------------
+
+:py:class:`ArtifactStore <burr.core.artifacts.ArtifactStore>` is synchronous -- calling it from
+an async action blocks the event loop for the duration of each ``put``/``get`` (e.g. a network
+round-trip to S3). For async applications, use an
+:py:class:`AsyncArtifactStore <burr.core.artifacts.AsyncArtifactStore>` instead (e.g.
+:py:class:`AsyncS3ArtifactStore <burr.integrations.artifacts.s3.AsyncS3ArtifactStore>`), and
+build the application with :py:meth:`abuild <burr.core.application.ApplicationBuilder.abuild>`:
+
+.. code-block:: python
+
+    from burr.core import action, State, ApplicationContext
+    from burr.core.artifacts import AsyncArtifactStore
+    from burr.integrations.artifacts.s3 import AsyncS3ArtifactStore
+
+    @action(reads=[], writes=["pdf_doc"])
+    async def ingest_pdf(state: State, pdf_bytes: bytes, __context: ApplicationContext) -> State:
+        store: AsyncArtifactStore = __context.object_store
+        ref = await store.put_artifact(pdf_bytes, media_type="application/pdf")
+        return state.update(pdf_doc=ref)
+
+    object_store = await AsyncS3ArtifactStore.acreate(bucket="my-bucket")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(ingest_pdf, ...)
+        .with_transitions(...)
+        .with_state(...)
+        .with_entrypoint(...)
+        .with_object_store(object_store)
+        .abuild()
+    )
+
+:py:meth:`build <burr.core.application.ApplicationBuilder.build>` (the synchronous builder)
+rejects an async store with a clear error at build time, since it has no way to await it. An
+``ArtifactStore`` (sync) can still be used from ``abuild()``-built applications, but, as with a
+sync state persister, it will block the event loop while it runs.
+
 Supported Backends
 -------------------
 
@@ -167,6 +206,9 @@ Supported Backends
     * - AWS S3
       - :py:class:`S3ArtifactStore <burr.integrations.artifacts.s3.S3ArtifactStore>`
       - ``pip install "apache-burr[s3]"``
+    * - AWS S3 (async)
+      - :py:class:`AsyncS3ArtifactStore <burr.integrations.artifacts.s3.AsyncS3ArtifactStore>`
+      - ``pip install "apache-burr[s3]"`` (includes ``aiobotocore``)
 
 See :ref:`the API reference <artifactsref>` for full details, and
 :ref:`the S3 integration reference <s3-artifacts-integration>` for setup instructions.
@@ -194,6 +236,11 @@ methods -- ``put``, ``get``, and ``exists``:
 
 ``put_artifact`` and ``get_artifact`` (digest computation/verification, content-addressed keys)
 are provided for free by the base class, so you don't need to reimplement them for a new backend.
+
+If your backend's I/O is itself async (e.g. a cloud SDK with a native async client), subclass
+:py:class:`AsyncArtifactStore <burr.core.artifacts.AsyncArtifactStore>` instead and implement
+``async def put/get/exists`` -- it provides the same ``put_artifact``/``get_artifact`` helpers,
+just awaited.
 
 Interaction with serialization
 --------------------------------

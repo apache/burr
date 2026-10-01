@@ -60,7 +60,7 @@ from burr.core.action import (
     StreamingAction,
     StreamingResultContainer,
 )
-from burr.core.artifacts import ArtifactStore
+from burr.core.artifacts import ArtifactStore, AsyncArtifactStore
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.persistence import (
     AsyncBaseStateLoader,
@@ -643,7 +643,9 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
     state_initializer: Optional[BaseStateLoader]
     state_persister: Optional[BaseStateSaver]
     action_name: Optional[str]  # Store just the action name
-    object_store: Optional[ArtifactStore] = None
+    # Trailing field with a `None` default so directly constructing this public dataclass the
+    # pre-existing way (without `object_store`) keeps working -- see with_object_store.
+    object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None
 
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
@@ -851,7 +853,7 @@ class Application(Generic[ApplicationStateType]):
         parallel_executor_factory: Optional[Executor] = None,
         state_persister: Union[BaseStateSaver, LifecycleAdapter, None] = None,
         state_initializer: Union[BaseStateLoader, LifecycleAdapter, None] = None,
-        object_store: Optional[ArtifactStore] = None,
+        object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None,
     ):
         """Instantiates an Application. This is an internal API -- use the builder!
 
@@ -2550,7 +2552,9 @@ class ApplicationBuilder(Generic[StateType]):
         self.state_persister = persister  # tracks for later; validates in build / abuild
         return self
 
-    def with_object_store(self, object_store: ArtifactStore) -> "ApplicationBuilder[StateType]":
+    def with_object_store(
+        self, object_store: Union[ArtifactStore, AsyncArtifactStore]
+    ) -> "ApplicationBuilder[StateType]":
         """Adds an object/blob store to the application, for storing large values (files,
         dataframes, images, etc...) outside of ``State`` -- see :py:mod:`burr.core.artifacts`.
 
@@ -2576,6 +2580,11 @@ class ApplicationBuilder(Generic[StateType]):
                 .with_object_store(LocalFileSystemArtifactStore(root_dir="./blobs"))
                 .build()
             )
+
+        An :py:class:`AsyncArtifactStore` (e.g. an ``aiobotocore``-backed S3 store) may be passed
+        too, for use from async actions without blocking the event loop -- build the application
+        with :py:meth:`abuild` in that case, since :py:meth:`build` rejects an async store (it
+        can't be awaited from a sync action).
 
         :param object_store: The artifact store to make available to actions.
         :return: The application builder for future chaining.
@@ -2855,6 +2864,12 @@ class ApplicationBuilder(Generic[StateType]):
         :return: The application object.
         """
         _validate_app_id(self.app_id)
+        if self.object_store is not None and self.object_store.is_async():
+            raise ValueError(
+                "You are building the sync application, but have used an "
+                "async object store. Please use a sync object store (ArtifactStore) or "
+                "use the .abuild() method to build an async application."
+            )
         if self.state is None:
             self.state = State()
 
@@ -2876,6 +2891,9 @@ class ApplicationBuilder(Generic[StateType]):
 
         Note: When you run an async application you can still use the normal sync functionalities, i.e.
         sync hooks of other adapters, but they will block the async event loop until finished.
+        Likewise, a synchronous :py:class:`~burr.core.artifacts.ArtifactStore` passed to
+        :py:meth:`with_object_store` still works here, but its calls will block the event loop --
+        prefer an :py:class:`~burr.core.artifacts.AsyncArtifactStore` for I/O-bound backends.
 
         In case you are using state initializers and persisters, the asynchronous application should
         be used in the following cases:

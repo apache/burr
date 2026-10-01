@@ -67,6 +67,16 @@ class ArtifactRef:
         """
         return store.get_artifact(self, verify=verify)
 
+    async def aread(self, store: "AsyncArtifactStore", verify: bool = True) -> bytes:
+        """Asynchronous counterpart to :py:meth:`read`, for use with an
+        :py:class:`AsyncArtifactStore` (e.g. from an async action).
+
+        :param store: The async store this artifact was originally written to.
+        :param verify: Whether to verify the fetched bytes match ``self.digest``. Defaults to True.
+        :return: The raw bytes of the artifact.
+        """
+        return await store.get_artifact(self, verify=verify)
+
 
 class ArtifactStore(abc.ABC):
     """Base class for blob/object storage backends.
@@ -96,6 +106,12 @@ class ArtifactStore(abc.ABC):
     @abc.abstractmethod
     def exists(self, key: str) -> bool:
         """Returns whether ``key`` is present in the store."""
+
+    def is_async(self) -> bool:
+        """Whether this store's I/O methods are async. Always False here -- see
+        :py:class:`AsyncArtifactStore` for the async contract. Mirrors
+        :py:meth:`burr.core.persistence.BaseStateSaver.is_async`."""
+        return False
 
     def put_artifact(
         self, data: bytes, media_type: Optional[str] = None, key: Optional[str] = None
@@ -145,6 +161,97 @@ class ArtifactStore(abc.ABC):
         :raises ValueError: If ``verify`` is True and the fetched bytes' digest does not match.
         """
         data = self.get(ref.key)
+        if verify:
+            actual_digest = hashlib.sha256(data).hexdigest()
+            if actual_digest != ref.digest:
+                raise ValueError(
+                    f"Digest mismatch for artifact '{ref.key}': "
+                    f"expected {ref.digest}, got {actual_digest}. The stored content may have "
+                    f"been overwritten or corrupted."
+                )
+        return data
+
+
+class AsyncArtifactStore(abc.ABC):
+    """Asynchronous counterpart to :py:class:`ArtifactStore`, for backends whose I/O should not
+    block the event loop (e.g. network calls to a cloud object store). Implement this instead of
+    :py:class:`ArtifactStore` if your backend's ``put``/``get``/``exists`` are I/O-bound and you
+    want it to be usable from async actions without blocking other concurrent work -- mirrors the
+    sync/async split already used for state persisters (see
+    :py:class:`burr.core.persistence.BaseStateSaver` /
+    :py:class:`burr.core.persistence.AsyncBaseStateSaver`).
+
+    A synchronous store (e.g. :py:class:`LocalFileSystemArtifactStore`) can still be used from an
+    async action, but its calls will block the event loop for their duration -- prefer an async
+    store (e.g. an ``aiobotocore``-backed S3 store) for I/O-bound backends used from async code.
+    """
+
+    @abc.abstractmethod
+    async def put(self, data: bytes, key: str) -> None:
+        """Stores ``data`` under ``key``. Should be idempotent -- writing the same key twice
+        with the same content should not error.
+
+        :param data: The raw bytes to store.
+        :param key: The key/path to store the data under.
+        """
+
+    @abc.abstractmethod
+    async def get(self, key: str) -> bytes:
+        """Retrieves the raw bytes stored under ``key``.
+
+        :param key: The key/path to load.
+        :raises FileNotFoundError: If no data is stored under ``key``.
+        """
+
+    @abc.abstractmethod
+    async def exists(self, key: str) -> bool:
+        """Returns whether ``key`` is present in the store."""
+
+    def is_async(self) -> bool:
+        """Whether this store's I/O methods are async. Always True here -- see
+        :py:class:`ArtifactStore` for the synchronous contract."""
+        return True
+
+    async def put_artifact(
+        self, data: bytes, media_type: Optional[str] = None, key: Optional[str] = None
+    ) -> ArtifactRef:
+        """Asynchronous counterpart to :py:meth:`ArtifactStore.put_artifact` -- same digest
+        computation and explicit-key collision semantics (see there for details), just awaited
+        instead of blocking.
+
+        :param data: The raw bytes to store.
+        :param media_type: Optional MIME type to record on the returned ref.
+        :param key: Optional explicit key to store under. If not provided, a content-addressed
+            key (the hex digest) is used -- so writing identical content twice is a no-op.
+        :raises ValueError: If ``key`` is explicitly provided and already exists with content
+            that does not match the digest of ``data``.
+        :return: An :py:class:`ArtifactRef` describing the stored artifact.
+        """
+        digest = hashlib.sha256(data).hexdigest()
+        resolved_key = key if key is not None else digest
+        if key is not None and await self.exists(resolved_key):
+            existing_digest = hashlib.sha256(await self.get(resolved_key)).hexdigest()
+            if existing_digest != digest:
+                raise ValueError(
+                    f"Key '{resolved_key}' already exists with different content (existing "
+                    f"digest {existing_digest}, new digest {digest}). Use a different explicit "
+                    f"key, or omit `key` to use content-addressed storage."
+                )
+            # Identical content is already stored under this key -- nothing to do.
+        else:
+            await self.put(data, resolved_key)
+        return ArtifactRef(
+            key=resolved_key, size_bytes=len(data), digest=digest, media_type=media_type
+        )
+
+    async def get_artifact(self, ref: ArtifactRef, verify: bool = True) -> bytes:
+        """Fetches the bytes described by ``ref``, optionally verifying its digest.
+
+        :param ref: The reference describing what to fetch.
+        :param verify: Whether to verify the fetched bytes match ``ref.digest``. Defaults to True.
+        :raises ValueError: If ``verify`` is True and the fetched bytes' digest does not match.
+        """
+        data = await self.get(ref.key)
         if verify:
             actual_digest = hashlib.sha256(data).hexdigest()
             if actual_digest != ref.digest:
