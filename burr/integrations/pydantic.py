@@ -188,6 +188,26 @@ class PydanticActionSchema(ActionSchema[StateInputType, StateOutputType, Interme
     def intermediate_result_type(self) -> type[IntermediateResultType]:
         return self._intermediate_result_type
 
+    def convert_state_before_run(self, state: State) -> StateInputType:
+        return model_from_state(model=self._input_type, state=state)
+
+    def convert_state_before_update(self, state: State) -> StateOutputType:
+        return model_from_state(model=self._output_type, state=state)
+
+    def convert_state_after_update(
+        self, state: StateOutputType, original_state: State
+    ) -> State:
+        if not isinstance(state, self._output_type):
+            raise TypeError(
+                f"Expected update() to return {self._output_type.__name__}, "
+                f"got {type(state).__name__}."
+            )
+        return merge_to_state(
+            model=state,
+            write_keys=list(self._output_type.model_fields),
+            state=original_state,
+        )
+
 
 def pydantic_action(
     reads: List[str],
