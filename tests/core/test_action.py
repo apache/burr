@@ -665,11 +665,29 @@ def test_safe_expr_node_count_bounded():
     # Wide and shallow.
     with pytest.raises(ValueError, match="more than 500 nodes"):
         Condition.safe_expr("[" + ", ".join(["1"] * 3000) + "]")
-    # Deep chain: rejected before any recursive walk of the tree is attempted.
+    # Deep chain that every supported parser accepts: rejected by the node count
+    # before any recursive walk of the tree is attempted.
     with pytest.raises(ValueError, match="more than 500 nodes"):
-        Condition.safe_expr("1" + " + 1" * 3000)
+        Condition.safe_expr("1" + " + 1" * 600)
     # A moderately long expression is still fine.
     cond = Condition.safe_expr(" + ".join(["x"] * 100) + " == 100")
+    assert cond.run(State({"x": 1})) == {Condition.KEY: True}
+
+
+def test_safe_expr_very_deep_chain_rejected():
+    # Depending on the Python version the parser either builds this tree (and the
+    # node count rejects it) or gives up on nesting depth first (and we surface
+    # that as a ValueError too). Either way: ValueError, never RecursionError.
+    with pytest.raises(ValueError):
+        Condition.safe_expr("1" + " + 1" * 3000)
+
+
+def test_safe_expr_source_length_bounded():
+    # Rejected on raw length, before the parser ever sees it.
+    with pytest.raises(ValueError, match="exceeds 10000 characters"):
+        Condition.safe_expr("x" + " " * 20_000)
+    # Just under the cap still parses (and is then judged on its own merits).
+    cond = Condition.safe_expr("x" + " " * 9_000 + "== 1")
     assert cond.run(State({"x": 1})) == {Condition.KEY: True}
 
 

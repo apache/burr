@@ -437,6 +437,7 @@ _SAFE_CMPOPS = (
 # keep those operators and bound them instead. Each bound is enforced at run
 # time by the interpreter; the ones that involve only literals are also
 # enforced up front at ``safe_expr()`` call time.
+_SAFE_EXPR_MAX_SOURCE_CHARS = 10_000  # length of the expression string, checked before parsing
 _SAFE_EXPR_MAX_NODES = 500  # total AST nodes in one expression
 _SAFE_EXPR_MAX_INT_BITS = 4096  # width of any int produced by arithmetic (or written as a literal)
 _SAFE_EXPR_MAX_POW_EXPONENT = 64  # |exponent| for int ** int
@@ -945,7 +946,9 @@ class Condition(Function):
         ``await``, ``yield``, imports, and any ``Call`` not on the builtin allowlist.
 
         Resource use is bounded as well, so a single expression cannot allocate
-        without limit. An expression may have at most 500 AST nodes. ``**`` accepts
+        without limit. The expression string may be at most 10,000 characters and
+        may have at most 500 AST nodes; an expression nested too deeply for the
+        parser is rejected the same way. ``**`` accepts
         only ``int`` / ``float`` operands; for ``int ** int`` the exponent must be
         within +/-64 and the base must fit in 64 bits. ``sequence * n`` requires
         ``n <= 10_000``, and ``*`` / ``+`` on sequences may not produce more than
@@ -963,8 +966,19 @@ class Condition(Function):
             when a state-dependent value exceeds the bounds.
         :raises SyntaxError: if the expression is not syntactically valid Python.
         """
-        # Parse first. This raises SyntaxError for malformed input, which is fine.
-        tree = ast.parse(expr, mode="eval")
+        # Bound the source length before parsing: the parser's own cost (and its
+        # nesting limit, which varies by Python version) scales with the input.
+        if len(expr) > _SAFE_EXPR_MAX_SOURCE_CHARS:
+            raise ValueError(
+                f"safe_expr: expression exceeds {_SAFE_EXPR_MAX_SOURCE_CHARS} characters"
+            )
+        # Parse. This raises SyntaxError for malformed input, which is fine. A
+        # deeply nested expression can instead exhaust the parser itself on some
+        # Python versions; surface that as the same kind of rejection.
+        try:
+            tree = ast.parse(expr, mode="eval")
+        except (RecursionError, MemoryError):
+            raise ValueError("safe_expr: expression is too deeply nested") from None
         # Bound the size of the tree before handing it to anything recursive.
         _check_safe_expr_size(tree)
         # Validate the whole tree against the allowlist *now*, at call time. If any
