@@ -212,8 +212,9 @@ def _run_server(
 @click.option(
     "--host",
     default="127.0.0.1",
-    help="Host to run the server on -- use 0.0.0.0 if you want "
-    "to expose it to the network (E.G. in a docker image)",
+    help="Host to run the server on -- defaults to 127.0.0.1 (local only). Use 0.0.0.0 if you "
+    "want to expose it to the network (E.G. in a docker image); the server has no built-in "
+    "authentication, so put it behind an authenticating proxy when doing so.",
 )
 @click.option(
     "--backend",

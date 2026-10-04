@@ -195,6 +195,10 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
     This factory creates a new FastAPI instance with all Burr UI routes,
     demo routers, and (optionally) static file serving configured.
 
+    The app does not authenticate requests. Serve it on localhost (the default for the
+    ``burr`` CLI and for ``python -m burr.tracking.server.run``) or put it behind an
+    authenticating reverse proxy when exposing it beyond the local machine.
+
     :param serve_static: Whether to serve the React UI static files. Defaults to
         the BURR_SERVE_STATIC environment variable (true by default).
     :return: A fully-configured FastAPI application.
@@ -450,4 +454,8 @@ app = create_burr_ui_app()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))  # Default to 8000 if no PORT environment variable is set
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Bind to localhost unless BURR_SERVER_HOST says otherwise. The server has no built-in
+    # authentication, so only expose it beyond the local machine (e.g. BURR_SERVER_HOST=0.0.0.0)
+    # behind an authenticating reverse proxy.
+    host = os.getenv("BURR_SERVER_HOST", "127.0.0.1")
+    uvicorn.run(app, host=host, port=port)
