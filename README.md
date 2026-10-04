@@ -263,3 +263,6 @@ Apache Burr is released under the Apache 2.0 License. See [LICENSE](https://gith
 We're very supportive of changes by new contributors, big or small! Make sure to discuss potential changes by creating an issue or commenting on an existing one before opening a pull request. Good first contributions include creating an example or an integration with your favorite Python library!
 
  To contribute, checkout our [contributing guidelines](https://github.com/apache/burr/blob/main/CONTRIBUTING.rst), our [developer setup guide](https://github.com/apache/burr/blob/main/docs/contributing/setup.rst), and the [Code of Conduct](https://www.apache.org/foundation/policies/conduct.html).
+
+## Security
+To report a vulnerability, see [SECURITY.md](https://github.com/apache/burr/blob/main/SECURITY.md). Do not file security reports as GitHub issues.
