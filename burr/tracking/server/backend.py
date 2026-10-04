@@ -20,7 +20,6 @@ import collections
 import importlib
 import json
 import os.path
-import re
 import sys
 from datetime import datetime
 from typing import Any, Optional, Sequence, Tuple, Type, TypeVar
@@ -32,6 +31,7 @@ from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from burr.tracking.common import models
+from burr.tracking.common.identifiers import join_within, validate_identifier
 from burr.tracking.common.models import ChildApplicationModel
 from burr.tracking.server import schema
 from burr.tracking.server.schema import (
@@ -293,43 +293,41 @@ def get_uri(project_id: str) -> str:
 
 DEFAULT_PATH = os.path.expanduser("~/.burr")
 
-# Regex for valid project/app identifiers — no path separators or traversal.
-_VALID_IDENTIFIER_RE = re.compile(r"^[a-zA-Z0-9_\-:]+$")
-
 
 def _validate_identifier(value: str, name: str = "identifier") -> str:
-    """Validate that a project/app identifier does not contain path traversal characters.
+    """Validate a project/app identifier that is used as a path component under the storage
+    directory. The rule itself lives in :mod:`burr.tracking.common.identifiers` and is shared
+    with the tracking client; this wrapper reports failures as HTTP 400.
 
     :param value: the identifier to validate
-    :param name: human-readable name for error messages
+    :param name: label for the error message, e.g. ``"project_id"``
     :return: the identifier if valid
-    :raises fastapi.HTTPException: 400 if the identifier contains invalid characters
+    :raises fastapi.HTTPException: 400 if the identifier does not meet the rule
     """
-    if not _VALID_IDENTIFIER_RE.match(value):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail=f"Invalid {name}: '{value}'. Only alphanumeric, underscore, hyphen and colon are allowed.",
-        )
-    return value
+    try:
+        return validate_identifier(value, name)
+    except ValueError as e:
+        raise fastapi.HTTPException(status_code=400, detail=str(e)) from e
 
 
 def _safe_join(base: str, *parts: str) -> str:
-    """Safely join path components and ensure the result stays within ``base``.
+    """Join path components and ensure the result stays inside ``base``.
+
+    Delegates to :func:`burr.tracking.common.identifiers.join_within`, which resolves symlinks
+    on both sides before comparing, so a link under the storage directory that points elsewhere
+    is rejected too. Failures are reported as HTTP 400 without echoing the storage location.
 
     :param base: the allowed base directory
     :param parts: path components to join
-    :return: the resolved path
-    :raises fastapi.HTTPException: 400 if the resolved path escapes the base directory
+    :return: the joined path
+    :raises fastapi.HTTPException: 400 if the resolved path is not inside the base directory
     """
-    target = os.path.realpath(os.path.join(base, *parts))
-    base_real = os.path.realpath(base)
-    # Ensure target is either the base directory or a subdirectory of it
-    if target != base_real and not target.startswith(base_real + os.sep):
+    try:
+        return join_within(base, *parts)
+    except ValueError as e:
         raise fastapi.HTTPException(
-            status_code=400,
-            detail="Path traversal detected: attempted to escape the base directory.",
-        )
-    return target
+            status_code=400, detail="Invalid path: must be inside the storage directory."
+        ) from e
 
 
 class LocalBackend(BackendBase, AnnotationsBackendMixin):
