@@ -196,9 +196,10 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
 
         cursor = await self.connection.cursor()
         await cursor.execute(
-            f"SELECT DISTINCT app_id FROM {self.table_name} "
+            f"SELECT app_id FROM {self.table_name} "
             f"WHERE partition_key = ? "
-            f"ORDER BY created_at DESC",
+            f"GROUP BY app_id "
+            f"ORDER BY MAX(created_at) DESC",
             (partition_key,),
         )
         app_ids = [row[0] for row in await cursor.fetchall()]

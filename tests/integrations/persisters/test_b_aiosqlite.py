@@ -73,6 +73,24 @@ async def test_async_persistence_lists_app_ids(async_persistence):
     assert set(app_ids) == set(["app_id1", "app_id2"])
 
 
+async def test_async_persistence_list_app_ids_is_unique_and_newest_first(async_persistence):
+    """Each app appears once, ordered by its most recent save."""
+    await async_persistence.initialize()
+    saves = [
+        ("a-app", 0, "2026-01-01 00:00:01"),
+        ("z-app", 0, "2026-01-01 00:00:02"),
+        ("a-app", 1, "2026-01-01 00:00:03"),
+    ]
+    for app_id, sequence_id, created_at in saves:
+        await async_persistence.save("pk", app_id, sequence_id, "position", State({}), "completed")
+        await async_persistence.connection.execute(
+            "UPDATE test_table SET created_at = ? WHERE app_id = ? AND sequence_id = ?",
+            (created_at, app_id, sequence_id),
+        )
+    await async_persistence.connection.commit()
+    assert await async_persistence.list_app_ids("pk") == ["a-app", "z-app"]
+
+
 @pytest.mark.parametrize(
     "method_name,kwargs",
     [

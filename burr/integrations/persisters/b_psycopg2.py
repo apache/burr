@@ -154,9 +154,10 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         """Lists the app_ids for a given partition_key."""
         cursor = self.connection.cursor()
         cursor.execute(
-            f"SELECT DISTINCT app_id, created_at FROM {self.table_name} "
+            f"SELECT app_id FROM {self.table_name} "
             "WHERE partition_key = %s "
-            "ORDER BY created_at DESC",
+            "GROUP BY app_id "
+            "ORDER BY MAX(created_at) DESC",
             (partition_key,),
         )
         app_ids = [row[0] for row in cursor.fetchall()]
