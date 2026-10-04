@@ -30,6 +30,7 @@ from burr.core import Action, Application, ApplicationBuilder, Result, State, ac
 from burr.core.persistence import BaseStatePersister, PersistedStateData
 from burr.tracking import LocalTrackingClient
 from burr.tracking.client import _allowed_project_name
+from burr.tracking.common.identifiers import join_within, validate_identifier
 from burr.tracking.common.models import (
     ApplicationMetadataModel,
     ApplicationModel,
@@ -665,3 +666,133 @@ def test_local_tracking_client_copy():
     assert copy.project_id == tracking_client.project_id
     assert copy.serde_kwargs == tracking_client.serde_kwargs
     assert copy.storage_dir == tracking_client.storage_dir
+
+
+# --- identifier validation: ids become directory names under the storage dir ---------------
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        str(uuid.uuid4()),
+        "my-app_1",
+        "session:abc.123",
+        "a" * 255,
+    ],
+)
+def test_validate_identifier_accepts_reasonable_ids(identifier):
+    assert validate_identifier(identifier, "app_id", on_windows=False) == identifier
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "",
+        ".",
+        "..",
+        "../other",
+        "nested/app",
+        "/absolute",
+        "back\\slash",
+        "with space",
+        "a" * 256,
+    ],
+)
+def test_validate_identifier_rejects_ids_unfit_for_a_path_component(identifier):
+    with pytest.raises(ValueError):
+        validate_identifier(identifier, "app_id")
+
+
+def test_validate_identifier_refuses_colon_on_windows():
+    assert validate_identifier("a:b", "app_id", on_windows=False) == "a:b"
+    with pytest.raises(ValueError):
+        validate_identifier("a:b", "app_id", on_windows=True)
+
+
+def test_join_within_keeps_paths_inside_base(tmp_path):
+    base = str(tmp_path)
+    assert join_within(base, "child") == os.path.join(base, "child")
+    assert join_within(base, "child", "log.jsonl") == os.path.join(base, "child", "log.jsonl")
+    for parts in [("..",), ("../sibling",), ("/absolute",), (".",), ("child", "..", "..")]:
+        with pytest.raises(ValueError):
+            join_within(base, *parts)
+
+
+def _entries_under(root: str) -> set:
+    """Every file and directory below ``root``, as paths relative to ``root``."""
+    found = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames + filenames:
+            found.add(os.path.relpath(os.path.join(dirpath, name), root))
+    return found
+
+
+@pytest.mark.parametrize(
+    "app_id",
+    ["..", "../../escaped", "nested/app", "/absolute/path", "", "with space"],
+)
+def test_builder_rejects_app_id_that_leaves_storage_dir(tmpdir, app_id):
+    """The error surfaces from .build(), and nothing is written -- inside or outside the storage dir."""
+    log_dir = os.path.join(str(tmpdir), "storage")
+    with pytest.raises(ValueError):
+        sample_application("test_builder_rejects_app_id", log_dir, app_id)
+    assert _entries_under(str(tmpdir)) == set()
+
+
+def test_builder_accepts_uuid_and_simple_app_ids(tmpdir):
+    log_dir = str(tmpdir)
+    project_name = "test_builder_accepts_ids"
+    for app_id in [str(uuid.uuid4()), "my-app_1", "v1.2.3"]:
+        app = sample_application(project_name, log_dir, app_id)
+        app.run(halt_after=["result"])
+        log_path = os.path.join(log_dir, project_name, app_id, LocalTrackingClient.LOG_FILENAME)
+        assert os.path.exists(log_path)
+
+
+def test_builder_rejects_fork_parent_app_id_that_leaves_storage_dir(tmpdir):
+    """Forking goes through load(); the parent id is validated before the log is read."""
+    log_dir = os.path.join(str(tmpdir), "storage")
+    tracker = LocalTrackingClient(project="test_fork_parent_id", storage_dir=log_dir)
+    with pytest.raises(ValueError):
+        (
+            ApplicationBuilder()
+            .with_actions(counter=counter, result=Result("counter"))
+            .with_transitions(("counter", "result", default))
+            .with_tracker(tracker)
+            .initialize_from(
+                tracker,
+                resume_at_next_action=True,
+                default_state={"counter": 0, "break_at": -1},
+                default_entrypoint="counter",
+                fork_from_app_id="../escaped",
+            )
+            .build()
+        )
+    assert _entries_under(str(tmpdir)) == set()
+
+
+def test_spawning_parent_app_id_is_validated_before_any_write(tmpdir):
+    """A bad parent id is caught before the child's own log/graph/metadata are written."""
+    log_dir = os.path.join(str(tmpdir), "storage")
+    with pytest.raises(ValueError):
+        sample_application(
+            "test_spawn_parent_id", log_dir, str(uuid.uuid4()), spawn_from=("../escaped", 5)
+        )
+    assert _entries_under(str(tmpdir)) == set()
+
+
+def test_readers_reject_app_id_that_leaves_storage_dir(tmpdir):
+    project_name = "test_readers_reject"
+    tracker = LocalTrackingClient(project=project_name, storage_dir=str(tmpdir))
+    with pytest.raises(ValueError):
+        tracker.load(partition_key=None, app_id="../escaped")
+    with pytest.raises(ValueError):
+        LocalTrackingClient.app_log_exists(project_name, "../escaped", storage_dir=str(tmpdir))
+    with pytest.raises(ValueError):
+        LocalTrackingClient.load_state(project_name, "../escaped", storage_dir=str(tmpdir))
+
+
+@pytest.mark.parametrize("project", ["..", "../other", "a/b", "", "with space"])
+def test_project_name_follows_the_same_rule(tmpdir, project):
+    with pytest.raises(ValueError):
+        LocalTrackingClient(project=project, storage_dir=str(tmpdir))
