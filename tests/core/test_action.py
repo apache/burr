@@ -563,6 +563,142 @@ def test_safe_expr_does_not_eval_during_validation():
         cond.run(State({"x": 0}))
 
 
+# --- resource bounds --------------------------------------------------------
+
+
+def test_safe_expr_pow_small_works():
+    assert _eval_value(Condition.safe_expr("2 ** 10"), {}) == 1024
+    assert _eval_value(Condition.safe_expr("x ** y"), {"x": 2, "y": 10}) == 1024
+    assert _eval_value(Condition.safe_expr("2 ** 0.5"), {}) == 2**0.5
+    # At the ceiling: a 64-bit base raised to 64 gives a 4033-bit result, still allowed.
+    assert _eval_value(Condition.safe_expr("x ** 64"), {"x": 2**63}) == (2**63) ** 64
+
+
+def test_safe_expr_pow_literal_out_of_range_rejected_at_call_time():
+    with pytest.raises(ValueError, match="exponent out of range"):
+        Condition.safe_expr("10 ** 10 ** 10")
+    with pytest.raises(ValueError, match="exponent out of range"):
+        Condition.safe_expr("2 ** 65")
+    with pytest.raises(ValueError, match=r"base of \*\* out of range"):
+        Condition.safe_expr("18446744073709551616 ** 2")  # 2 ** 64 is 65 bits wide
+    # A literal subexpression nested under a state-dependent one is still caught here.
+    with pytest.raises(ValueError, match="exponent out of range"):
+        Condition.safe_expr("x > 10 ** 10 ** 10")
+
+
+def test_safe_expr_pow_state_out_of_range_rejected_at_run_time():
+    cond = Condition.safe_expr("x ** y")
+    assert cond.run(State({"x": 2, "y": 10})) == {Condition.KEY: True}
+    with pytest.raises(ValueError, match="exponent out of range"):
+        cond.run(State({"x": 10, "y": 10**10}))
+    with pytest.raises(ValueError, match="exponent out of range"):
+        cond.run(State({"x": 2, "y": -65}))
+    with pytest.raises(ValueError, match=r"base of \*\* out of range"):
+        cond.run(State({"x": 2**64, "y": 2}))
+    with pytest.raises(ValueError, match="int or float operands"):
+        cond.run(State({"x": "a", "y": 2}))
+
+
+def test_safe_expr_pow_float_path_left_to_python():
+    # Floats cannot grow in memory, so float ** is not width-bounded: Python either
+    # returns a float or raises OverflowError straight away.
+    assert _eval_value(Condition.safe_expr("x ** y"), {"x": 2.0, "y": 100.0}) == 2.0**100
+    assert _eval_value(Condition.safe_expr("x ** y"), {"x": 0.5, "y": 10**10}) == 0.0
+    with pytest.raises(OverflowError):
+        _eval_value(Condition.safe_expr("x ** y"), {"x": 1e308, "y": 2})
+
+
+def test_safe_expr_sequence_repeat_small_works():
+    assert _eval_value(Condition.safe_expr('"a" * 3'), {}) == "aaa"
+    assert _eval_value(Condition.safe_expr("3 * [0]"), {}) == [0, 0, 0]
+    assert _eval_value(Condition.safe_expr("s * n"), {"s": "ab", "n": 2}) == "abab"
+    assert _eval_value(Condition.safe_expr("t * 2"), {"t": (1,)}) == (1, 1)
+
+
+def test_safe_expr_sequence_repeat_out_of_range_rejected():
+    with pytest.raises(ValueError, match="repeat count"):
+        Condition.safe_expr('"a" * 10000000000')
+    with pytest.raises(ValueError, match="repeat count"):
+        Condition.safe_expr("10000000000 * [0]")
+    # Each step within the repeat-count bound is still capped on the resulting length.
+    with pytest.raises(ValueError, match="longer than"):
+        Condition.safe_expr('("a" * 10000) * 10000')
+    cond = Condition.safe_expr("s * n")
+    assert cond.run(State({"s": "a", "n": 3})) == {Condition.KEY: True}
+    with pytest.raises(ValueError, match="repeat count"):
+        cond.run(State({"s": "a", "n": 10000000000}))
+    with pytest.raises(ValueError, match="longer than"):
+        cond.run(State({"s": "a" * 1000, "n": 10_000}))
+
+
+def test_safe_expr_sequence_concat_bounded():
+    assert _eval_value(Condition.safe_expr("s + t"), {"s": "a", "t": "b"}) == "ab"
+    assert _eval_value(Condition.safe_expr("s + t"), {"s": [1], "t": [2]}) == [1, 2]
+    cond = Condition.safe_expr("s + t")
+    with pytest.raises(ValueError, match="longer than"):
+        cond.run(State({"s": "a" * 600_000, "t": "b" * 600_000}))
+
+
+def test_safe_expr_string_formatting_not_supported():
+    assert _eval_value(Condition.safe_expr("x % 3"), {"x": 10}) == 1
+    cond = Condition.safe_expr("s % n")
+    with pytest.raises(ValueError, match="formatting"):
+        cond.run(State({"s": "%0999d", "n": 1}))
+
+
+def test_safe_expr_int_result_width_bounded():
+    big = 2**4000
+    assert _eval_value(Condition.safe_expr("x + 1"), {"x": big}) == big + 1
+    cond = Condition.safe_expr("x * y")
+    assert cond.run(State({"x": 7, "y": 6})) == {Condition.KEY: True}
+    with pytest.raises(ValueError, match="wider than 4096 bits"):
+        cond.run(State({"x": big, "y": big}))
+
+
+def test_safe_expr_int_literal_width_bounded():
+    Condition.safe_expr(str(2**4095))  # exactly 4096 bits: allowed
+    with pytest.raises(ValueError, match="integer literal wider"):
+        Condition.safe_expr(str(2**4096))
+
+
+def test_safe_expr_node_count_bounded():
+    # Wide and shallow.
+    with pytest.raises(ValueError, match="more than 500 nodes"):
+        Condition.safe_expr("[" + ", ".join(["1"] * 3000) + "]")
+    # Deep chain that every supported parser accepts: rejected by the node count
+    # before any recursive walk of the tree is attempted.
+    with pytest.raises(ValueError, match="more than 500 nodes"):
+        Condition.safe_expr("1" + " + 1" * 600)
+    # A moderately long expression is still fine.
+    cond = Condition.safe_expr(" + ".join(["x"] * 100) + " == 100")
+    assert cond.run(State({"x": 1})) == {Condition.KEY: True}
+
+
+def test_safe_expr_very_deep_chain_rejected():
+    # Depending on the Python version the parser either builds this tree (and the
+    # node count rejects it) or gives up on nesting depth first (and we surface
+    # that as a ValueError too). Either way: ValueError, never RecursionError.
+    with pytest.raises(ValueError):
+        Condition.safe_expr("1" + " + 1" * 3000)
+
+
+def test_safe_expr_source_length_bounded():
+    # Rejected on raw length, before the parser ever sees it.
+    with pytest.raises(ValueError, match="exceeds 10000 characters"):
+        Condition.safe_expr("x" + " " * 20_000)
+    # Just under the cap still parses (and is then judged on its own merits).
+    cond = Condition.safe_expr("x" + " " * 9_000 + "== 1")
+    assert cond.run(State({"x": 1})) == {Condition.KEY: True}
+
+
+def test_safe_expr_literal_bounds_check_defers_other_errors():
+    # Literal-only arithmetic is bounds-checked at call time, but any other error it
+    # would raise (here, division by zero) is still deferred to run(), as before.
+    cond = Condition.safe_expr("1 / 0")
+    with pytest.raises(ZeroDivisionError):
+        cond.run(State({}))
+
+
 def _eval_value(cond: Condition, state: dict):
     """Helper: get the raw (pre-bool-coerce) interpreter result for a safe_expr.
 
