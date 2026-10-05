@@ -20,6 +20,7 @@ import importlib
 import json
 import sys
 import types
+from pathlib import Path
 
 
 def test_load_state_from_log_file_reads_utf8(monkeypatch, tmp_path):
@@ -29,10 +30,20 @@ def test_load_state_from_log_file_reads_utf8(monkeypatch, tmp_path):
         types.SimpleNamespace(Hamilton=object, StateSource=object),
     )
     monkeypatch.setitem(sys.modules, "graphviz", types.SimpleNamespace(Digraph=object))
-    monkeypatch.setitem(
-        sys.modules, "streamlit", types.SimpleNamespace(session_state={})
+    monkeypatch.setitem(sys.modules, "streamlit", types.SimpleNamespace(session_state={}))
+    colors = types.ModuleType("matplotlib.colors")
+    matplotlib = types.ModuleType("matplotlib")
+    matplotlib.colors = colors
+    monkeypatch.setitem(sys.modules, "matplotlib", matplotlib)
+    monkeypatch.setitem(sys.modules, "matplotlib.colors", colors)
+    # Use a temporary module name so stubbed imports cannot leak into later tests.
+    name = "_burr_streamlit_under_test"
+    spec = importlib.util.spec_from_file_location(
+        name, Path(__file__).resolve().parents[2] / "burr/integrations/streamlit.py"
     )
-    streamlit = importlib.import_module("burr.integrations.streamlit")
+    streamlit = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, streamlit)
+    spec.loader.exec_module(streamlit)
 
     log_file = tmp_path / "state.jsonl"
     log_file.write_text(
@@ -49,10 +60,13 @@ def test_load_state_from_log_file_reads_utf8(monkeypatch, tmp_path):
     )
 
     real_open = builtins.open
+    opened = []
 
     def guarded_open(*args, **kwargs):
         assert kwargs.get("encoding") == "utf-8"
-        return real_open(*args, **kwargs)
+        handle = real_open(*args, **kwargs)
+        opened.append(handle)
+        return handle
 
     monkeypatch.setattr(builtins, "open", guarded_open)
 
@@ -63,3 +77,4 @@ def test_load_state_from_log_file_reads_utf8(monkeypatch, tmp_path):
     assert state.history[0].state == {"message": "café"}
     assert state.history[0].action == "say"
     assert state.history[0].result == {"ok": True}
+    assert opened and all(handle.closed for handle in opened)
