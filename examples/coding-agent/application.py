@@ -21,10 +21,10 @@ import json
 import os
 from typing import Callable, Optional
 
+from tools import list_files, read_file, run_bash, write_file
+
 from burr.core import State, action, expr, when
 from burr.core.application import ApplicationBuilder
-
-from tools import list_files, read_file, run_bash, write_file
 
 TOOLS = {
     "list_files": list_files,
@@ -87,10 +87,23 @@ class OpenAIClient:
             model=self.model, messages=messages, tools=OPENAI_TOOLS
         )
         message = response.choices[0].message
-        calls = [
-            {"id": c.id, "name": c.function.name, "args": json.loads(c.function.arguments)}
-            for c in (message.tool_calls or [])
-        ]
+        calls = []
+        for c in message.tool_calls or []:
+            try:
+                args = json.loads(c.function.arguments)
+            except json.JSONDecodeError as e:
+                # Models occasionally emit malformed arguments. Carry the error
+                # through as a tool result instead of crashing the run.
+                calls.append(
+                    {
+                        "id": c.id,
+                        "name": c.function.name,
+                        "args": {},
+                        "error": f"could not parse tool arguments as JSON: {e}",
+                    }
+                )
+            else:
+                calls.append({"id": c.id, "name": c.function.name, "args": args})
         return {"content": message.content, "tool_calls": calls}
 
 
@@ -114,12 +127,22 @@ DEFAULT_SCRIPT = [
     {
         "content": None,
         "tool_calls": [
-            {"id": "c2", "name": "write_file",
-             "args": {"path": "hello.py", "contents": "print('hello from the agent')\n"}}
+            {
+                "id": "c2",
+                "name": "write_file",
+                "args": {
+                    "path": "hello.py",
+                    "contents": "print('hello from the agent')\n",
+                },
+            }
         ],
     },
-    {"content": None, "tool_calls": [{"id": "c3", "name": "run_bash",
-                                      "args": {"command": "python hello.py"}}]},
+    {
+        "content": None,
+        "tool_calls": [
+            {"id": "c3", "name": "run_bash", "args": {"command": "python hello.py"}}
+        ],
+    },
     {"content": "Created hello.py and confirmed it runs.", "tool_calls": []},
 ]
 
@@ -157,8 +180,15 @@ def create_prompt(state: State) -> State:
 
 @action(
     reads=["messages", "steps"],
-    writes=["messages", "next_tool", "next_args", "last_tool_call_id",
-            "steps", "done", "final_answer"],
+    writes=[
+        "messages",
+        "next_tool",
+        "next_args",
+        "last_tool_call_id",
+        "steps",
+        "done",
+        "final_answer",
+    ],
 )
 def call_llm(state: State, client: Callable) -> State:
     """Asks the model what to do next: call a tool, or finish."""
@@ -167,7 +197,8 @@ def call_llm(state: State, client: Callable) -> State:
 
     if not calls:
         return state.update(
-            messages=state["messages"] + [{"role": "assistant", "content": result["content"]}],
+            messages=state["messages"]
+            + [{"role": "assistant", "content": result["content"]}],
             next_tool=None,
             next_args={},
             last_tool_call_id=None,
@@ -185,10 +216,39 @@ def call_llm(state: State, client: Callable) -> State:
             {
                 "id": call["id"],
                 "type": "function",
-                "function": {"name": call["name"], "arguments": json.dumps(call["args"])},
+                "function": {
+                    "name": call["name"],
+                    "arguments": json.dumps(call["args"]),
+                },
             }
         ],
     }
+
+    # A tool the model invented, or arguments that failed to parse, would leave
+    # the run with no matching transition. Answer the call with an error and go
+    # back around the loop, so the model gets a chance to correct itself.
+    problem = call.get("error")
+    if problem is None and call["name"] not in TOOLS:
+        problem = f"unknown tool: {call['name']}"
+    if problem is not None:
+        return state.update(
+            messages=state["messages"]
+            + [
+                assistant_message,
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": json.dumps({"error": problem}),
+                },
+            ],
+            next_tool=None,
+            next_args={},
+            last_tool_call_id=None,
+            steps=state["steps"] + 1,
+            done=False,
+            final_answer=None,
+        )
+
     return state.update(
         messages=state["messages"] + [assistant_message],
         next_tool=call["name"],
@@ -202,8 +262,16 @@ def call_llm(state: State, client: Callable) -> State:
 
 @action(reads=["next_args", "last_tool_call_id", "messages"], writes=["messages"])
 def execute_tool(state: State, tool_function: Callable) -> State:
-    """Runs one tool and feeds its result back to the model."""
-    result = tool_function(**state["next_args"])
+    """Runs one tool and feeds its result back to the model.
+
+    A tool that raises is reported back to the model as an error rather than
+    ending the run -- the point of the loop is that the agent sees the failure
+    and tries something else.
+    """
+    try:
+        result = tool_function(**state["next_args"])
+    except Exception as e:  # noqa: BLE001 - deliberately broad; the model recovers
+        result = {"error": f"{type(e).__name__}: {e}"}
     return state.update(
         messages=state["messages"]
         + [
@@ -226,7 +294,9 @@ def respond(state: State) -> State:
     )
 
 
-def application(app_id: Optional[str] = None, max_steps: int = 15, client: Callable = None):
+def application(
+    app_id: Optional[str] = None, max_steps: int = 15, client: Callable = None
+):
     """Builds the coding agent application."""
     client = client or get_client()
     return (
@@ -246,14 +316,21 @@ def application(app_id: Optional[str] = None, max_steps: int = 15, client: Calla
             ("create_prompt", "call_llm"),
             ("call_llm", "respond", when(done=True)),
             ("call_llm", "respond", expr("steps>=max_steps")),
+            # A bad tool call is answered with an error and loops back so the
+            # model can retry; this must come before the tool transitions.
+            ("call_llm", "create_prompt", when(next_tool=None)),
             ("call_llm", "read_file", when(next_tool="read_file")),
             ("call_llm", "write_file", when(next_tool="write_file")),
             ("call_llm", "list_files", when(next_tool="list_files")),
             ("call_llm", "run_bash", when(next_tool="run_bash")),
-            (["read_file", "write_file", "list_files", "run_bash"], "call_llm"),
+            # Tool results go back through create_prompt, so the prompt-shaping
+            # seam runs before every model call rather than only the first.
+            (["read_file", "write_file", "list_files", "run_bash"], "create_prompt"),
             ("respond", "human_input"),
         )
-        .with_state(max_steps=max_steps, steps=0, messages=[], done=False, final_answer=None)
+        .with_state(
+            max_steps=max_steps, steps=0, messages=[], done=False, final_answer=None
+        )
         .with_identifiers(app_id=app_id)
         .with_entrypoint("human_input")
         .with_tracker(project="demo_coding_agent")
@@ -263,7 +340,12 @@ def application(app_id: Optional[str] = None, max_steps: int = 15, client: Calla
 
 if __name__ == "__main__":
     app = application()
-    app.visualize(output_file_path="./statemachine.png")
+    # Rendering the graph needs the Graphviz binary, which the example does not
+    # otherwise require. Skip it when unavailable instead of failing the run.
+    try:
+        app.visualize(output_file_path="./statemachine.png")
+    except Exception as e:  # noqa: BLE001
+        print(f"Skipping state machine render (Graphviz unavailable: {e})")
     _, _, state = app.run(
         halt_after=["respond"],
         inputs={"task": "Create a hello.py that prints a greeting, then run it."},

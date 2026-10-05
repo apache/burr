@@ -16,17 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import inspect
-import json
-import os
-from typing import Callable, Optional
-
-import openai
-import requests
-
-from burr.core import State, action, when
-from burr.core.application import ApplicationBuilder
-
 import os
 import subprocess
 
@@ -35,9 +24,13 @@ WORKSPACE = os.environ.get("CODING_AGENT_WORKSPACE", "./workspace")
 
 
 def _resolve(path: str) -> str:
-    """Resolve a path inside the workspace, refusing anything that escapes it."""
-    root = os.path.abspath(WORKSPACE)
-    full = os.path.abspath(os.path.join(root, path))
+    """Resolve a path inside the workspace, refusing anything that escapes it.
+
+    Resolves symlinks (``realpath`` rather than ``abspath``) so that a link
+    placed inside the workspace cannot be followed out of it.
+    """
+    root = os.path.realpath(WORKSPACE)
+    full = os.path.realpath(os.path.join(root, path))
     if not full.startswith(root + os.sep) and full != root:
         raise ValueError(f"path escapes workspace: {path}")
     return full
@@ -76,9 +69,17 @@ def write_file(path: str, contents: str) -> dict:
 def run_bash(command: str) -> dict:
     """Runs a shell command in the workspace and returns its output."""
     try:
+        workspace = os.path.realpath(WORKSPACE)
+        # The workspace may not exist yet -- a model that starts by running a
+        # command rather than writing a file should still get a useful answer.
+        os.makedirs(workspace, exist_ok=True)
         proc = subprocess.run(
-            command, shell=True, cwd=os.path.abspath(WORKSPACE),
-            capture_output=True, text=True, timeout=30,
+            command,
+            shell=True,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         return {
             "exit_code": proc.returncode,
@@ -87,3 +88,5 @@ def run_bash(command: str) -> dict:
         }
     except subprocess.TimeoutExpired:
         return {"error": "command timed out after 30s"}
+    except OSError as e:
+        return {"error": str(e)}
