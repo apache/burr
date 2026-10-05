@@ -74,6 +74,25 @@ def test_persistence_lists_app_ids(persistence):
     assert set(app_ids) == set(["app_id1", "app_id2"])
 
 
+def test_sqlite_persister_list_app_ids_is_unique_and_newest_first():
+    """Each app appears once, ordered by its most recent save."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    persister.initialize()
+    saves = [
+        ("a-app", 0, "2026-01-01 00:00:01"),
+        ("z-app", 0, "2026-01-01 00:00:02"),
+        ("a-app", 1, "2026-01-01 00:00:03"),
+    ]
+    for app_id, sequence_id, created_at in saves:
+        persister.save("pk", app_id, sequence_id, "position", State({}), "completed")
+        persister.connection.execute(
+            "UPDATE test_table SET created_at = ? WHERE app_id = ? AND sequence_id = ?",
+            (created_at, app_id, sequence_id),
+        )
+    persister.connection.commit()
+    assert persister.list_app_ids("pk") == ["a-app", "z-app"]
+
+
 def test_persistence_is_initialized_false(initializing_persistence):
     assert not initializing_persistence.is_initialized()
 

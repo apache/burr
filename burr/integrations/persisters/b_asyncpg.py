@@ -285,13 +285,14 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
             await self._release_connection(conn, acquired)
 
     async def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
-        """Lists the app_ids for a given partition_key."""
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         conn, acquired = await self._get_connection()
         try:
             query = (
-                f"SELECT DISTINCT app_id, created_at FROM {self.table_name} "
+                f"SELECT app_id FROM {self.table_name} "
                 "WHERE partition_key = $1 "
-                "ORDER BY created_at DESC"
+                "GROUP BY app_id "
+                "ORDER BY MAX(created_at) DESC"
             )
             fetched_data = await conn.fetch(query, partition_key)
             app_ids = [row[0] for row in fetched_data]
