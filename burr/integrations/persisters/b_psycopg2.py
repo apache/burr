@@ -216,7 +216,7 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
 
     def save(
         self,
-        partition_key: str,
+        partition_key: Optional[str],
         app_id: str,
         sequence_id: int,
         position: str,
@@ -241,6 +241,8 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
             before the action was applied.
         :return: None
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         logger.debug(
             "saving %s, %s, %s, %s, %s, %s",
             partition_key,
