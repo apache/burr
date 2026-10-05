@@ -49,6 +49,13 @@ def test_save_and_load_state(postgresql_persister):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+def test_save_and_load_with_default_partition_key(postgresql_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    postgresql_persister.save(None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed")
+    data = postgresql_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+
+
 def test_list_app_ids(postgresql_persister):
     postgresql_persister.save("pk", "app_id1", 1, "pos1", state.State({"a": 1}), "completed")
     postgresql_persister.save("pk", "app_id2", 2, "pos2", state.State({"b": 2}), "completed")
@@ -144,6 +151,15 @@ async def test_async_save_and_load_state(asyncpostgresql_persister):
     data = await asyncpostgresql_persister.load("pk", "app_id", 1)
     print(data)
     assert data["state"].get_all() == {"a": 1, "b": 2}
+
+
+async def test_async_save_and_load_with_default_partition_key(asyncpostgresql_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    await asyncpostgresql_persister.save(
+        None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed"
+    )
+    data = await asyncpostgresql_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
 
 
 async def test_async_list_app_ids(asyncpostgresql_persister):
