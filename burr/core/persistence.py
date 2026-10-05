@@ -446,6 +446,7 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
         return self._initialized
 
     def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         partition_key = (
             partition_key if partition_key is not None else SQLitePersister.PARTITION_KEY_DEFAULT
         )

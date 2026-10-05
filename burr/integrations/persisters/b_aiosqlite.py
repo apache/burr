@@ -188,6 +188,7 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
         return self._initialized
 
     async def list_app_ids(self, partition_key: Optional[str] = None, **kwargs) -> list[str]:
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         partition_key = (
             partition_key
             if partition_key is not None

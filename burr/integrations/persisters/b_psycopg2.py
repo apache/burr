@@ -151,7 +151,7 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         return self._initialized
 
     def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
-        """Lists the app_ids for a given partition_key."""
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         cursor = self.connection.cursor()
         cursor.execute(
             f"SELECT app_id FROM {self.table_name} "
