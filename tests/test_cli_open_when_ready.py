@@ -15,7 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from burr.cli import __main__ as cli_main
+import pytest
+
+pytest.importorskip("loguru")
+
+from burr.cli import __main__ as cli_main  # noqa: E402
 
 
 def test_open_when_ready_bounds_readiness_request(monkeypatch):
@@ -40,4 +44,27 @@ def test_open_when_ready_bounds_readiness_request(monkeypatch):
             {"timeout": cli_main.OPEN_WHEN_READY_TIMEOUT_SECONDS},
         )
     ]
+    assert opened == ["http://localhost:7241"]
+
+
+def test_open_when_ready_retries_read_timeout(monkeypatch):
+    calls, opened, sleeps = [], [], []
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs))
+        if len(calls) == 1:
+            raise cli_main.requests.exceptions.ReadTimeout("server did not answer")
+        return type("Response", (), {"status_code": 200})()
+
+    monkeypatch.setattr(cli_main.requests, "get", fake_get)
+    monkeypatch.setattr(cli_main.webbrowser, "open", opened.append)
+    monkeypatch.setattr(cli_main.time, "sleep", sleeps.append)
+    cli_main.open_when_ready("http://localhost:7241/health", "http://localhost:7241")
+
+    assert (
+        calls
+        == [("http://localhost:7241/health", {"timeout": cli_main.OPEN_WHEN_READY_TIMEOUT_SECONDS})]
+        * 2
+    )
+    assert sleeps == [1]
     assert opened == ["http://localhost:7241"]
