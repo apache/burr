@@ -50,7 +50,7 @@ except ImportError as e:
 setup_logging(logging.INFO)
 
 
-def _command(command: str, capture_output: bool, addl_env: dict | None = None) -> str:
+def _command(command: str, capture_output: bool, addl_env: Optional[dict] = None) -> str:
     """Runs a simple command"""
     if addl_env is None:
         addl_env = {}
@@ -97,10 +97,13 @@ def _locate_package_root() -> Optional[str]:
     return None
 
 
+OPEN_WHEN_READY_TIMEOUT_SECONDS = 5
+
+
 def open_when_ready(check_url: str, open_url: str):
     while True:
         try:
-            response = requests.get(check_url)
+            response = requests.get(check_url, timeout=OPEN_WHEN_READY_TIMEOUT_SECONDS)
             if response.status_code == 200:
                 webbrowser.open(open_url)
                 return
