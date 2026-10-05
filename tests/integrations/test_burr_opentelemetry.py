@@ -333,3 +333,29 @@ def test_burr_tracking_span_processor_uncaches_span_when_tracker_raises():
 
     assert span_ids[0] not in span_map
     assert len(span_map) == 0
+
+
+def test_burr_tracking_span_processor_span_after_nested_app_step_reaches_outer_tracker():
+    """A sub-application stepped inside an action clears tracker_context in its post_run_step.
+    Spans the outer action opens afterwards still reach the outer tracker and leave the cache."""
+    tracer, outer_tracker, outer_otel, outer_action = _tracker_with_local_provider()
+    _, inner_tracker, inner_otel, inner_action = _tracker_with_local_provider()
+    inner_otel.tracer = tracer
+
+    def run_step():
+        _pre_run_step(outer_otel, outer_action)
+        _pre_run_step(inner_otel, inner_action)
+        _post_run_step(inner_otel, inner_action)
+        assert tracker_context.get() is None
+        with tracer.start_as_current_span("after_inner"):
+            pass
+        _post_run_step(outer_otel, outer_action)
+
+    contextvars.copy_context().run(run_step)
+
+    assert len(span_map) == 0
+    ended = [c.kwargs["span"].name for c in outer_tracker.post_end_span.call_args_list]
+    assert "after_inner" in ended
+    assert "after_inner" not in [
+        c.kwargs["span"].name for c in inner_tracker.post_end_span.call_args_list
+    ]
