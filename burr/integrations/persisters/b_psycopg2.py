@@ -22,6 +22,7 @@ try:
 except ImportError as e:
     base.require_plugin(e, "postgresql")
 
+import contextlib
 import json
 import logging
 from typing import Literal, Optional
@@ -51,7 +52,9 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         p = PostgreSQLPersister.from_values("postgres", "postgres", "my_password",
                                            "localhost", 54320, table_name="burr_state")
 
-
+    ``is_initialized``, ``list_app_ids``, ``load`` and ``save`` each end their transaction before
+    returning (commit on success, rollback on failure). Give the persister a connection of its own
+    rather than one you keep your own transaction open on.
     """
 
     PARTITION_KEY_DEFAULT = ""
@@ -107,6 +110,25 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         """Sets the serde_kwargs for the persister."""
         self.serde_kwargs = serde_kwargs
 
+    @contextlib.contextmanager
+    def _transaction(self):
+        """Yields a cursor and ends the transaction when the block exits: commit on success,
+        rollback on an exception. psycopg2 opens a transaction on the first statement and keeps it
+        open, so without this a failed insert leaves the connection in an aborted transaction and
+        a read leaves it idle in transaction. This doesn't use ``with self.connection`` because
+        psycopg2 refuses to re-enter it from a caller's own ``with connection`` block.
+        """
+        try:
+            yield self.connection.cursor()
+        except BaseException:
+            try:
+                self.connection.rollback()
+            except Exception:
+                # Usually the connection is already gone; the original error is the useful one.
+                logger.debug("Rollback after a failed call also failed", exc_info=True)
+            raise
+        self.connection.commit()
+
     def create_table(self, table_name: str):
         """Helper function to create the table where things are stored."""
         cursor = self.connection.cursor()
@@ -142,24 +164,24 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         """
         if self._initialized:
             return True
-        cursor = self.connection.cursor()
-        cursor.execute(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = %s)",
-            (self.table_name,),
-        )
-        self._initialized = cursor.fetchone()[0]
+        with self._transaction() as cursor:
+            cursor.execute(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = %s)",
+                (self.table_name,),
+            )
+            self._initialized = cursor.fetchone()[0]
         return self._initialized
 
     def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
         """Lists the app_ids for a given partition_key."""
-        cursor = self.connection.cursor()
-        cursor.execute(
-            f"SELECT DISTINCT app_id, created_at FROM {self.table_name} "
-            "WHERE partition_key = %s "
-            "ORDER BY created_at DESC",
-            (partition_key,),
-        )
-        app_ids = [row[0] for row in cursor.fetchall()]
+        with self._transaction() as cursor:
+            cursor.execute(
+                f"SELECT DISTINCT app_id, created_at FROM {self.table_name} "
+                "WHERE partition_key = %s "
+                "ORDER BY created_at DESC",
+                (partition_key,),
+            )
+            app_ids = [row[0] for row in cursor.fetchall()]
         return app_ids
 
     def load(
@@ -178,29 +200,29 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         if partition_key is None:
             partition_key = self.PARTITION_KEY_DEFAULT
         logger.debug("Loading %s, %s, %s", partition_key, app_id, sequence_id)
-        cursor = self.connection.cursor()
-        if app_id is None:
-            # get latest for all app_ids
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = %s "
-                f"ORDER BY CREATED_AT DESC LIMIT 1",
-                (partition_key,),
-            )
-        elif sequence_id is None:
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = %s AND app_id = %s "
-                f"ORDER BY sequence_id DESC LIMIT 1",
-                (partition_key, app_id),
-            )
-        else:
-            cursor.execute(
-                f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
-                f"WHERE partition_key = %s AND app_id = %s AND sequence_id = %s ",
-                (partition_key, app_id, sequence_id),
-            )
-        row = cursor.fetchone()
+        with self._transaction() as cursor:
+            if app_id is None:
+                # get latest for all app_ids
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = %s "
+                    f"ORDER BY CREATED_AT DESC LIMIT 1",
+                    (partition_key,),
+                )
+            elif sequence_id is None:
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = %s AND app_id = %s "
+                    f"ORDER BY sequence_id DESC LIMIT 1",
+                    (partition_key, app_id),
+                )
+            else:
+                cursor.execute(
+                    f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
+                    f"WHERE partition_key = %s AND app_id = %s AND sequence_id = %s ",
+                    (partition_key, app_id, sequence_id),
+                )
+            row = cursor.fetchone()
         if row is None:
             return None
         _state = state.State.deserialize(row[1], **self.serde_kwargs)
@@ -250,14 +272,13 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
             state,
             status,
         )
-        cursor = self.connection.cursor()
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        cursor.execute(
-            f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
-            (partition_key, app_id, sequence_id, position, json_state, status),
-        )
-        self.connection.commit()
+        with self._transaction() as cursor:
+            cursor.execute(
+                f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (partition_key, app_id, sequence_id, position, json_state, status),
+            )
 
     def cleanup(self):
         """Closes the connection to the database."""

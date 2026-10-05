@@ -18,6 +18,8 @@
 import os
 import pickle
 
+import psycopg2
+import psycopg2.extensions
 import pytest
 
 from burr.core import state
@@ -55,6 +57,100 @@ def test_list_app_ids(postgresql_persister):
     app_ids = postgresql_persister.list_app_ids("pk")
     assert "app_id1" in app_ids
     assert "app_id2" in app_ids
+
+
+def test_failed_save_does_not_poison_the_connection(postgresql_persister):
+    """A rejected insert is rolled back, so later calls on the same persister still work."""
+    postgresql_persister.save("txn", "app", 1, "pos", state.State({"a": 1}), "completed")
+    with pytest.raises(psycopg2.errors.UniqueViolation):
+        postgresql_persister.save("txn", "app", 1, "pos", state.State({"a": 1}), "completed")
+    assert postgresql_persister.load("txn", "app", 1)["state"].get_all() == {"a": 1}
+    assert postgresql_persister.list_app_ids("txn") == ["app"]
+    postgresql_persister.save("txn", "app", 2, "pos", state.State({"a": 2}), "completed")
+    assert postgresql_persister.load("txn", "app")["sequence_id"] == 2
+
+
+def _is_idle(persister):
+    return (
+        persister.connection.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_IDLE
+    )
+
+
+def test_reads_leave_no_transaction_open(postgresql_persister):
+    postgresql_persister.save("txn-read", "app", 1, "pos", state.State({"a": 1}), "completed")
+    postgresql_persister.load("txn-read", "app")
+    assert _is_idle(postgresql_persister)
+    postgresql_persister.load("txn-read", "missing")
+    assert _is_idle(postgresql_persister)
+    postgresql_persister.list_app_ids("txn-read")
+    assert _is_idle(postgresql_persister)
+    fresh = PostgreSQLPersister.from_values(
+        db_name="postgres",
+        user="postgres",
+        password="postgres",
+        host="localhost",
+        port=5432,
+        table_name="testtable",
+    )
+    try:
+        assert fresh.is_initialized()
+        assert _is_idle(fresh)
+    finally:
+        fresh.cleanup()
+
+
+def test_interrupted_call_rolls_back(postgresql_persister):
+    """A KeyboardInterrupt mid-statement must not leave the transaction open."""
+    real = postgresql_persister.connection
+
+    class InterruptingCursor:
+        def __init__(self):
+            self.cursor = real.cursor()
+
+        def execute(self, *args, **kwargs):
+            self.cursor.execute(*args, **kwargs)
+            raise KeyboardInterrupt()
+
+    class ConnectionProxy:
+        def cursor(self):
+            return InterruptingCursor()
+
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+    interrupted = PostgreSQLPersister(ConnectionProxy(), table_name="testtable")
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.load("txn-interrupt", "app")
+    assert real.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_IDLE
+
+
+def test_persister_works_inside_a_callers_connection_block(postgresql_persister):
+    """Callers who wrap the persister in their own ``with connection`` block keep working."""
+    with postgresql_persister.connection:
+        postgresql_persister.save("txn-nested", "app", 1, "pos", state.State({"a": 1}), "completed")
+        assert postgresql_persister.load("txn-nested", "app", 1)["state"].get_all() == {"a": 1}
+
+
+def test_save_after_read_is_stamped_after_another_connections_save(postgresql_persister):
+    """created_at comes from the transaction start, so a read must not keep one open
+    across another connection's save."""
+    other = PostgreSQLPersister.from_values(
+        db_name="postgres",
+        user="postgres",
+        password="postgres",
+        host="localhost",
+        port=5432,
+        table_name="testtable",
+    )
+    try:
+        postgresql_persister.load("txn-order", "missing")
+        other.save("txn-order", "app-b", 1, "pos", state.State({}), "completed")
+        postgresql_persister.save("txn-order", "app-a", 1, "pos", state.State({}), "completed")
+        created_a = postgresql_persister.load("txn-order", "app-a", 1)["created_at"]
+        created_b = postgresql_persister.load("txn-order", "app-b", 1)["created_at"]
+        assert created_a >= created_b
+    finally:
+        other.cleanup()
 
 
 def test_load_nonexistent_key(postgresql_persister):
