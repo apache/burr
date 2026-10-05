@@ -16,7 +16,7 @@
 # under the License.
 
 import builtins
-import importlib
+import importlib.util
 import json
 import sys
 import types
