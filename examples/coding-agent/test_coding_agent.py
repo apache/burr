@@ -22,10 +22,12 @@ dispatch, error recovery and the step budget -- is exercised without an API key.
 """
 
 import json
+import os
+import sys
 
 import pytest
 import tools
-from application import ScriptedClient, application
+from application import OpenAIClient, ScriptedClient, application
 
 
 @pytest.fixture(autouse=True)
@@ -241,3 +243,100 @@ def test_tool_results_are_fed_back_to_the_model(tmp_path, monkeypatch):
     # the second model call must include the tool result from the first
     assert "tool" in seen[1]
     assert tool_result(state)["contents"] == "hello"
+
+
+# --- OpenAIClient argument parsing -----------------------------------------
+# The scripted-client tests above hand `application` an already-parsed call,
+# which means the parsing code itself was never exercised. These tests drive
+# `OpenAIClient` with a stand-in `openai` module so the real path is covered.
+
+
+class _FakeFunction:
+    def __init__(self, name, arguments):
+        self.name = name
+        self.arguments = arguments
+
+
+class _FakeToolCall:
+    def __init__(self, call_id, name, arguments):
+        self.id = call_id
+        self.function = _FakeFunction(name, arguments)
+
+
+def _fake_openai(tool_calls):
+    """Builds a minimal stand-in for the `openai` module."""
+
+    class _Completions:
+        @staticmethod
+        def create(**_kwargs):
+            message = type(
+                "Message", (), {"content": None, "tool_calls": tool_calls}
+            )()
+            choice = type("Choice", (), {"message": message})()
+            return type("Response", (), {"choices": [choice]})()
+
+    chat = type("Chat", (), {"completions": _Completions()})()
+    return type("Module", (), {"chat": chat})()
+
+
+@pytest.mark.parametrize(
+    "arguments, expected",
+    [
+        # json.loads(None) raises TypeError -- the crash this code exists to stop
+        (None, "expected a JSON string, got NoneType"),
+        ("{not json}", "could not parse tool arguments as JSON"),
+        ('{"path": "a.txt"}', None),
+    ],
+)
+def test_openai_client_survives_unparseable_arguments(
+    monkeypatch, arguments, expected
+):
+    """Bad tool arguments become an error result instead of killing the run."""
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        _fake_openai([_FakeToolCall("c1", "write_file", arguments)]),
+    )
+
+    call = OpenAIClient()([{"role": "user", "content": "hi"}])["tool_calls"][0]
+
+    assert call["id"] == "c1" and call["name"] == "write_file"
+    if expected is None:
+        assert "error" not in call
+        assert call["args"] == {"path": "a.txt"}
+    else:
+        assert expected in call["error"]
+        assert call["args"] == {}
+
+
+# --- workspace confinement edges -------------------------------------------
+
+
+def test_resolve_accepts_the_workspace_root(tmp_path, monkeypatch):
+    """The workspace itself is inside the workspace."""
+    monkeypatch.setattr(tools, "WORKSPACE", str(tmp_path))
+    assert tools._resolve(".") == os.path.realpath(str(tmp_path))
+
+
+def test_resolve_rejects_a_sibling_with_a_shared_prefix(tmp_path, monkeypatch):
+    """`<ws>-sibling` must not pass a naive prefix test against `<ws>`."""
+    monkeypatch.setattr(tools, "WORKSPACE", str(tmp_path))
+    sibling = tmp_path.parent / (tmp_path.name + "-sibling")
+    sibling.mkdir()
+
+    with pytest.raises(ValueError, match="escapes workspace"):
+        tools._resolve(os.path.relpath(sibling, tmp_path))
+
+
+def test_resolve_tolerates_case_differences(tmp_path, monkeypatch):
+    """`realpath` may return a different case than WORKSPACE (Windows, macOS).
+
+    A plain string prefix test rejects a legitimate path in that situation, so
+    the comparison is normcased. Skipped where the filesystem is case-sensitive.
+    """
+    swapped = str(tmp_path).swapcase()
+    if swapped == str(tmp_path) or not os.path.isdir(swapped):
+        pytest.skip("needs a case-insensitive filesystem")
+
+    monkeypatch.setattr(tools, "WORKSPACE", swapped)
+    assert tools._resolve("sub") == os.path.join(os.path.realpath(str(tmp_path)), "sub")

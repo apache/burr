@@ -28,10 +28,18 @@ def _resolve(path: str) -> str:
 
     Resolves symlinks (``realpath`` rather than ``abspath``) so that a link
     placed inside the workspace cannot be followed out of it.
+
+    The comparison is done on ``normcase``-d paths: on case-insensitive file
+    systems (Windows, macOS) ``realpath`` may return a different case than
+    ``WORKSPACE``, and a plain string prefix test would then reject a perfectly
+    legitimate path. ``rstrip`` on the root handles the drive-root case, where
+    ``root + os.sep`` would otherwise become a doubled separator (``C:\\``).
     """
     root = os.path.realpath(WORKSPACE)
     full = os.path.realpath(os.path.join(root, path))
-    if not full.startswith(root + os.sep) and full != root:
+    root_key = os.path.normcase(root)
+    full_key = os.path.normcase(full)
+    if full_key != root_key and not full_key.startswith(root_key.rstrip("\\/") + os.sep):
         raise ValueError(f"path escapes workspace: {path}")
     return full
 

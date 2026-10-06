@@ -71,7 +71,11 @@ SYSTEM_PROMPT = (
 
 # --- LLM clients -----------------------------------------------------------
 # Both return the same shape:
-#   {"content": str | None, "tool_calls": [{"id", "name", "args"}]}
+#   {"content": str | None,
+#    "tool_calls": [{"id", "name", "args", "error"?}]}
+# `error` is present (and `args` left empty) when the model emitted arguments
+# that could not be parsed as JSON; the harness turns it into a tool result
+# rather than crashing the run.
 
 
 class OpenAIClient:
@@ -90,8 +94,15 @@ class OpenAIClient:
         calls = []
         for c in message.tool_calls or []:
             try:
-                args = json.loads(c.function.arguments)
-            except json.JSONDecodeError as e:
+                raw = c.function.arguments
+                # A JSON string is what the API contract promises, but some
+                # OpenAI-compatible backends send None when streaming failed to
+                # assemble the arguments -- json.loads(None) raises TypeError,
+                # which is exactly the crash this block exists to prevent.
+                if not isinstance(raw, str):
+                    raise TypeError(f"expected a JSON string, got {type(raw).__name__}")
+                args = json.loads(raw)
+            except (json.JSONDecodeError, TypeError) as e:
                 # Models occasionally emit malformed arguments. Carry the error
                 # through as a tool result instead of crashing the run.
                 calls.append(
@@ -316,8 +327,14 @@ def application(
             ("create_prompt", "call_llm"),
             ("call_llm", "respond", when(done=True)),
             ("call_llm", "respond", expr("steps>=max_steps")),
-            # A bad tool call is answered with an error and loops back so the
-            # model can retry; this must come before the tool transitions.
+            # Order matters here in both directions:
+            #  * AFTER the done=True branch above: a finished run has no tool
+            #    calls, so done=True and next_tool=None hold at the same time,
+            #    and Graph.get_next_node returns the first match in insertion
+            #    order. Moving this line up would send a finished run back to
+            #    create_prompt and spin until steps>=max_steps.
+            #  * BEFORE the per-tool transitions below: an unparseable tool
+            #    call is answered with an error so the model can retry.
             ("call_llm", "create_prompt", when(next_tool=None)),
             ("call_llm", "read_file", when(next_tool="read_file")),
             ("call_llm", "write_file", when(next_tool="write_file")),
