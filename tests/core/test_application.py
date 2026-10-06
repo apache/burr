@@ -3210,6 +3210,23 @@ def test_app_get_prior_action():
     assert app.get_prior_action() is None
 
 
+def test_app_get_prior_action_not_in_graph():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({PRIOR_STEP: "removed"}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+    with pytest.raises(ValueError):
+        app.get_prior_action()
+
+
 def test_application_builder_complete():
     app = (
         ApplicationBuilder()
