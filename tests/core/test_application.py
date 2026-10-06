@@ -3184,6 +3184,49 @@ def test_app_get_next_step():
     assert app.get_next_action().name == "counter_1"
 
 
+def test_app_get_prior_action():
+    counter_action_1 = base_counter_action.with_name("counter_1")
+    counter_action_2 = base_counter_action.with_name("counter_2")
+    app = Application(
+        state=State(),
+        entrypoint="counter_1",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action_1, counter_action_2],
+            transitions=[
+                Transition(counter_action_1, counter_action_2, default),
+                Transition(counter_action_2, counter_action_1, default),
+            ],
+        ),
+    )
+    assert app.get_prior_action() is None
+    app.step()
+    assert app.get_prior_action().name == "counter_1"
+    app.step()
+    assert app.get_prior_action().name == "counter_2"
+    app.reset_to_entrypoint()
+    assert app.get_prior_action() is None
+
+
+def test_app_get_prior_action_not_in_graph():
+    counter_action = base_counter_action.with_name("counter")
+    app = Application(
+        state=State({PRIOR_STEP: "removed"}),
+        entrypoint="counter",
+        partition_key="test",
+        uid="test-123",
+        sequence_id=0,
+        graph=Graph(
+            actions=[counter_action],
+            transitions=[Transition(counter_action, counter_action, default)],
+        ),
+    )
+    with pytest.raises(ValueError):
+        app.get_prior_action()
+
+
 def test_application_builder_complete():
     app = (
         ApplicationBuilder()
