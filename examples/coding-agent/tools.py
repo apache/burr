@@ -23,23 +23,49 @@ import subprocess
 WORKSPACE = os.environ.get("CODING_AGENT_WORKSPACE", "./workspace")
 
 
+def _is_within(root: str, full: str) -> bool:
+    """True when ``full`` is ``root`` itself or a descendant of it.
+
+    Split out from :func:`_resolve` so the containment rule can be tested
+    directly, without depending on the case behaviour of the filesystem the
+    test happens to run on.
+
+    ``os.path.commonpath`` is used instead of a string prefix test because it
+    compares path *components*: ``C:\\ws`` is not an ancestor of
+    ``C:\\ws-sibling`` even though the latter starts with the former. It is
+    case-insensitive on Windows (``ntpath`` normcases before comparing) and
+    case-sensitive on POSIX, which is what each platform's filesystem does.
+    """
+    if full == root:
+        return True
+    try:
+        common = os.path.commonpath([root, full])
+    except ValueError:
+        # Different drives (Windows) or a mix of absolute and relative paths:
+        # there is no common ancestor, so `full` cannot be inside `root`.
+        return False
+    # `commonpath` returns a normalised path (and, on Windows, a normcased
+    # one), so normalise the root the same way before comparing — otherwise
+    # `/ws` would not match the `\ws` that `ntpath` hands back.
+    return os.path.normcase(common) == os.path.normcase(os.path.normpath(root))
+
+
 def _resolve(path: str) -> str:
     """Resolve a path inside the workspace, refusing anything that escapes it.
 
     Resolves symlinks (``realpath`` rather than ``abspath``) so that a link
     placed inside the workspace cannot be followed out of it.
 
-    The comparison is done on ``normcase``-d paths: on case-insensitive file
-    systems (Windows, macOS) ``realpath`` may return a different case than
-    ``WORKSPACE``, and a plain string prefix test would then reject a perfectly
-    legitimate path. ``rstrip`` on the root handles the drive-root case, where
-    ``root + os.sep`` would otherwise become a doubled separator (``C:\\``).
+    Containment is decided by :func:`_is_within`, which compares path
+    components and is case-insensitive exactly where the platform is. Windows
+    needs that (``realpath`` may return a different case than ``WORKSPACE``);
+    on macOS ``realpath`` already reports the on-disk case, so both sides agree
+    without any extra normalisation — ``os.path.normcase`` is a no-op on POSIX
+    and could not have provided it anyway.
     """
     root = os.path.realpath(WORKSPACE)
     full = os.path.realpath(os.path.join(root, path))
-    root_key = os.path.normcase(root)
-    full_key = os.path.normcase(full)
-    if full_key != root_key and not full_key.startswith(root_key.rstrip("\\/") + os.sep):
+    if not _is_within(root, full):
         raise ValueError(f"path escapes workspace: {path}")
     return full
 

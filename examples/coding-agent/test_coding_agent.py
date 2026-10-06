@@ -312,6 +312,46 @@ def test_openai_client_survives_unparseable_arguments(
 # --- workspace confinement edges -------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("root", "full", "expected"),
+    [
+        # the root itself counts as inside
+        ("/ws", "/ws", True),
+        # a plain descendant
+        ("/ws", "/ws/sub", True),
+        # a sibling sharing a name prefix must NOT pass — this is what a naive
+        # `startswith(root + os.sep)` test got right but `<ws>-sibling` + `..`
+        # tricks could still confuse
+        ("/ws", "/ws-sibling", False),
+        ("/ws", "/ws-sibling/sub", False),
+        # escaping upwards
+        ("/ws", "/", False),
+        ("/ws/sub", "/ws", False),
+        # unrelated trees have no common ancestor
+        ("C:\\ws", "D:\\ws\\sub", False),
+    ],
+)
+def test_is_within_compares_path_components(root, full, expected):
+    """Containment is decided per path component, not per character.
+
+    Tested through `_is_within` rather than `_resolve` so the assertions do not
+    depend on the case behaviour of the filesystem this suite runs on — the
+    old test went through `_resolve` and was therefore a false positive on
+    macOS, where `realpath` already normalises case and `normcase` never ran.
+    """
+    assert tools._is_within(root, full) is expected
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive-letter comparison is Windows-only")
+def test_is_within_is_case_insensitive_on_windows():
+    """On Windows the containment check must ignore case.
+
+    `ntpath.commonpath` normcases before comparing, which is the only reason
+    the case difference below is tolerated.
+    """
+    assert tools._is_within("C:\\WS", "c:\\ws\\sub") is True
+
+
 def test_resolve_accepts_the_workspace_root(tmp_path, monkeypatch):
     """The workspace itself is inside the workspace."""
     monkeypatch.setattr(tools, "WORKSPACE", str(tmp_path))
@@ -329,10 +369,12 @@ def test_resolve_rejects_a_sibling_with_a_shared_prefix(tmp_path, monkeypatch):
 
 
 def test_resolve_tolerates_case_differences(tmp_path, monkeypatch):
-    """`realpath` may return a different case than WORKSPACE (Windows, macOS).
+    """`realpath` may report a different case than WORKSPACE.
 
-    A plain string prefix test rejects a legitimate path in that situation, so
-    the comparison is normcased. Skipped where the filesystem is case-sensitive.
+    This exercises the real filesystem, so it is skipped where the filesystem is
+    case-sensitive. Note what it does NOT prove: on macOS `realpath` already
+    returns the on-disk case, so this passes there without any normalisation
+    (see `test_is_within_*` for the containment rule itself).
     """
     swapped = str(tmp_path).swapcase()
     if swapped == str(tmp_path) or not os.path.isdir(swapped):
