@@ -1,0 +1,133 @@
+..
+   Licensed to the Apache Software Foundation (ASF) under one
+   or more contributor license agreements.  See the NOTICE file
+   distributed with this work for additional information
+   regarding copyright ownership.  The ASF licenses this file
+   to you under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+
+
+.. _s3-artifacts-integration:
+
+===================
+S3 Artifact Storage
+===================
+
+An :py:class:`ArtifactStore <burr.core.artifacts.ArtifactStore>` backed by an
+`AWS S3 <https://aws.amazon.com/s3/>`_ bucket. See :doc:`../../concepts/artifact-storage` for
+background on artifact storage in general.
+
+Install the optional extra (pulls ``boto3`` and ``aiobotocore``):
+
+.. code-block:: bash
+
+   pip install "apache-burr[s3]"
+
+-------------
+Quick Example
+-------------
+
+.. code-block:: python
+
+    from burr.core import ApplicationBuilder
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    object_store = S3ArtifactStore.from_values(
+        bucket="my-bucket",
+        prefix="burr-artifacts",  # optional
+    )
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(...)
+        .with_transitions(...)
+        .with_state(...)
+        .with_entrypoint(...)
+        .with_object_store(object_store)
+        .build()
+    )
+
+If you already have a boto3 client (e.g. reusing a connection, custom endpoint for testing with
+`moto <https://github.com/getmoto/moto>`_ or a local S3-compatible server), construct the store
+directly and pass it in:
+
+.. code-block:: python
+
+    import boto3
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    client = boto3.client("s3", region_name="us-east-1")
+    object_store = S3ArtifactStore(bucket="my-bucket", prefix="burr-artifacts", client=client)
+
+--------------------------
+Async (non-blocking) Usage
+--------------------------
+
+``S3ArtifactStore`` performs blocking network I/O through ``boto3`` -- calling it from an async
+action blocks the event loop for the duration of each upload/download. For async applications
+(built with :py:meth:`abuild <burr.core.application.ApplicationBuilder.abuild>`), use
+:py:class:`AsyncS3ArtifactStore <burr.integrations.artifacts.s3.AsyncS3ArtifactStore>` instead,
+which is backed by `aiobotocore <https://github.com/aio-libs/aiobotocore>`_:
+
+.. code-block:: python
+
+    from burr.core import ApplicationBuilder
+    from burr.integrations.artifacts.s3 import AsyncS3ArtifactStore
+
+    async with await AsyncS3ArtifactStore.acreate(
+        bucket="my-bucket",
+        prefix="burr-artifacts",  # optional
+    ) as object_store:
+        app = await (
+            ApplicationBuilder()
+            .with_actions(...)
+            .with_transitions(...)
+            .with_state(...)
+            .with_entrypoint(...)
+            .with_object_store(object_store)
+            .abuild()
+        )
+        await app.arun(...)
+    # the underlying aiobotocore client is closed automatically here, even on exception.
+
+``acreate`` opens and owns its underlying ``aiobotocore`` client. Using ``async with`` (shown
+above) is the recommended way to release it, since it closes the client safely even on
+exceptions and early returns. You can also call ``await object_store.aclose()`` directly
+(e.g. on app shutdown) -- it's idempotent, so calling it more than once is safe. If you already
+have an open ``aiobotocore`` client, pass it directly via the constructor's ``client`` argument
+instead.
+
+---------------
+IAM Permissions
+---------------
+
+At minimum, the runtime identity used by Burr needs permission to read/write/check objects in
+the target bucket (optionally scoped to the configured prefix):
+
+* ``s3:PutObject``
+* ``s3:GetObject``
+* ``s3:HeadObject``
+
+----------------
+API Reference
+----------------
+
+.. autoclass:: burr.integrations.artifacts.s3.S3ArtifactStore
+   :members:
+
+   .. automethod:: __init__
+
+.. autoclass:: burr.integrations.artifacts.s3.AsyncS3ArtifactStore
+   :members:
+
+   .. automethod:: __init__
