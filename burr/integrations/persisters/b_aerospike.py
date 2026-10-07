@@ -312,6 +312,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         sequence_id: Optional[int] = None,
         **kwargs,
     ) -> Optional[persistence.PersistedStateData]:
+        """Load the latest or a specific checkpoint for an application.
+
+        ``app_id=None`` is not supported by the Aerospike persister; callers must
+        supply an application identifier.
+        """
         partition_key = self._normalize_partition_key(partition_key)
         if app_id is None:
             raise ValueError("app_id is required for load")
@@ -535,7 +540,6 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return self._canonical_json(self.key_prefix)
 
     def _normalize_partition_key(self, partition_key: Optional[str]) -> str:
-        """Normalize ``partition_key=None`` to the empty string."""
         return partition_key if partition_key is not None else ""
 
     def _read_record(self, key, policy=None):
@@ -742,12 +746,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     def _ensure_history_content_matches(
         self, existing_bins: Optional[dict], requested_bins: dict
     ) -> None:
-        """Verify that an existing history record matches the requested checkpoint content.
-
-        Raises AerospikePersistenceConsistencyError if content differs, or
-        AerospikePersistenceUncertainOutcomeError if the existing record could not
-        be read.
-        """
+        """Verify that an existing history record matches the requested checkpoint content."""
         if existing_bins is None:
             raise AerospikePersistenceUncertainOutcomeError(
                 "History record exists but could not be read to verify duplicate content"
