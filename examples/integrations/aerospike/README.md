@@ -45,7 +45,9 @@ docker run --name burr-aerospike -d \
   aerospike/aerospike-server:8.1.2.4
 ```
 
-The example uses the default `test` namespace. Aerospike creates the `burr_state` and `burr_head` sets on the first write.
+Some container runtimes default to a low `nofile` limit. If Aerospike aborts at startup with `1024 system file descriptors not enough, config specified 15000`, add `--ulimit nofile=15000:15000` to the `docker run` command.
+
+The example uses the default `test` namespace. Aerospike creates the `burr_state`, `burr_head`, and `burr_apps` sets on the first write.
 
 ## Run the chatbot
 
