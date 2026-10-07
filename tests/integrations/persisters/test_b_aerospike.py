@@ -36,6 +36,11 @@ from burr.integrations.persisters.b_aerospike import (
     AerospikeBasePersister,
     AerospikePersistenceConsistencyError,
     AerospikePersistenceUncertainOutcomeError,
+    _APP_BIN,
+    _POS_BIN,
+    _SEQ_BIN,
+    _STATE_BIN,
+    _STATUS_BIN,
 )
 
 
@@ -129,23 +134,48 @@ def test_load_requires_an_application_id(aerospike_persister):
         aerospike_persister.load("pk", None)
 
 
-def test_none_empty_and_literal_none_partitions_remain_distinct(aerospike_persister):
-    for partition_key, value in [(None, "null"), ("", "empty"), ("None", "literal")]:
-        aerospike_persister.save(
-            partition_key,
-            "app",
-            1,
-            "position",
-            state.State({"value": value}),
-            "completed",
-        )
+def test_none_partition_is_normalized_to_empty_string(aerospike_persister):
+    """Saving with partition_key=None must be reachable through "" like SQLite."""
+    aerospike_persister.save(
+        None,
+        "app-none",
+        1,
+        "position",
+        state.State({"value": "null"}),
+        "completed",
+    )
+    aerospike_persister.save(
+        "",
+        "app-empty",
+        1,
+        "position",
+        state.State({"value": "empty"}),
+        "completed",
+    )
 
-    assert aerospike_persister.load(None, "app", 1)["state"].get_all() == {"value": "null"}
-    assert aerospike_persister.load("", "app", 1)["state"].get_all() == {"value": "empty"}
-    assert aerospike_persister.load("None", "app", 1)["state"].get_all() == {"value": "literal"}
-    assert set(aerospike_persister.list_app_ids(None)) == {"app"}
-    assert set(aerospike_persister.list_app_ids("")) == {"app"}
+    assert set(aerospike_persister.list_app_ids("")) == {"app-none", "app-empty"}
+    assert set(aerospike_persister.list_app_ids(None)) == {"app-none", "app-empty"}
+    assert (
+        aerospike_persister.load("", "app-none", 1)["state"].get_all() == {"value": "null"}
+    )
+    assert (
+        aerospike_persister.load(None, "app-empty", 1)["state"].get_all() == {"value": "empty"}
+    )
+
+
+def test_literal_none_partition_remains_distinct_from_empty_string(aerospike_persister):
+    aerospike_persister.save(
+        "None",
+        "app",
+        1,
+        "position",
+        state.State({"value": "literal"}),
+        "completed",
+    )
+
     assert set(aerospike_persister.list_app_ids("None")) == {"app"}
+    assert aerospike_persister.list_app_ids("") == []
+    assert aerospike_persister.load("None", "app", 1)["state"].get_all() == {"value": "literal"}
 
 
 def test_list_app_ids_returns_each_application_once_without_an_order_contract(
@@ -186,15 +216,14 @@ def test_identical_save_is_idempotent_and_preserves_the_first_creation_time(
         ("position", state.State({"value": 1}), "failed"),
     ],
 )
-def test_duplicate_checkpoint_save_is_idempotent(
+def test_duplicate_checkpoint_with_different_content_raises(
     aerospike_persister, position, saved_state, status
 ):
-    """A duplicate save by primary key is a no-op; the first checkpoint is preserved."""
+    """A duplicate save with different content raises instead of silently keeping the first record."""
     aerospike_persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
 
-    # A second write with the same key but different content must not raise
-    # and must not overwrite the immutable history record.
-    aerospike_persister.save("pk", "app", 1, position, saved_state, status)
+    with pytest.raises(AerospikePersistenceConsistencyError, match="Checkpoint content mismatch"):
+        aerospike_persister.save("pk", "app", 1, position, saved_state, status)
 
     loaded = aerospike_persister.load("pk", "app", 1)
     assert loaded["position"] == "position"
@@ -697,3 +726,4 @@ def test_initialize_is_idempotent_without_remote_calls():
     assert persister.is_initialized() is True
     client.assert_not_called()
     assert client.method_calls == []
+
