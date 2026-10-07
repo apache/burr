@@ -185,10 +185,21 @@ build the application with :py:meth:`abuild <burr.core.application.ApplicationBu
         .abuild()
     )
 
-:py:meth:`build <burr.core.application.ApplicationBuilder.build>` (the synchronous builder)
-rejects an async store with a clear error at build time, since it has no way to await it. An
-``ArtifactStore`` (sync) can still be used from ``abuild()``-built applications, but, as with a
-sync state persister, it will block the event loop while it runs.
+An async object store can be attached via either :py:meth:`build
+<burr.core.application.ApplicationBuilder.build>` or :py:meth:`abuild
+<burr.core.application.ApplicationBuilder.abuild>` -- this matters because a sync state
+persister/initializer forces ``build()`` even when the application is otherwise run
+asynchronously. The store is only rejected once a *synchronous* execution method (``step()``,
+``run()``, ``iterate()``, etc.) is actually called, since awaiting it there would require an
+event loop; calling an async execution method (``astep()``, ``arun()``, ``aiterate()``) works
+regardless of which builder method was used. An ``ArtifactStore`` (sync) can still be used from
+``abuild()``-built applications, but, as with a sync state persister, it will block the event
+loop while it runs.
+
+:py:meth:`AsyncS3ArtifactStore.acreate <burr.integrations.artifacts.s3.AsyncS3ArtifactStore.acreate>`
+opens and owns an ``aiobotocore`` client; use ``async with`` or call ``await
+object_store.aclose()`` (idempotent) to release it once you're done. See
+:ref:`the S3 integration docs <s3-artifacts-integration>` for an example.
 
 Supported Backends
 -------------------

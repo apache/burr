@@ -4255,20 +4255,24 @@ def _make_in_memory_async_store():
     return InMemoryAsyncArtifactStore()
 
 
-def test_build_rejects_async_object_store():
-    """A sync `.build()` can't await an async store's `put`/`get`/`exists` -- using one should
-    fail fast at build time with a clear error, not silently produce a broken sync app."""
+def test_build_accepts_async_object_store_but_rejects_sync_execution():
+    """`.build()` must accept an async object store (e.g. needed when a sync persister/
+    initializer forces .build() even though the object store is async -- see
+    SubGraphTask.arun()). The store is only rejected once a synchronous execution method
+    (step()/run()/iterate()) is actually invoked, since that's where awaiting it would be
+    required outside of an event loop."""
     store = _make_in_memory_async_store()
-    builder = (
+    app = (
         ApplicationBuilder()
         .with_actions(terminal=Result())
         .with_transitions()
         .with_entrypoint("terminal")
         .with_state()
         .with_object_store(store)
+        .build()
     )
     with pytest.raises(ValueError, match="async object store"):
-        builder.build()
+        app.run(halt_after=["terminal"])
 
 
 async def test_abuild_exposes_async_object_store_through_application_context():
@@ -4298,6 +4302,37 @@ async def test_abuild_exposes_async_object_store_through_application_context():
 
     ref = state["doc"]
     assert await ref.aread(store) == b"hello async world"
+
+
+async def test_build_with_sync_persister_and_async_object_store_runs_via_arun():
+    """Regression test for the combination skrawcz flagged: a sync state persister/initializer
+    forces construction through .build() (since .abuild() requires async persistence), but the
+    application must still support an async object store as long as it is executed via arun().
+    """
+    store = _make_in_memory_async_store()
+    persister = DummyPersister()
+
+    @action(reads=[], writes=["doc"])
+    async def ingest(state: State, __context: ApplicationContext) -> State:
+        assert __context.object_store is store
+        ref = await __context.object_store.put_artifact(b"hello from sync persister app")
+        return state.update(doc=ref)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(ingest=ingest, terminal=Result("doc"))
+        .with_transitions(("ingest", "terminal"))
+        .with_entrypoint("ingest")
+        .with_state()
+        .with_state_persister(persister)
+        .with_object_store(store)
+        .build()
+    )
+
+    *_, state = await app.arun(halt_after=["terminal"])
+
+    ref = state["doc"]
+    assert await ref.aread(store) == b"hello from sync persister app"
 
 
 class ActionWithoutContext(Action):

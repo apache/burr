@@ -119,6 +119,13 @@ class AsyncS3ArtifactStore(AsyncArtifactStore):
     can safely be used from async actions without blocking the event loop. Prefer this over
     :py:class:`S3ArtifactStore` whenever the store is configured on an application built with
     :py:meth:`~burr.core.application.ApplicationBuilder.abuild`.
+
+    Supports ``async with`` for exception-safe cleanup of the client opened by :py:meth:`acreate`::
+
+        async with await AsyncS3ArtifactStore.acreate(bucket="my-bucket") as store:
+            app = await ApplicationBuilder()...with_object_store(store).abuild()
+            await app.arun(...)
+        # store.aclose() is called automatically here, even if an exception was raised above.
     """
 
     @classmethod
@@ -171,9 +178,17 @@ class AsyncS3ArtifactStore(AsyncArtifactStore):
     async def aclose(self) -> None:
         """Closes the underlying client, if this instance opened one itself via
         :py:meth:`acreate`. No-op if a pre-opened ``client`` was passed to the constructor
-        directly -- that client is owned by the caller."""
+        directly (that client is owned by the caller), or if already closed -- safe to call
+        more than once, including after an exception."""
         if self._client_cm is not None:
-            await self._client_cm.__aexit__(None, None, None)
+            client_cm, self._client_cm = self._client_cm, None
+            await client_cm.__aexit__(None, None, None)
+
+    async def __aenter__(self) -> "AsyncS3ArtifactStore":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.aclose()
 
     def _object_key(self, key: str) -> str:
         if self.prefix:

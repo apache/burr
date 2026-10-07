@@ -384,3 +384,50 @@ async def test_async_store_acreate_opens_client_via_session_and_aclose_closes_it
 
     await store.aclose()
     client_cm.__aexit__.assert_awaited_once()
+
+
+async def test_async_store_aclose_is_idempotent(monkeypatch):
+    """Calling `aclose` more than once must not re-invoke `__aexit__` on the client context
+    manager -- it should be a safe no-op after the first call."""
+    import burr.integrations.artifacts.s3 as s3_module
+
+    fake_client = AsyncMock()
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=fake_client)
+    client_cm.__aexit__ = AsyncMock(return_value=None)
+
+    fake_session = MagicMock()
+    fake_session.create_client = MagicMock(return_value=client_cm)
+
+    monkeypatch.setattr(s3_module.aiobotocore.session, "get_session", lambda: fake_session)
+
+    store = await AsyncS3ArtifactStore.acreate(bucket="my-bucket")
+
+    await store.aclose()
+    await store.aclose()  # should be a no-op, not raise or double-close
+    client_cm.__aexit__.assert_awaited_once()
+
+
+async def test_async_store_supports_async_context_manager(monkeypatch):
+    """`async with` should enter/exit cleanly and close the underlying client on exit, including
+    when the body raises."""
+    import burr.integrations.artifacts.s3 as s3_module
+
+    fake_client = AsyncMock()
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=fake_client)
+    client_cm.__aexit__ = AsyncMock(return_value=None)
+
+    fake_session = MagicMock()
+    fake_session.create_client = MagicMock(return_value=client_cm)
+
+    monkeypatch.setattr(s3_module.aiobotocore.session, "get_session", lambda: fake_session)
+
+    store = await AsyncS3ArtifactStore.acreate(bucket="my-bucket")
+
+    with pytest.raises(ValueError, match="boom"):
+        async with store as entered_store:
+            assert entered_store is store
+            raise ValueError("boom")
+
+    client_cm.__aexit__.assert_awaited_once()

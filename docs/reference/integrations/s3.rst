@@ -84,25 +84,28 @@ which is backed by `aiobotocore <https://github.com/aio-libs/aiobotocore>`_:
     from burr.core import ApplicationBuilder
     from burr.integrations.artifacts.s3 import AsyncS3ArtifactStore
 
-    object_store = await AsyncS3ArtifactStore.acreate(
+    async with await AsyncS3ArtifactStore.acreate(
         bucket="my-bucket",
         prefix="burr-artifacts",  # optional
-    )
+    ) as object_store:
+        app = await (
+            ApplicationBuilder()
+            .with_actions(...)
+            .with_transitions(...)
+            .with_state(...)
+            .with_entrypoint(...)
+            .with_object_store(object_store)
+            .abuild()
+        )
+        await app.arun(...)
+    # the underlying aiobotocore client is closed automatically here, even on exception.
 
-    app = await (
-        ApplicationBuilder()
-        .with_actions(...)
-        .with_transitions(...)
-        .with_state(...)
-        .with_entrypoint(...)
-        .with_object_store(object_store)
-        .abuild()
-    )
-
-``acreate`` opens and owns its underlying ``aiobotocore`` client -- call
-``await object_store.aclose()`` when you're done with it (e.g. on app shutdown) to release it.
-If you already have an open ``aiobotocore`` client, pass it directly via the constructor's
-``client`` argument instead.
+``acreate`` opens and owns its underlying ``aiobotocore`` client. Using ``async with`` (shown
+above) is the recommended way to release it, since it closes the client safely even on
+exceptions and early returns. You can also call ``await object_store.aclose()`` directly
+(e.g. on app shutdown) -- it's idempotent, so calling it more than once is safe. If you already
+have an open ``aiobotocore`` client, pass it directly via the constructor's ``client`` argument
+instead.
 
 ---------------
 IAM Permissions

@@ -2190,6 +2190,19 @@ class Application(Generic[ApplicationStateType]):
                 "Please use the async run methods to run the application."
             )
 
+        # An AsyncArtifactStore can be attached via build() (e.g. when a sync persister/
+        # initializer forces build() even though the object store is async -- see
+        # SubGraphTask.arun()), but it can only be used from async execution methods, since
+        # awaiting it here would require an event loop. Validate at the execution-method layer,
+        # not at build()-time, so that combination stays supported.
+        if self._object_store is not None and self._object_store.is_async():
+            raise ValueError(
+                "This application has an async object store (AsyncArtifactStore) attached, "
+                "but you are calling a synchronous execution method. Please use the async "
+                "execution methods (arun(), astep(), aiterate(), etc.) instead, or use a "
+                "sync object store (ArtifactStore)."
+            )
+
 
 def _validate_app_id(app_id: Optional[str]):
     if app_id is None:
@@ -2861,15 +2874,15 @@ class ApplicationBuilder(Generic[StateType]):
         app async. However, we strongly encourage to switch to async persisters if you are running
         an async application.
 
+        An :py:class:`~burr.core.artifacts.AsyncArtifactStore` passed to :py:meth:`with_object_store`
+        can also be attached here -- it is only rejected if you subsequently try to execute the
+        application through a synchronous method (:py:meth:`~Application.step`,
+        :py:meth:`~Application.run`, :py:meth:`~Application.iterate`, etc.), since that combination
+        would otherwise require awaiting the store outside of an event loop.
+
         :return: The application object.
         """
         _validate_app_id(self.app_id)
-        if self.object_store is not None and self.object_store.is_async():
-            raise ValueError(
-                "You are building the sync application, but have used an "
-                "async object store. Please use a sync object store (ArtifactStore) or "
-                "use the .abuild() method to build an async application."
-            )
         if self.state is None:
             self.state = State()
 

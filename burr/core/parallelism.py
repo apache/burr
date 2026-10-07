@@ -105,9 +105,7 @@ class SubGraphTask:
     state_initializer: Optional[BaseStateLoader] = None
     object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None
 
-    def _create_app_builder(
-        self, parent_context: ApplicationIdentifiers, attach_object_store: bool = True
-    ) -> ApplicationBuilder:
+    def _create_app_builder(self, parent_context: ApplicationIdentifiers) -> ApplicationBuilder:
         builder = (
             ApplicationBuilder()
             .with_graph(self.graph.graph)
@@ -125,13 +123,7 @@ class SubGraphTask:
         if self.tracker is not None:
             builder = builder.with_tracker(self.tracker)  # TODO -- move this into the adapter
 
-        # attach_object_store=False is used by arun() -- it attaches the object store directly
-        # to the built Application afterwards instead, since build()/abuild() choice there is
-        # driven entirely by state_persister/state_initializer sync-ness and may not agree with
-        # the object store's sync-ness (e.g. an async object store cascaded alongside a sync
-        # persister still works fine, since the sub-app is always executed via app.arun()
-        # regardless of whether build() or abuild() was used to construct it).
-        if attach_object_store and self.object_store is not None:
+        if self.object_store is not None:
             builder = builder.with_object_store(self.object_store)
 
         # In this case we want to persist the state for the app
@@ -167,14 +159,10 @@ class SubGraphTask:
         return state
 
     async def arun(self, parent_context: ApplicationContext):
-        # Here for backwards compatibility, not ideal. Note the object store's sync/async-ness
-        # is intentionally *not* a factor in choosing build() vs abuild() below -- the sub-app is
-        # always run via app.arun() in this method regardless of which one is used, so either
-        # store type works either way. It's attached directly to the built app afterwards
-        # (attach_object_store=False + the explicit assignment below) instead of going through
-        # with_object_store(), since build()/abuild() would otherwise reject an object store
-        # whose sync/async-ness doesn't match -- a check that only makes sense for the public
-        # build()/abuild() -> run()/arun() pairing, not this internal always-async codepath.
+        # Here for backwards compatibility, not ideal. Note that build()/abuild() both accept
+        # either a sync or an async object_store -- only synchronous execution methods
+        # (step()/run()/iterate()) reject an async store, and this method always executes via
+        # app.arun(), so build() can safely be used below even when self.object_store is async.
         if (self.state_initializer is not None and not self.state_initializer.is_async()) or (
             self.state_persister is not None and not self.state_persister.is_async()
         ):
@@ -182,11 +170,9 @@ class SubGraphTask:
                 "You are using sync persisters for an async application which is not optimal. "
                 "Consider switching to an async persister implementation. We will make this an error soon."
             )
-            app = self._create_app_builder(parent_context, attach_object_store=False).build()
+            app = self._create_app_builder(parent_context).build()
         else:
-            app = await self._create_app_builder(parent_context, attach_object_store=False).abuild()
-        if self.object_store is not None:
-            app._object_store = self.object_store
+            app = await self._create_app_builder(parent_context).abuild()
         action, result, state = await app.arun(
             halt_after=self.graph.halt_after,
             inputs={key: value for key, value in self.inputs.items() if not key.startswith("__")},
