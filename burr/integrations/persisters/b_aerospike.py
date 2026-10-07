@@ -247,10 +247,11 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         status: str,
         **kwargs,
     ):
+        partition_key = self._normalize_partition_key(partition_key)
         self._validate_sequence_id(sequence_id)
 
         try:
-            state_json = json.dumps(state.serialize(**self.serde_kwargs), allow_nan=False)
+            state_json = self._canonical_json(state.serialize(**self.serde_kwargs))
         except (TypeError, ValueError) as e:
             raise AerospikePersistenceSerializationError(
                 f"State is not JSON-serializable: {e}"
@@ -311,6 +312,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         sequence_id: Optional[int] = None,
         **kwargs,
     ) -> Optional[persistence.PersistedStateData]:
+        partition_key = self._normalize_partition_key(partition_key)
         if app_id is None:
             raise ValueError("app_id is required for load")
         if sequence_id is not None:
@@ -337,7 +339,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
 
     def _load_latest(
         self,
-        partition_key: Optional[str],
+        partition_key: str,
         app_id: str,
     ) -> Optional[persistence.PersistedStateData]:
         """Load the latest state for an application by reading the head, then the referenced history."""
@@ -372,6 +374,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return self._build_persisted_data(history_record, partition_key, app_id, stored_seq)
 
     def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
+        partition_key = self._normalize_partition_key(partition_key)
         membership_key = self._membership_page_key(partition_key, 0)
         root = self._read_membership_root(membership_key)
         if root is None:
@@ -424,7 +427,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         )
 
     def _identity_history(
-        self, key_prefix: Optional[str], partition_key: Optional[str], app_id: str, sequence_id: int
+        self, key_prefix: Optional[str], partition_key: str, app_id: str, sequence_id: int
     ) -> list:
         return [
             _SYSTEM,
@@ -437,7 +440,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         ]
 
     def _identity_head(
-        self, key_prefix: Optional[str], partition_key: Optional[str], app_id: str
+        self, key_prefix: Optional[str], partition_key: str, app_id: str
     ) -> list:
         return [
             _SYSTEM,
@@ -448,7 +451,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             app_id,
         ]
 
-    def _identity_membership(self, key_prefix: Optional[str], partition_key: Optional[str]) -> list:
+    def _identity_membership(self, key_prefix: Optional[str], partition_key: str) -> list:
         return [
             _SYSTEM,
             _CODE_VERSION,
@@ -458,7 +461,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         ]
 
     def _identity_membership_page(
-        self, key_prefix: Optional[str], partition_key: Optional[str], page: int
+        self, key_prefix: Optional[str], partition_key: str, page: int
     ) -> list:
         return [
             _SYSTEM,
@@ -473,7 +476,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
     def _derive_history_key(
-        self, key_prefix: Optional[str], partition_key: Optional[str], app_id: str, sequence_id: int
+        self, key_prefix: Optional[str], partition_key: str, app_id: str, sequence_id: int
     ) -> str:
         return self._sha256_hex(
             self._canonical_json(
@@ -482,21 +485,21 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         )
 
     def _derive_head_key(
-        self, key_prefix: Optional[str], partition_key: Optional[str], app_id: str
+        self, key_prefix: Optional[str], partition_key: str, app_id: str
     ) -> str:
         return self._sha256_hex(
             self._canonical_json(self._identity_head(key_prefix, partition_key, app_id))
         )
 
     def _derive_membership_key(
-        self, key_prefix: Optional[str], partition_key: Optional[str]
+        self, key_prefix: Optional[str], partition_key: str
     ) -> str:
         return self._sha256_hex(
             self._canonical_json(self._identity_membership(key_prefix, partition_key))
         )
 
     def _derive_membership_page_key(
-        self, key_prefix: Optional[str], partition_key: Optional[str], page: int
+        self, key_prefix: Optional[str], partition_key: str, page: int
     ) -> str:
         if type(page) is not int or isinstance(page, bool) or page <= 0:
             raise ValueError("membership overflow page must be a positive integer")
@@ -504,7 +507,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             self._canonical_json(self._identity_membership_page(key_prefix, partition_key, page))
         )
 
-    def _membership_page_key(self, partition_key: Optional[str], page: int):
+    def _membership_page_key(self, partition_key: str, page: int):
         user_key = (
             self._derive_membership_key(self.key_prefix, partition_key)
             if page == 0
@@ -525,11 +528,15 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     def _key(self, set_name: str, user_key: str):
         return (self.namespace, set_name, user_key)
 
-    def _canonical_partition(self, partition_key: Optional[str]) -> str:
+    def _canonical_partition(self, partition_key: str) -> str:
         return self._canonical_json(partition_key)
 
     def _canonical_key_prefix(self) -> str:
         return self._canonical_json(self.key_prefix)
+
+    def _normalize_partition_key(self, partition_key: Optional[str]) -> str:
+        """Normalize ``partition_key=None`` to the empty string."""
+        return partition_key if partition_key is not None else ""
 
     def _read_record(self, key, policy=None):
         read_policy = policy or {"replica": aerospike.POLICY_REPLICA_MASTER}
@@ -657,7 +664,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 self._tail_hints.popitem(last=False)
 
     def _register_membership(
-        self, membership_key, partition_key: Optional[str], app_id: str
+        self, membership_key, partition_key: str, app_id: str
     ) -> None:
         hinted_page = self._get_tail_hint(membership_key)
         current_page = hinted_page if hinted_page is not None else 0
@@ -732,6 +739,26 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 "Checkpoint record exceeds the namespace max-record-size"
             ) from e
 
+    def _ensure_history_content_matches(
+        self, existing_bins: Optional[dict], requested_bins: dict
+    ) -> None:
+        """Verify that an existing history record matches the requested checkpoint content.
+
+        Raises AerospikePersistenceConsistencyError if content differs, or
+        AerospikePersistenceUncertainOutcomeError if the existing record could not
+        be read.
+        """
+        if existing_bins is None:
+            raise AerospikePersistenceUncertainOutcomeError(
+                "History record exists but could not be read to verify duplicate content"
+            )
+        for field in (_POS_BIN, _STATE_BIN, _STATUS_BIN):
+            if existing_bins.get(field) != requested_bins.get(field):
+                raise AerospikePersistenceConsistencyError(
+                    f"Checkpoint content mismatch for app_id={requested_bins[_APP_BIN]} "
+                    f"sequence_id={requested_bins[_SEQ_BIN]}: {field} differs"
+                )
+
     def _write_history(self, history_key, bins):
         """Create-only history write with bounded retries."""
         for attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
@@ -739,13 +766,15 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 self._write_history_once(history_key, bins)
                 return None
             except aerospike.exception.RecordExistsError:
-                # The checkpoint already exists; history is immutable, so this is idempotent.
-                return None
+                existing = self._read_history(history_key)
+                self._ensure_history_content_matches(existing, bins)
+                return existing
             except aerospike.exception.AerospikeError as e:
                 if self._is_retryable(e):
                     # Reconcile: if the record is now present, the write succeeded.
                     existing = self._read_history(history_key)
                     if existing is not None:
+                        self._ensure_history_content_matches(existing, bins)
                         return existing
                     if attempt == _MAX_WRITE_ATTEMPTS:
                         raise AerospikePersistenceUncertainOutcomeError(
@@ -997,7 +1026,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
     def _build_persisted_data(
         self,
         history_bins: dict,
-        partition_key: Optional[str],
+        partition_key: str,
         app_id: str,
         sequence_id: int,
     ) -> persistence.PersistedStateData:
