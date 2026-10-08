@@ -4256,6 +4256,105 @@ def test_remap_context_variable_without_mangled_context():
     assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
+class AsyncActionWithContext(Action):
+    """Class-based async action whose run() takes the injected ``__context``.
+    Python name-mangles the parameter to ``_AsyncActionWithContext__context``."""
+
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def run(self, state: State, __context: ApplicationContext) -> dict:
+        return {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class StreamingActionWithContext(StreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def stream_run(
+        self, state: State, __context: ApplicationContext
+    ) -> Generator[dict, None, None]:
+        yield {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class AsyncStreamingActionWithContext(AsyncStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def stream_run(self, state: State, __context: ApplicationContext) -> AsyncGenerator:
+        yield {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+def _build_context_app(action_: Action) -> Application:
+    return (
+        ApplicationBuilder()
+        .with_actions(ctx_action=action_)
+        .with_transitions()
+        .with_entrypoint("ctx_action")
+        .with_identifiers(app_id="context-app-id")
+        .build()
+    )
+
+
+async def test_astep_class_based_action_receives_context():
+    app = _build_context_app(AsyncActionWithContext())
+    _, result, state = await app.astep()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_stream_result_class_based_streaming_action_receives_context():
+    app = _build_context_app(StreamingActionWithContext())
+    _, container = app.stream_result(halt_after=["ctx_action"])
+    result, state = container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astream_result_class_based_async_streaming_action_receives_context():
+    app = _build_context_app(AsyncStreamingActionWithContext())
+    _, container = await app.astream_result(halt_after=["ctx_action"])
+    result, state = await container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
 async def test_async_application_builder_initialize_raises_on_broken_persistor():
     """Persisters should return None when there is no state to be loaded and the default used."""
     await asyncio.sleep(0.00001)
