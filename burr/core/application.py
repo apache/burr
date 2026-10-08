@@ -318,6 +318,7 @@ def _run_single_step_action(
     """
     # TODO -- guard all reads/writes with a subset of the state
     action.validate_inputs(inputs)
+    # TODO: __context/__tracer are not remapped here (see _remap_injected_inputs).
     result, new_state = _adjust_single_step_output(
         action.run_and_update(state, **inputs), action.name, action.schema
     )
@@ -341,6 +342,7 @@ def _run_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
+    # TODO: __context/__tracer are not remapped here (see _remap_injected_inputs).
     generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
@@ -409,6 +411,7 @@ async def _arun_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
+    # TODO: __context/__tracer are not remapped here (see _remap_injected_inputs).
     generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
@@ -594,6 +597,7 @@ async def _arun_single_step_action(
     """Runs a single step action in async. See the synchronous version for more details."""
     state_to_use = state
     action.validate_inputs(inputs)
+    # TODO: __context/__tracer are not remapped here (see _remap_injected_inputs).
     result, new_state = _adjust_single_step_output(
         await action.run_and_update(state_to_use, **inputs), action.name, action.schema
     )
