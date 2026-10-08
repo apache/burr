@@ -19,6 +19,7 @@ import pathlib
 
 import pytest
 
+from burr.core import ApplicationBuilder
 from burr.core.graph import GraphBuilder
 
 from tests.core.test_graph import PassedInAction
@@ -115,3 +116,22 @@ def test_visualize_engine_kwargs_attr_dicts(graph):
     assert digraph.node_attr["fontname"] == "Courier"
     assert digraph.node_attr["fillcolor"] == "#b4d8e4"  # Burr default is kept
     assert digraph.edge_attr == {"color": "red"}
+
+
+def test_application_visualize_edge_attr(graph):
+    """``Application.visualize`` is the path users call; it forwards ``edge_attr``."""
+    app = ApplicationBuilder().with_graph(graph).with_entrypoint("counter").build()
+
+    digraph = app.visualize(edge_attr={"color": "red"})
+
+    assert digraph.edge_attr == {"color": "red"}
+    assert digraph.graph_attr["rankdir"] == "TB"  # Burr default is kept
+
+
+def test_visualize_none_attr_keeps_defaults(graph):
+    """Passing ``graph_attr=None`` behaves like not passing it."""
+    digraph = graph.visualize(graph_attr=None, node_attr=None, edge_attr=None)
+
+    assert digraph.graph_attr["rankdir"] == "TB"
+    assert digraph.node_attr["fillcolor"] == "#b4d8e4"
+    assert digraph.edge_attr == {}
