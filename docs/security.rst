@@ -17,33 +17,17 @@
    under the License.
 
 
-.. include:: main.rst
+========
+Security
+========
 
-.. toctree::
-   :maxdepth: 2
-   :hidden:
-   :caption: Apache Burr
+Apache Burr follows the `ASF vulnerability handling process <https://www.apache.org/security/>`_.
 
-   getting_started/index
-   ui/index
-   examples/index
-   concepts/index
-   reference/index
-   contributing/index
-   security
-   ecosystem
+If you believe you have found a security vulnerability in Burr, report it privately by email to
+`security@apache.org <mailto:security@apache.org>`_. Do not open a GitHub issue or post to the
+``dev@burr.apache.org`` list.
 
-.. toctree::
-   :hidden:
-   :caption: ASF
-
-   asf/index
-
-.. toctree::
-   :hidden:
-   :caption: RESOURCES
-
-   Blog <https://blog.dagworks.io/>
-   Discord community server <https://discord.gg/6Zy2DwP4f3>
-   GitHub <https://github.com/apache/burr>
-   Twitter <https://twitter.com/burr_framework>
+The project's security model -- which parties Burr trusts, what it guarantees, and what is out of
+scope -- is documented in `SECURITY.md <https://github.com/apache/burr/blob/main/SECURITY.md>`_ in
+the source repository. Read it before reporting to check whether an issue is a Burr vulnerability or
+a deployment concern.
