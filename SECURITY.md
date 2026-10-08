@@ -84,23 +84,38 @@ State that an untrusted party could write.
 ### Tracking server
 
 The tracking server (`burr` CLI, `burr.tracking.server`) is a local development
-tool. It has no authentication or authorization: anyone who can reach it can
-read every project and trace in the configured storage directory (`~/.burr` by
-default) or S3 backend, and can write annotations. The CLI binds it to
-`127.0.0.1` by default. It must not be exposed on a network interface without
-an authenticating reverse proxy in front of it. Within that model, Burr
-guarantees that identifiers taken from URLs (project IDs, application IDs,
-partition keys) are validated against a conservative allowlist and that every
-path the server reads or writes stays inside the configured storage directory.
-Escaping that directory through a crafted identifier is a Burr bug.
+tool, not a hardened multi-tenant service. It has no authentication or
+authorization: anyone who can reach it can read the data exposed by its
+configured backend and can write annotations. Some distributions also include
+writable example application routes; these are demonstrations, not protected
+application endpoints.
+
+The CLI binds to `127.0.0.1` by default. Do not expose the server on another
+network interface unless an authenticating reverse proxy or an equivalent
+access-control layer protects it. Treat every caller that can reach an
+unprotected server as trusted.
+
+For the local filesystem backend, project and application identifiers received
+by the tracking API are each treated as a single path component and validated
+before use. A remote caller who can escape the configured storage root through
+a crafted API identifier has crossed a Burr security boundary. The storage
+root itself remains trusted, operator-controlled application data: Burr does
+not defend against a local principal who can modify its files, replace them
+with symlinks, or otherwise alter the directory layout.
 
 ### Identifiers
 
-Project names, `app_id`, and `partition_key` are developer-supplied. They
-become filesystem paths and object keys in the tracking client and persisters.
-An application that derives any of them from end-user input must validate it
-first. Burr also validates identifiers against an allowlist as defense in
-depth; that check is a backstop, not a substitute.
+Project names, `app_id`, and `partition_key` are developer-supplied identifiers
+used by tracking clients and persisters as directory names, object keys, or
+record selectors, depending on the backend. Burr validates filesystem-bound
+project and application identifiers as defense in depth. Applications remain
+responsible for validating and authorizing identifiers derived from end-user
+input; Burr's syntactic validation does not establish identity, ownership, or
+access control.
+
+Built-in example routes may use storage and configuration separate from the
+tracking backend selected for the server. Do not assume that configuring a
+backend also configures or secures those example applications.
 
 ### Dependencies
 
@@ -117,8 +132,11 @@ The following are not Burr vulnerabilities:
 - Attacks that require write access to the persistence store, including crafted
   State deserialized by the pydantic, pandas, or pickle integrations.
 - Passing untrusted text to `Condition.expr()`.
-- Exposing the tracking server on a non-loopback interface without an
-  authenticating reverse proxy.
+- Reading or changing tracking data through an intentionally exposed,
+  unauthenticated tracking server, including its built-in example routes.
+- Attacks that require local write access to the tracking storage root, such as
+  replacing tracking files with symlinks. That directory is trusted and must be
+  writable only by the Burr application identity.
 - Crafted pickle payloads supplied to the opt-in pickle serializer.
 - Denial of service through developer-authored code: actions, `expr()`
   conditions, hooks, or serializers that consume unbounded resources.
@@ -127,7 +145,7 @@ The following are not Burr vulnerabilities:
 
 - Keep the tracking server on `127.0.0.1`. For shared access, put it behind an
   authenticating reverse proxy and scope the storage directory or S3 prefix to
-  that team.
+  that team. Disable or remove built-in example routes when they are not needed.
 - Treat the persistence store like a credential store: restrict write access to
   the application identity, enable encryption at rest, and audit access.
 - Use `Condition.safe_expr()` for any expression that is not written by a
