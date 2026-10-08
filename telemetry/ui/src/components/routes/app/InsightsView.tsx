@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import React, { useContext, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { AppContext } from './AppView';
+import { isTelemetryRowHovered } from './hoverHighlight';
 import { Chip } from '../../common/chip';
 import { modelCosts } from '../../common/modelCost';
 
@@ -370,8 +371,13 @@ const InsightSubTable = (props: {
     return acc;
   }, new Map<number, Step>());
 
-  const { currentSelectedIndex, setCurrentSelectedIndex, currentHoverIndex, setCurrentHoverIndex } =
-    useContext(AppContext);
+  const {
+    currentSelectedIndex,
+    setCurrentSelectedIndex,
+    currentHoverIndex,
+    currentHoverAction,
+    setCurrentHoverIndex
+  } = useContext(AppContext);
 
   return (
     <>
@@ -408,7 +414,14 @@ const InsightSubTable = (props: {
             const span = spansBySpanID.get(attribute.span_id || '');
             const step = stepsByStepID.get(span?.begin_entry.action_sequence_id || 0);
             const insightCasted = props.insight as InsightWithIndividualValues;
-            const isHovered = currentHoverIndex === span?.begin_entry.action_sequence_id;
+            const isHovered = isTelemetryRowHovered({
+              currentHoverIndex,
+              currentHoverAction,
+              sequenceId: span?.begin_entry.action_sequence_id,
+              actionName: span ? step?.step_start_log.action : undefined,
+              appId: props.appID,
+              partitionKey: props.partitionKey
+            });
             const isCurrentSelected = currentSelectedIndex === span?.begin_entry.action_sequence_id;
             return (
               <TableRow
