@@ -38,6 +38,7 @@ import {
   REFRESH_INTERVAL,
   SequenceLocation
 } from './AppView';
+import { isTelemetryRowHovered } from './hoverHighlight';
 import { Status, getActionStatus } from '../../../utils';
 import { Chip } from '../../common/chip';
 import { useContext, useEffect, useRef, useState } from 'react';
@@ -214,15 +215,20 @@ const ActionTableRow = (props: {
     setCurrentEditingAnnotationContext,
     setTab,
     currentHoverIndex,
+    currentHoverAction,
     setCurrentHoverIndex,
     currentSelectedIndex,
     setCurrentSelectedIndex
   } = useContext(AppContext);
 
-  const isHovered =
-    currentHoverIndex?.sequenceId === sequenceID &&
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey;
+  const isHovered = isTelemetryRowHovered({
+    currentHoverIndex,
+    currentHoverAction,
+    sequenceId: sequenceID,
+    actionName: props.step.step_start_log.action,
+    appId: props.appID,
+    partitionKey: props.partitionKey
+  });
   // const spanCount = props.step.spans.length;
   const childCount = props.links.length;
   const shouldBeHighlighted =
@@ -478,13 +484,22 @@ const LinkSubTable = (props: {
   latestTimeSeen: Date;
   depth: number;
 }) => {
-  const { currentHoverIndex, setCurrentHoverIndex, currentSelectedIndex, setCurrentSelectedIndex } =
-    useContext(AppContext);
+  const {
+    currentHoverIndex,
+    currentHoverAction,
+    setCurrentHoverIndex,
+    currentSelectedIndex,
+    setCurrentSelectedIndex
+  } = useContext(AppContext);
   const sequenceID = props.step.step_start_log.sequence_id;
-  const isHovered =
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey &&
-    currentHoverIndex?.sequenceId === sequenceID;
+  const isHovered = isTelemetryRowHovered({
+    currentHoverIndex,
+    currentHoverAction,
+    sequenceId: sequenceID,
+    actionName: props.step.step_start_log.action,
+    appId: props.appID,
+    partitionKey: props.partitionKey
+  });
   const shouldBeHighlighted =
     currentSelectedIndex !== undefined &&
     currentSelectedIndex.appId === props.appID &&
@@ -781,7 +796,7 @@ const StepSubTable = (props: {
   displayAnnotations: boolean;
   depth: number;
 }) => {
-  const { currentHoverIndex, currentSelectedIndex } = useContext(AppContext);
+  const { currentHoverIndex, currentHoverAction, currentSelectedIndex } = useContext(AppContext);
   const attributesBySpanID = props.attributes.reduce((acc, attr) => {
     const existing = acc.get(attr.span_id) || [];
     existing.push(attr);
@@ -796,10 +811,14 @@ const StepSubTable = (props: {
   //   return acc;
   // }, new Map<string | null, Array<InitializeStreamModel | FirstItemStreamModel | EndStreamModel>>());
   const sequenceID = props.step.step_start_log.sequence_id;
-  const isHovered =
-    currentHoverIndex?.sequenceId === sequenceID &&
-    currentHoverIndex?.appId === props.appID &&
-    currentHoverIndex?.partitionKey === props.partitionKey;
+  const isHovered = isTelemetryRowHovered({
+    currentHoverIndex,
+    currentHoverAction,
+    sequenceId: sequenceID,
+    actionName: props.step.step_start_log.action,
+    appId: props.appID,
+    partitionKey: props.partitionKey
+  });
   // const spanCount = props.step.spans.length;
   const shouldBeHighlighted =
     currentSelectedIndex !== undefined &&

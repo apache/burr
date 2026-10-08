@@ -44,6 +44,8 @@ export const AppStateView = (props: {
   highlightedActions: Step[] | undefined;
   hoverAction: Step | undefined;
   currentActionLocation: SequenceLocation | undefined;
+  graphAppId: string;
+  graphPartitionKey: string | null;
   displayGraphAsTab: boolean;
   setMinimized: (minimized: boolean) => void;
   isMinimized: boolean;
@@ -108,6 +110,8 @@ export const AppStateView = (props: {
             currentAction={currentStep}
             highlightedActions={props.highlightedActions}
             hoverAction={props.hoverAction}
+            appId={props.graphAppId}
+            partitionKey={props.graphPartitionKey}
           />
         )}
         {tab === 'insights' && (
