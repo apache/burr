@@ -248,8 +248,11 @@ class Graph:
             ),
         )
         for g_key, g_value in engine_kwargs.items():
+            if g_value is None and g_key.endswith("_attr"):
+                # Same as not passing it: keep Burr's defaults.
+                continue
             if isinstance(g_value, dict):
-                digraph_attr[g_key].update(**g_value)
+                digraph_attr.setdefault(g_key, {}).update(**g_value)
             else:
                 digraph_attr[g_key] = g_value
         digraph = graphviz.Digraph(**digraph_attr)
