@@ -444,9 +444,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             sequence_id,
         ]
 
-    def _identity_head(
-        self, key_prefix: Optional[str], partition_key: str, app_id: str
-    ) -> list:
+    def _identity_head(self, key_prefix: Optional[str], partition_key: str, app_id: str) -> list:
         return [
             _SYSTEM,
             _CODE_VERSION,
@@ -489,16 +487,12 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             )
         )
 
-    def _derive_head_key(
-        self, key_prefix: Optional[str], partition_key: str, app_id: str
-    ) -> str:
+    def _derive_head_key(self, key_prefix: Optional[str], partition_key: str, app_id: str) -> str:
         return self._sha256_hex(
             self._canonical_json(self._identity_head(key_prefix, partition_key, app_id))
         )
 
-    def _derive_membership_key(
-        self, key_prefix: Optional[str], partition_key: str
-    ) -> str:
+    def _derive_membership_key(self, key_prefix: Optional[str], partition_key: str) -> str:
         return self._sha256_hex(
             self._canonical_json(self._identity_membership(key_prefix, partition_key))
         )
@@ -667,9 +661,7 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             while len(self._tail_hints) > _MAX_TAIL_HINTS:
                 self._tail_hints.popitem(last=False)
 
-    def _register_membership(
-        self, membership_key, partition_key: str, app_id: str
-    ) -> None:
+    def _register_membership(self, membership_key, partition_key: str, app_id: str) -> None:
         hinted_page = self._get_tail_hint(membership_key)
         current_page = hinted_page if hinted_page is not None else 0
         current_key = self._membership_page_key(partition_key, current_page)

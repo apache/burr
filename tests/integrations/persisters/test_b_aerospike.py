@@ -36,11 +36,6 @@ from burr.integrations.persisters.b_aerospike import (
     AerospikeBasePersister,
     AerospikePersistenceConsistencyError,
     AerospikePersistenceUncertainOutcomeError,
-    _APP_BIN,
-    _POS_BIN,
-    _SEQ_BIN,
-    _STATE_BIN,
-    _STATUS_BIN,
 )
 
 
@@ -155,12 +150,8 @@ def test_none_partition_is_normalized_to_empty_string(aerospike_persister):
 
     assert set(aerospike_persister.list_app_ids("")) == {"app-none", "app-empty"}
     assert set(aerospike_persister.list_app_ids(None)) == {"app-none", "app-empty"}
-    assert (
-        aerospike_persister.load("", "app-none", 1)["state"].get_all() == {"value": "null"}
-    )
-    assert (
-        aerospike_persister.load(None, "app-empty", 1)["state"].get_all() == {"value": "empty"}
-    )
+    assert aerospike_persister.load("", "app-none", 1)["state"].get_all() == {"value": "null"}
+    assert aerospike_persister.load(None, "app-empty", 1)["state"].get_all() == {"value": "empty"}
 
 
 def test_literal_none_partition_remains_distinct_from_empty_string(aerospike_persister):
@@ -726,4 +717,3 @@ def test_initialize_is_idempotent_without_remote_calls():
     assert persister.is_initialized() is True
     client.assert_not_called()
     assert client.method_calls == []
-
