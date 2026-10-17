@@ -2037,6 +2037,21 @@ class Application(Generic[ApplicationStateType]):
     def get_next_action(self) -> Optional[Action]:
         return self._graph.get_next_node(self._state.get(PRIOR_STEP), self._state, self.entrypoint)
 
+    def get_prior_action(self) -> Optional[Action]:
+        """Returns the last action that ran, or None if nothing has run yet.
+
+        In a pre_run_step hook this is the action before the current one, in a post_run_step
+        hook it is the action that just finished. For streaming actions it only changes once
+        the stream is fully consumed. Raises a ValueError if the prior action is not in the
+        graph anymore, for example after restoring state saved with an older graph.
+
+        :return: The last action that ran, or None.
+        """
+        prior_step = self._state.get(PRIOR_STEP)
+        if prior_step is None:
+            return None
+        return self._graph.get_action(prior_step)
+
     def update_state(self, new_state: State[ApplicationStateType]):
         """Updates state -- this is meant to be called if you need to do
         anything with the state. For example:
