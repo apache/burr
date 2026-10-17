@@ -15,6 +15,14 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""FastAPI application for the Burr UI server (``burr`` CLI, ``python -m burr.tracking.server.run``).
+
+The demo routers (counter, chatbot, email assistant, streaming chatbot, deep researcher)
+each build their own local tracking client, and are not mounted unless the
+``BURR_SERVER_DEMOS`` environment variable is set to ``1``, ``true`` or ``yes``
+(case-insensitive). The ``burr-demo`` CLI entry point sets it; a plain ``burr`` does not.
+"""
+
 import asyncio
 import importlib
 import logging
@@ -81,6 +89,12 @@ except ImportError as e:
     # )
 
 SERVE_STATIC = os.getenv("BURR_SERVE_STATIC", "true").lower() == "true"
+
+
+def _demos_enabled() -> bool:
+    """Whether the demo routers should be mounted: ``BURR_SERVER_DEMOS`` set to a truthy value."""
+    return os.getenv("BURR_SERVER_DEMOS", "").strip().lower() in ("1", "true", "yes")
+
 
 SENTINEL_PARTITION_KEY = "__none__"
 
@@ -189,14 +203,23 @@ if app_spec.snapshotting:
     )(save_snapshot)
 
 
-def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
+def create_burr_ui_app(
+    serve_static: bool = SERVE_STATIC, mount_demos: Optional[bool] = None
+) -> FastAPI:
     """Create a fully-configured Burr UI FastAPI application.
 
-    This factory creates a new FastAPI instance with all Burr UI routes,
+    This factory creates a new FastAPI instance with all Burr UI routes, (optionally) the
     demo routers, and (optionally) static file serving configured.
+
+    The app does not authenticate requests. Serve it on localhost (the default for the
+    ``burr`` CLI and for ``python -m burr.tracking.server.run``) or put it behind an
+    authenticating reverse proxy when exposing it beyond the local machine.
 
     :param serve_static: Whether to serve the React UI static files. Defaults to
         the BURR_SERVE_STATIC environment variable (true by default).
+    :param mount_demos: Whether to mount the demo routers (counter, chatbot, ...). Defaults
+        to the BURR_SERVER_DEMOS environment variable, read when the app is created; the
+        demos are off unless it is set to 1, true or yes.
     :return: A fully-configured FastAPI application.
     """
     ui_app = FastAPI(lifespan=lifespan)
@@ -359,12 +382,19 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
                 burr_version = "unknown"
         return {"version": burr_version}
 
-    # Examples -- todo -- put them behind `if` statements
-    ui_app.include_router(chatbot.router, prefix="/api/v0/chatbot")
-    ui_app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")
-    ui_app.include_router(streaming_chatbot.router, prefix="/api/v0/streaming_chatbot")
-    ui_app.include_router(deep_researcher.router, prefix="/api/v0/deep_researcher")
-    ui_app.include_router(counter.router, prefix="/api/v0/counter")
+    # The demo routers are opt-in: each builds its own local tracking client on ~/.burr,
+    # so a plain `burr` server only mounts them when BURR_SERVER_DEMOS asks for it
+    # (`burr-demo` sets it).
+    if mount_demos is None:
+        mount_demos = _demos_enabled()
+    if mount_demos:
+        ui_app.include_router(chatbot.router, prefix="/api/v0/chatbot")
+        ui_app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")
+        ui_app.include_router(streaming_chatbot.router, prefix="/api/v0/streaming_chatbot")
+        ui_app.include_router(deep_researcher.router, prefix="/api/v0/deep_researcher")
+        ui_app.include_router(counter.router, prefix="/api/v0/counter")
+    else:
+        logger.info("Demo routers are not mounted; set BURR_SERVER_DEMOS=true to enable them.")
 
     if serve_static:
         base_asset_directory = str(files("burr").joinpath("tracking/server/build"))
@@ -429,6 +459,7 @@ def mount_burr_ui(
     path: str = "/burr",
     name: str = "burr-ui",
     serve_static: bool = SERVE_STATIC,
+    mount_demos: Optional[bool] = None,
 ) -> FastAPI:
     """Mount the Burr UI inside another FastAPI app.
 
@@ -437,9 +468,11 @@ def mount_burr_ui(
     :param name: Name for the mounted sub-application. Defaults to "burr-ui".
     :param serve_static: Whether to serve the React UI static files. Defaults to
         the BURR_SERVE_STATIC environment variable (true by default).
+    :param mount_demos: Whether to mount the demo routers. Defaults to the
+        BURR_SERVER_DEMOS environment variable (off unless set to 1, true or yes).
     :return: The mounted Burr UI FastAPI app instance.
     """
-    ui_app = create_burr_ui_app(serve_static=serve_static)
+    ui_app = create_burr_ui_app(serve_static=serve_static, mount_demos=mount_demos)
     parent_app.mount(path, ui_app, name=name)
     return ui_app
 
@@ -450,4 +483,8 @@ app = create_burr_ui_app()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))  # Default to 8000 if no PORT environment variable is set
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Bind to localhost unless BURR_SERVER_HOST says otherwise. The server has no built-in
+    # authentication, so only expose it beyond the local machine (e.g. BURR_SERVER_HOST=0.0.0.0)
+    # behind an authenticating reverse proxy.
+    host = os.getenv("BURR_SERVER_HOST", "127.0.0.1")
+    uvicorn.run(app, host=host, port=port)
