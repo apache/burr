@@ -16,7 +16,7 @@
 # under the License.
 
 [build-system]
-requires = ["flit_core >=3.2,<4"]
+requires = ["flit_core >=3.11,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
@@ -36,6 +36,7 @@ maintainers = [
 ]
 description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
+license = "Apache-2.0"
 license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
