@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from importlib.resources import files
 from pathlib import Path
 from types import ModuleType
-from typing import Optional
+from typing import List, Optional, Union
 
 from burr import system
 from burr.core.persistence import PersistedStateData
@@ -50,7 +50,9 @@ except ImportError as e:
 setup_logging(logging.INFO)
 
 
-def _command(command: str, capture_output: bool, addl_env: Optional[dict] = None) -> str:
+def _command(
+    command: Union[str, List[str]], capture_output: bool, addl_env: Optional[dict] = None
+) -> str:
     """Runs a simple command"""
     if addl_env is None:
         addl_env = {}
@@ -59,18 +61,18 @@ def _command(command: str, capture_output: bool, addl_env: Optional[dict] = None
     logger.info(f"Running command: {command}")
     if isinstance(command, str):
         command = command.split(" ")
-        if capture_output:
-            try:
-                return (
-                    subprocess.check_output(command, stderr=subprocess.PIPE, shell=False, env=env)
-                    .decode()
-                    .strip()
-                )
-            except subprocess.CalledProcessError as e:
-                print(e.stdout.decode())
-                print(e.stderr.decode())
-                raise e
-        subprocess.run(command, shell=False, check=True, env=env)
+    if capture_output:
+        try:
+            return (
+                subprocess.check_output(command, stderr=subprocess.PIPE, shell=False, env=env)
+                .decode()
+                .strip()
+            )
+        except subprocess.CalledProcessError as e:
+            print(e.stdout.decode())
+            print(e.stderr.decode())
+            raise e
+    subprocess.run(command, shell=False, check=True, env=env)
 
 
 def _get_git_root() -> str:
@@ -171,9 +173,18 @@ def _run_server(
     # TODO: Implement server running logic here
     # Example: Start a web server, configure ports, etc.
     logger.info(f"Starting server on port {port}")
-    cmd = f"{sys.executable} -m uvicorn burr.tracking.server.run:app --port {port} --host {host}"
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "burr.tracking.server.run:app",
+        "--port",
+        str(port),
+        "--host",
+        host,
+    ]
     if dev_mode:
-        cmd += " --reload"
+        cmd.append("--reload")
 
     if backend == "local" and not no_copy_demo_data:
         # TODO: fix this so we don't leak burr_path here since that's the value the local backend users
