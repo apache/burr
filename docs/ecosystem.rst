@@ -115,6 +115,9 @@ See :doc:`reference/persister` for the full API reference.
    * - **MongoDB**
      - Document-store persistence via ``pymongo``.
      - :doc:`Reference <reference/persister>`
+   * - **Aerospike**
+     - Distributed key-value persistence via the Aerospike Python client.
+     - :doc:`Reference <reference/persister>`
 
 ----
 
