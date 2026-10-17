@@ -15,19 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import os
 from pathlib import Path
 
 from tortoise import Tortoise, run_async
 
 from burr.tracking.server.s3 import settings
 
-DB_PATH = Path("~/.burr_server/db.sqlite3").expanduser()
-
 
 async def connect():
-    if not os.path.exists(DB_PATH):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    db_path = Path(settings.DB_PATH).expanduser()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     await Tortoise.init(
         config=settings.TORTOISE_ORM,
     )
