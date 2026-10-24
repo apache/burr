@@ -115,15 +115,18 @@ Launch Burr UI from a notebook
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You can launch the Burr UI from a notebook or Google Colab using the ``%burr_ui`` "IPython magic".
-This will print the URL to access the Burr UI web app.
+This will show the Burr UI web app in an iframe below the cell. Pass ``--no-iframe`` to print its URL
+instead (see :ref:`ui-notebook` for all options).
 
 .. code-block:: python
 
-    # in one cell - expose the port:
+    # in one cell - show the UI inline:
     %load_ext burr.integrations.notebook
     %burr_ui
 
-    "Burr UI: http://127.0.0.1:7241"
+    # or print the URL instead of embedding the UI:
+    %burr_ui --no-iframe
+    # → "Burr UI: http://127.0.0.1:7241"
 
 .. code-block:: python
 
