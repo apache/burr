@@ -1105,12 +1105,13 @@ class Application(Generic[ApplicationStateType]):
                 return None
             if inputs is None:
                 inputs = {}
+            action_inputs = self._process_inputs(inputs, next_action)
             if _run_hooks:
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "pre_run_step",
                     action=next_action,
                     state=self._state,
-                    inputs=inputs,
+                    inputs=action_inputs,
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
@@ -1124,16 +1125,13 @@ class Application(Generic[ApplicationStateType]):
                     # but that's safer than assuming its OK to launch a thread
                     # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
                     # which this is supposed to be its OK).
-                    # In this case we allow the self._step to do input processing
                     # Execute the synchronous step without hooks here. Async hooks still run
                     # afterward so async persisters can save the completed state of synchronous steps.
                     output = self._step(inputs=inputs, _run_hooks=False)
                     if output is None:
                         return None
                     next_action, result, new_state = output
-                # In this case we want to process inputs because we run the function directly
                 else:
-                    action_inputs = self._process_inputs(inputs, next_action)
                     if next_action.single_step:
                         result, new_state = await _arun_single_step_action(
                             next_action, self._state, inputs=action_inputs

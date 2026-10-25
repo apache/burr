@@ -3401,6 +3401,90 @@ async def test_application_run_step_runs_hooks():
     assert len(hooks[0].pre_run_execute_calls) == 1
 
 
+async def test_astep_processes_inputs_before_pre_run_step_hook():
+    class InputCaptureHook(PreRunStepHook):
+        def __init__(self):
+            self.captured_inputs = []
+
+        def pre_run_step(self, *, inputs, **kwargs):
+            self.captured_inputs.append(inputs)
+
+    @action(reads=[], writes=['val'])
+    def sync_noop(state: State) -> State:
+        return state.update(val=1)
+
+    @action(reads=[], writes=['val'])
+    async def async_noop(state: State) -> State:
+        return state.update(val=2)
+
+    # 1. Test sync action executed via astep()
+    sync_hook = InputCaptureHook()
+    app_sync = (
+        ApplicationBuilder()
+        .with_actions(sync_noop)
+        .with_entrypoint('sync_noop')
+        .with_hooks(sync_hook)
+        .build()
+    )
+    await app_sync.astep(inputs={'unused': 123})
+    assert sync_hook.captured_inputs == [{}]
+
+    # 2. Test async action executed via astep()
+    async_hook = InputCaptureHook()
+    app_async = (
+        ApplicationBuilder()
+        .with_actions(async_noop)
+        .with_entrypoint('async_noop')
+        .with_hooks(async_hook)
+        .build()
+    )
+    await app_async.astep(inputs={'unused': 123})
+    assert async_hook.captured_inputs == [{}]
+
+
+async def test_astep_validates_inputs_before_pre_run_step_hook():
+    class InputCaptureHook(PreRunStepHook):
+        def __init__(self):
+            self.call_count = 0
+
+        def pre_run_step(self, *, inputs, **kwargs):
+            self.call_count += 1
+
+    @action(reads=[], writes=['val'])
+    def sync_requires_param(state: State, required_param: int) -> State:
+        return state.update(val=required_param)
+
+    @action(reads=[], writes=['val'])
+    async def async_requires_param(state: State, required_param: int) -> State:
+        return state.update(val=required_param)
+
+    # 1. Sync action under astep: missing required input should raise ValueError before pre_run_step
+    hook_sync = InputCaptureHook()
+    app_sync = (
+        ApplicationBuilder()
+        .with_actions(sync_requires_param)
+        .with_entrypoint('sync_requires_param')
+        .with_hooks(hook_sync)
+        .build()
+    )
+    with pytest.raises(ValueError):
+        await app_sync.astep(inputs={})
+    assert hook_sync.call_count == 0
+
+    # 2. Async action under astep: missing required input should raise ValueError before pre_run_step
+    hook_async = InputCaptureHook()
+    app_async = (
+        ApplicationBuilder()
+        .with_actions(async_requires_param)
+        .with_entrypoint('async_requires_param')
+        .with_hooks(hook_async)
+        .build()
+    )
+    with pytest.raises(ValueError):
+        await app_async.astep(inputs={})
+    assert hook_async.call_count == 0
+
+
 def test_application_post_application_create_hook():
     class PostApplicationCreateTracker(PostApplicationCreateHook):
         def __init__(self):
