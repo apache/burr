@@ -665,3 +665,29 @@ def test_local_tracking_client_copy():
     assert copy.project_id == tracking_client.project_id
     assert copy.serde_kwargs == tracking_client.serde_kwargs
     assert copy.storage_dir == tracking_client.storage_dir
+
+
+async def test_astream_result_failing_action_keeps_original_exception(tmpdir: str):
+    """Tracking must not change the exception the application raises.
+
+    A non-streaming action never reaches pre_start_stream, so the error path must not
+    call post_end_stream; LocalTrackingClient.post_end_stream indexes state that only
+    pre_start_stream creates, and the resulting KeyError used to replace the action's
+    exception.
+    """
+
+    @action(reads=[], writes=[])
+    def failing_action(state: State) -> State:
+        raise ValueError("original failure")
+
+    app = (
+        burr.core.ApplicationBuilder()
+        .with_actions(failing_action=failing_action)
+        .with_entrypoint("failing_action")
+        .with_tracker(project="test-project", tracker="local", params={"storage_dir": tmpdir})
+        .with_identifiers(app_id=str(uuid.uuid4()))
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="original failure"):
+        await app.astream_result(halt_after=["failing_action"])
