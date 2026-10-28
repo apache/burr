@@ -83,6 +83,10 @@ redis = [
   "redis"
 ]
 
+aerospike = [
+  "aerospike>=19.0.0; python_version >= \"3.10\""
+]
+
 release = [
   "jinja2",
 ]
@@ -102,6 +106,7 @@ tests = [
   "apache-burr[psycopg2]",
   "apache-burr[pymongo]",
   "apache-burr[redis]",
+  "apache-burr[aerospike]",
   "apache-burr[opentelemetry]",
   "apache-burr[langfuse]",
   "apache-burr[haystack]",
@@ -122,6 +127,7 @@ documentation = [
   "apache-burr[psycopg2]",
   "apache-burr[pymongo]",
   "apache-burr[redis]",
+  "apache-burr[aerospike]",
   "apache-burr[ray]",
   "apache-burr[streamlit]",
   "sphinxcontrib-googleanalytics"
