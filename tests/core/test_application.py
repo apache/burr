@@ -2501,6 +2501,32 @@ async def test_app_a_run_async_and_sync():
     assert result["count"] > 20
 
 
+async def test_astream_result_failing_non_streaming_action_does_not_end_stream():
+    """A non-streaming action never starts a stream, so a failure must not fire
+    post_end_stream without a matching pre_start_stream. Hooks that keep per-stream
+    state (e.g. the local tracker) blow up on the unmatched callback and replace the
+    action's exception."""
+    stream_event_tracker = StreamEventCaptureTracker()
+
+    @action(reads=[], writes=[])
+    def failing_action(state: State) -> State:
+        raise ValueError("original failure")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(failing_action=failing_action)
+        .with_entrypoint("failing_action")
+        .with_hooks(stream_event_tracker)
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="original failure"):
+        await app.astream_result(halt_after=["failing_action"])
+
+    assert stream_event_tracker.pre_start_stream_calls == []
+    assert stream_event_tracker.post_end_stream_calls == []
+
+
 def test_stream_result_halt_after_unique_ordered_sequence_id():
     action_tracker = CallCaptureTracker()
     stream_event_tracker = StreamEventCaptureTracker()
