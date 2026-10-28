@@ -90,6 +90,7 @@ release = [
 tests = [
   "pytest",
   "pytest-asyncio",
+  "ipython",
   "apache-burr[graphviz]",
   "apache-burr[hamilton]",
   "langchain_core",
