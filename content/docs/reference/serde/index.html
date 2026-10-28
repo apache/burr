@@ -500,6 +500,9 @@ a collision with other kwargs that might be passed in.</p>
 deserialize function to use, the serialize function needs to return a dictionary and have
 <code class="docutils literal notranslate"><span class="pre">burr.core.serde.KEY</span></code> as one of the keys mapping to the appropriate value.
 This is used to identify the deserialization function to use.</p>
+<p><code class="docutils literal notranslate"><span class="pre">burr.core.serde.KEY</span></code> is reserved for this. A dictionary of your own that contains it is
+still saved and loaded back as is: Burr wraps it as <code class="docutils literal notranslate"><span class="pre">burr.dict</span></code> when serializing, so don’t
+use <code class="docutils literal notranslate"><span class="pre">burr.dict</span></code> as the key for your own deserializer.</p>
 <section id="out-of-the-box-implementations">
 <h2>Out of the box Implementations<a class="headerlink" href="#out-of-the-box-implementations" title="Link to this heading">¶</a></h2>
 <p>The following implementations are available assuming you have the right dependencies in your environment:</p>
