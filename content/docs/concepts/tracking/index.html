@@ -497,12 +497,15 @@ run it with the following command:</p>
 <section id="launch-burr-ui-from-a-notebook">
 <h3>Launch Burr UI from a notebook<a class="headerlink" href="#launch-burr-ui-from-a-notebook" title="Link to this heading">¶</a></h3>
 <p>You can launch the Burr UI from a notebook or Google Colab using the <code class="docutils literal notranslate"><span class="pre">%burr_ui</span></code> “IPython magic”.
-This will print the URL to access the Burr UI web app.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># in one cell - expose the port:</span>
+This will show the Burr UI web app in an iframe below the cell. Pass <code class="docutils literal notranslate"><span class="pre">--no-iframe</span></code> to print its URL
+instead (see <a class="reference internal" href="../../ui/notebook/#ui-notebook"><span class="std std-ref">Notebook / Colab</span></a> for all options).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># in one cell - show the UI inline:</span>
 <span class="o">%</span><span class="n">load_ext</span> <span class="n">burr</span><span class="o">.</span><span class="n">integrations</span><span class="o">.</span><span class="n">notebook</span>
 <span class="o">%</span><span class="n">burr_ui</span>
 
-<span class="s2">"Burr UI: http://127.0.0.1:7241"</span>
+<span class="c1"># or print the URL instead of embedding the UI:</span>
+<span class="o">%</span><span class="n">burr_ui</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">iframe</span>
+<span class="c1"># → "Burr UI: http://127.0.0.1:7241"</span>
 </pre></div>
 </div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># But you need to expose the port to the browser:</span>
