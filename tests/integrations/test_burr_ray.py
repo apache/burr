@@ -142,3 +142,208 @@ def test_ray_executor_end_to_end_persistence(init, tmpdir):
     )
     *_, final_state = containing_application.run(halt_after=["final"])
     assert len(final_state["counts"]) == MAX_NUMBER - MIN_NUMBER
+
+
+def _map_blob_writes_app(app_id: str, object_store, tracker=None):
+    @action(reads=["n"], writes=["blob"])
+    def write_blob(state: State, __context: ApplicationContext) -> State:
+        ref = __context.object_store.put_artifact(f"blob-{state['n']}".encode())
+        return state.update(blob=ref)
+
+    class MapBlobs(MapStates):
+        def states(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[State, None, None]:
+            for n in range(3):
+                yield state.update(n=n)
+
+        def action(self, state: State, inputs: Dict[str, Any]) -> SubgraphType:
+            return RunnableGraph.create(write_blob)
+
+        def reduce(self, state: State, results: Generator[State, None, None]) -> State:
+            return state.update(refs=[result["blob"] for result in results])
+
+        @property
+        def writes(self) -> list[str]:
+            return ["refs"]
+
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+    builder = (
+        ApplicationBuilder()
+        .with_actions(map_blobs=MapBlobs())
+        .with_transitions()
+        .with_identifiers(app_id=app_id)
+        .with_parallel_executor(RayExecutor)
+        .with_object_store(object_store)
+        .with_entrypoint("map_blobs")
+    )
+    if tracker is not None:
+        builder = builder.with_tracker(tracker)
+    return builder.build()
+
+
+def test_ray_executor_ships_s3_object_store_to_workers(init):
+    """Regression test: the object store is carried to Ray workers by the context and the
+    sub-application tasks, so it must survive pickling -- S3ArtifactStore drops its boto3 client
+    and rebuilds it on the worker. The tasks here never call S3; this only exercises shipping the
+    store and running the graph."""
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    store = S3ArtifactStore.from_values(
+        bucket="my-bucket",
+        client_kwargs={
+            "region_name": "us-east-1",
+            "aws_access_key_id": "test",
+            "aws_secret_access_key": "test",
+        },
+    )
+
+    @action(reads=["n"], writes=["n_squared"])
+    def square(state: State, __context: ApplicationContext) -> State:
+        assert __context.object_store.bucket == "my-bucket"
+        return state.update(n_squared=state["n"] ** 2)
+
+    class MapSquares(MapStates):
+        def states(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[State, None, None]:
+            for n in range(3):
+                yield state.update(n=n)
+
+        def action(self, state: State, inputs: Dict[str, Any]) -> SubgraphType:
+            return RunnableGraph.create(square)
+
+        def reduce(self, state: State, results: Generator[State, None, None]) -> State:
+            return state.update(squares=sorted(result["n_squared"] for result in results))
+
+        @property
+        def writes(self) -> list[str]:
+            return ["squares"]
+
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(map_squares=MapSquares())
+        .with_transitions()
+        .with_parallel_executor(RayExecutor)
+        .with_object_store(store)
+        .with_entrypoint("map_squares")
+        .build()
+    )
+    *_, final_state = app.run(halt_after=["map_squares"])
+    assert final_state["squares"] == [0, 1, 4]
+
+
+def test_ray_executor_workers_write_and_track_artifacts_through_object_store(init, tmpdir):
+    """Sub-applications on Ray workers write artifacts through the shipped store, and the
+    cascaded tracker serializes their state (containing ArtifactRefs) on the worker; the parent
+    can read every artifact back."""
+    import glob
+    import json
+    import os
+
+    from burr.core.artifacts import LocalFileSystemArtifactStore
+    from burr.tracking.client import LocalTrackingClient
+
+    store = LocalFileSystemArtifactStore(str(tmpdir / "blobs"))
+    tracker = LocalTrackingClient(project="ray_artifacts", storage_dir=str(tmpdir / "tracking"))
+    app = _map_blob_writes_app(f"ray_artifacts_{uuid.uuid4()}", store, tracker=tracker)
+
+    *_, final_state = app.run(halt_after=["map_blobs"])
+
+    assert sorted(store.get_artifact(ref) for ref in final_state["refs"]) == [
+        b"blob-0",
+        b"blob-1",
+        b"blob-2",
+    ]
+    child_states = []
+    for path in glob.glob(os.path.join(str(tmpdir), "tracking", "ray_artifacts", "*", "log.jsonl")):
+        for line in open(path):
+            entry = json.loads(line)
+            if entry["type"] == "end_entry" and "blob" in entry["state"]:
+                child_states.append(entry["state"])
+    assert len(child_states) == 3
+    assert all(state["blob"]["__burr_serde__"] == "ArtifactRef" for state in child_states)
+
+
+def test_ray_workers_persist_and_reload_state_through_store_dependent_serde(init, tmpdir):
+    """Type- and field-based serde that use the object store run on Ray workers both when child
+    state is saved and when it is reloaded: the first run stops each child after `produce`; the
+    second resumes the same children, which deserialize their state on the worker (into lazy
+    values) and continue with `summarize`."""
+    from burr.core import GraphBuilder
+    from burr.core.artifacts import LocalFileSystemArtifactStore
+    from burr.tracking.client import LocalTrackingClient
+
+    from tests.integrations import ray_artifact_serde
+
+    child_graph = (
+        GraphBuilder()
+        .with_actions(produce=ray_artifact_serde.produce, summarize=ray_artifact_serde.summarize)
+        .with_transitions(("produce", "summarize"))
+        .build()
+    )
+
+    class MapChildren(MapStates):
+        def __init__(self, halt_after: str):
+            super().__init__()
+            self.halt_after = halt_after
+
+        def states(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[State, None, None]:
+            for n in range(3):
+                yield state.update(n=n)
+
+        def action(self, state: State, inputs: Dict[str, Any]) -> SubgraphType:
+            return RunnableGraph(child_graph, entrypoint="produce", halt_after=[self.halt_after])
+
+        def reduce(self, state: State, results: Generator[State, None, None]) -> State:
+            results = list(results)
+            return state.update(
+                summaries=sorted(r.get("summary") for r in results if "summary" in r),
+                loaded_lazily=[r.get("loaded_lazily") for r in results],
+            )
+
+        @property
+        def writes(self) -> list[str]:
+            return ["summaries", "loaded_lazily"]
+
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+    store = LocalFileSystemArtifactStore(str(tmpdir / "blobs"))
+    tracker = LocalTrackingClient(project="ray_serde", storage_dir=str(tmpdir / "tracking"))
+
+    def run(halt_after: str) -> State:
+        app = (
+            ApplicationBuilder()
+            .with_actions(map_children=MapChildren(halt_after))
+            .with_transitions()
+            .with_identifiers(app_id="ray_serde_parent")
+            .with_parallel_executor(RayExecutor)
+            .with_object_store(store)
+            .with_tracker(tracker)
+            .initialize_from(
+                tracker,
+                resume_at_next_action=False,
+                default_state={},
+                default_entrypoint="map_children",
+            )
+            .build()
+        )
+        *_, state = app.run(halt_after=["map_children"])
+        return state
+
+    run(halt_after="produce")
+    final_state = run(halt_after="summarize")
+
+    assert final_state["summaries"] == [f"blob-{n}|report-{n}" for n in range(3)]
+    assert final_state["loaded_lazily"] == [True, True, True]

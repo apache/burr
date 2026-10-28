@@ -329,7 +329,9 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         data = await self.connection.hgetall(key)
         if not data:
             return None
-        _state = state.State.deserialize(json.loads(data[b"state"].decode()), **self.serde_kwargs)
+        _state = await state.State.adeserialize(
+            json.loads(data[b"state"].decode()), **self.serde_kwargs
+        )
         return {
             "partition_key": partition_key,
             "app_id": app_id,
@@ -372,7 +374,7 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         key = self.create_key(app_id, partition_key, sequence_id)
         if await self.connection.exists(key):
             raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")
-        json_state = json.dumps(state.serialize(**self.serde_kwargs))
+        json_state = json.dumps(await state.aserialize(**self.serde_kwargs))
         await self.connection.hset(
             key,
             mapping={
