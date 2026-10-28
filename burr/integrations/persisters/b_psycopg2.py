@@ -52,9 +52,13 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         p = PostgreSQLPersister.from_values("postgres", "postgres", "my_password",
                                            "localhost", 54320, table_name="burr_state")
 
-    ``is_initialized``, ``list_app_ids``, ``load`` and ``save`` each end their transaction before
-    returning (commit on success, rollback on failure). Give the persister a connection of its own
-    rather than one you keep your own transaction open on.
+    A persister built with ``from_values`` or ``from_config`` owns its connection, so
+    ``list_app_ids``, ``load``, ``save`` and an uncached ``is_initialized`` each end their
+    transaction: they commit after the database work succeeds and attempt a rollback if it
+    raises. A connection passed to the constructor keeps its existing behavior by default: of these
+    four, only ``save`` commits, and a failed call leaves the rollback to the caller. Pass
+    ``manage_transactions=True`` to get per-call transactions on a connection you give it, which is
+    the recommended setup for a connection used only by the persister.
     """
 
     PARTITION_KEY_DEFAULT = ""
@@ -86,17 +90,29 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         connection = psycopg2.connect(
             dbname=db_name, user=user, password=password, host=host, port=port
         )
-        return cls(connection, table_name)
+        return cls(connection, table_name, manage_transactions=True)
 
-    def __init__(self, connection, table_name: str = "burr_state", serde_kwargs: dict = None):
+    def __init__(
+        self,
+        connection,
+        table_name: str = "burr_state",
+        serde_kwargs: dict = None,
+        manage_transactions: bool = False,
+    ):
         """Constructor
 
         :param connection: the connection to the PostgreSQL database.
         :param table_name:  the table name to store things under.
+        :param manage_transactions: if True, ``load``, ``list_app_ids``, ``save`` and an uncached
+            ``is_initialized`` commit after their database work succeeds and attempt a rollback if
+            it raises. Leave it False when the connection also carries your own transaction; then
+            reads neither commit nor roll back, ``save`` commits on success, and a failed call
+            leaves the rollback to you.
         """
         self.table_name = table_name
         self.connection = connection
         self.serde_kwargs = serde_kwargs or {}
+        self.manage_transactions = manage_transactions
         self._initialized = False
 
     def __enter__(self):
@@ -111,13 +127,23 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         self.serde_kwargs = serde_kwargs
 
     @contextlib.contextmanager
-    def _transaction(self):
-        """Yields a cursor and ends the transaction when the block exits: commit on success,
-        rollback on an exception. psycopg2 opens a transaction on the first statement and keeps it
-        open, so without this a failed insert leaves the connection in an aborted transaction and
-        a read leaves it idle in transaction. This doesn't use ``with self.connection`` because
-        psycopg2 refuses to re-enter it from a caller's own ``with connection`` block.
+    def _transaction(self, commit: bool = False):
+        """Yields a cursor and closes it when the block exits.
+
+        With ``manage_transactions``, it also ends the transaction: commit when the block
+        succeeds, and a rollback attempt when it raises, ``KeyboardInterrupt`` included. psycopg2 opens a transaction on the first statement and keeps it open, so
+        without this a failed insert leaves the connection in an aborted transaction and a read
+        leaves it idle in transaction. This doesn't use ``with self.connection`` because psycopg2
+        refuses to re-enter it from a caller's own ``with connection`` block. Without
+        ``manage_transactions``, the transaction belongs to the caller and only ``commit=True``
+        (used by ``save``) commits it on success.
         """
+        if not self.manage_transactions:
+            with self.connection.cursor() as cursor:
+                yield cursor
+            if commit:
+                self.connection.commit()
+            return
         try:
             with self.connection.cursor() as cursor:
                 yield cursor
@@ -279,7 +305,7 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
             status,
         )
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        with self._transaction() as cursor:
+        with self._transaction(commit=True) as cursor:
             cursor.execute(
                 f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
                 "VALUES (%s, %s, %s, %s, %s, %s)",
@@ -317,6 +343,8 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
 
     def __setstate__(self, state: dict):
         connection_params = state.pop("connection_params")
+        # Persisters pickled before manage_transactions existed never managed transactions.
+        state.setdefault("manage_transactions", False)
         # we assume normal psycopg2 client.
         self.connection = psycopg2.connect(**connection_params)
         self.__dict__.update(state)

@@ -18,6 +18,7 @@
 import datetime
 import os
 import pickle
+from unittest import mock
 
 import psycopg2
 import psycopg2.extensions
@@ -65,7 +66,8 @@ def test_list_app_ids_with_default_partition_key(postgresql_persister):
     assert "no_pk_list_app" in postgresql_persister.list_app_ids(None)
 
 
-def test_calls_close_their_cursors(postgresql_persister):
+@pytest.mark.parametrize("manage_transactions", [True, False])
+def test_calls_close_their_cursors(postgresql_persister, manage_transactions):
     """Each call closes the cursor it opens instead of leaving it to the garbage collector."""
     real = postgresql_persister.connection
     opened = []
@@ -79,11 +81,14 @@ def test_calls_close_their_cursors(postgresql_persister):
         def __getattr__(self, name):
             return getattr(real, name)
 
-    recording = PostgreSQLPersister(RecordingConnection(), table_name="testtable")
+    recording = PostgreSQLPersister(
+        RecordingConnection(), table_name="testtable", manage_transactions=manage_transactions
+    )
+    partition_key = f"txn-cursor-{manage_transactions}"
     recording.is_initialized()
-    recording.save("txn-cursor", "app", 1, "pos", state.State({"a": 1}), "completed")
-    recording.load("txn-cursor", "app")
-    recording.list_app_ids("txn-cursor")
+    recording.save(partition_key, "app", 1, "pos", state.State({"a": 1}), "completed")
+    recording.load(partition_key, "app")
+    recording.list_app_ids(partition_key)
     assert len(opened) == 4
     assert all(cursor.closed for cursor in opened)
 
@@ -181,10 +186,71 @@ def test_interrupted_call_rolls_back(postgresql_persister):
         def __getattr__(self, name):
             return getattr(real, name)
 
-    interrupted = PostgreSQLPersister(ConnectionProxy(), table_name="testtable")
+    interrupted = PostgreSQLPersister(
+        ConnectionProxy(), table_name="testtable", manage_transactions=True
+    )
     with pytest.raises(KeyboardInterrupt):
         interrupted.load("txn-interrupt", "app")
     assert real.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_IDLE
+
+
+def test_transaction_management_defaults(postgresql_persister):
+    """from_values opens the connection, so it opts in; a supplied one is off unless asked."""
+    assert postgresql_persister.manage_transactions
+    supplied = mock.MagicMock()
+    assert not PostgreSQLPersister(supplied).manage_transactions
+    assert PostgreSQLPersister(supplied, manage_transactions=True).manage_transactions
+
+
+def test_injected_connection_keeps_the_callers_transaction(postgresql_persister):
+    """By default a persister on a caller's connection neither commits nor rolls back reads."""
+    connection = psycopg2.connect(
+        dbname="postgres", user="postgres", password="postgres", host="localhost", port=5432
+    )
+    try:
+        persister = PostgreSQLPersister(connection, table_name="testtable")
+        with connection.cursor() as cursor:
+            cursor.execute("CREATE TEMP TABLE caller_work (x int)")
+            cursor.execute("INSERT INTO caller_work VALUES (1)")
+
+        def caller_work():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT x FROM caller_work")
+                return cursor.fetchall()
+
+        assert persister.load("txn-injected", "missing") is None
+        assert caller_work() == [(1,)]
+        persister.list_app_ids("txn-injected")
+        assert caller_work() == [(1,)]
+        persister.is_initialized()
+        assert caller_work() == [(1,)]
+        assert connection.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INTRANS
+        connection.rollback()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT to_regclass('pg_temp.caller_work')")
+            assert cursor.fetchone()[0] is None
+    finally:
+        connection.close()
+
+
+def test_injected_connection_leaves_failures_to_the_caller(postgresql_persister):
+    """By default a failed call on a caller's connection doesn't roll back, as on main."""
+    connection = psycopg2.connect(
+        dbname="postgres", user="postgres", password="postgres", host="localhost", port=5432
+    )
+    try:
+        persister = PostgreSQLPersister(connection, table_name="testtable")
+        persister.save("txn-injected-fail", "app", 1, "pos", state.State({}), "completed")
+        with pytest.raises(psycopg2.errors.UniqueViolation):
+            persister.save("txn-injected-fail", "app", 1, "pos", state.State({}), "completed")
+        assert connection.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR
+        connection.rollback()
+        missing_table = PostgreSQLPersister(connection, table_name="no_such_table")
+        with pytest.raises(psycopg2.errors.UndefinedTable):
+            missing_table.load("txn-injected-fail", "app")
+        assert connection.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR
+    finally:
+        connection.close()
 
 
 def test_persister_works_inside_a_callers_connection_block(postgresql_persister):
