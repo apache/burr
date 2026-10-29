@@ -2029,6 +2029,48 @@ async def test_app_astep_with_inputs():
     assert state.subset("count", "tracker").get_all() == {"count": 2, "tracker": [2]}
 
 
+@pytest.mark.parametrize(
+    "counter_action",
+    [base_counter_action_with_inputs, base_counter_action_with_inputs_async],
+)
+async def test_app_astep_hook_receives_processed_inputs(counter_action):
+    tracker = CallCaptureTracker()
+    app = (
+        ApplicationBuilder()
+        .with_actions(counter=counter_action)
+        .with_entrypoint("counter")
+        .with_state(count=0)
+        .with_hooks(tracker)
+        .build()
+    )
+
+    await app.astep(inputs={"additional_increment": 1, "unused": "ignored"})
+
+    assert tracker.pre_called[0][1]["inputs"] == {"additional_increment": 1}
+
+
+@pytest.mark.parametrize(
+    "counter_action",
+    [base_counter_action_with_inputs, base_counter_action_with_inputs_async],
+)
+async def test_app_astep_validates_inputs_before_hooks(counter_action):
+    tracker = CallCaptureTracker()
+    app = (
+        ApplicationBuilder()
+        .with_actions(counter=counter_action)
+        .with_entrypoint("counter")
+        .with_state(count=0)
+        .with_hooks(tracker)
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="missing required inputs"):
+        await app.astep(inputs={})
+
+    assert tracker.pre_called == []
+    assert tracker.post_called == []
+
+
 async def test_app_astep_with_inputs_missing():
     """Tests that we can run an async step in an app"""
     counter_action = base_single_step_counter_with_inputs_async.with_name("counter_async")
