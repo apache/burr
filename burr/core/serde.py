@@ -138,3 +138,37 @@ def deserialize_escaped_dict(value: dict, **kwargs) -> dict[str, Any]:
 @serialize.register(list)
 def serialize_list(value: list, **kwargs) -> list[Any]:
     return [serialize(v, **kwargs) for v in value]
+
+
+TUPLE = "builtins.tuple"
+SET = "builtins.set"
+FROZENSET = "builtins.frozenset"
+
+
+@serialize.register(tuple)
+def serialize_tuple(value: tuple, **kwargs) -> dict[str, Any]:
+    """Serializes a tuple so it is restored as a tuple, not as ``str(value)``."""
+    return {KEY: TUPLE, PAYLOAD_KEY: [serialize(v, **kwargs) for v in value]}
+
+
+@deserializer.register(TUPLE)
+def deserialize_tuple(value: dict, **kwargs) -> tuple:
+    return tuple(deserialize(v, **kwargs) for v in value[PAYLOAD_KEY])
+
+
+@serialize.register(set)
+@serialize.register(frozenset)
+def serialize_set(value: Union[set, frozenset], **kwargs) -> dict[str, Any]:
+    """Serializes a set or frozenset so it is restored as one, not as ``str(value)``."""
+    key = FROZENSET if isinstance(value, frozenset) else SET
+    return {KEY: key, PAYLOAD_KEY: [serialize(v, **kwargs) for v in value]}
+
+
+@deserializer.register(SET)
+def deserialize_set(value: dict, **kwargs) -> set:
+    return {deserialize(v, **kwargs) for v in value[PAYLOAD_KEY]}
+
+
+@deserializer.register(FROZENSET)
+def deserialize_frozenset(value: dict, **kwargs) -> frozenset:
+    return frozenset(deserialize(v, **kwargs) for v in value[PAYLOAD_KEY])
