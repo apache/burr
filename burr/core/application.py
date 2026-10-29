@@ -1587,10 +1587,11 @@ class Application(Generic[ApplicationStateType]):
                     partition_key=self._partition_key,
                 )
 
-            action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
+                # ``_step`` processes the inputs itself -- processing them here as
+                # well would inject ``__context``/``__tracer`` twice.
                 action, result, state = self._step(inputs=inputs, _run_hooks=False)
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "post_run_step",
@@ -1607,6 +1608,8 @@ class Application(Generic[ApplicationStateType]):
                 )
                 call_execute_method_wrapper.call_post(self, None)
                 return out
+            # Only the streaming path below needs the processed inputs.
+            action_inputs = self._process_inputs(inputs, next_action)
             # Both the next cases start with this
             self._adapter_set.call_all_lifecycle_hooks_sync(
                 "pre_start_stream",
@@ -1842,10 +1845,11 @@ class Application(Generic[ApplicationStateType]):
                 )
                 await call_execute_method_wrapper.acall_post(self, exc)
 
-            action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
+                # ``_astep`` processes the inputs itself -- processing them here as
+                # well would inject ``__context``/``__tracer`` twice.
                 action, result, state = await self._astep(inputs=inputs, _run_hooks=False)
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",
@@ -1861,6 +1865,8 @@ class Application(Generic[ApplicationStateType]):
                 return action, AsyncStreamingResultContainer.pass_through(
                     results=result, final_state=state
                 )
+            # Only the streaming path below needs the processed inputs.
+            action_inputs = self._process_inputs(inputs, next_action)
             await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "pre_start_stream",
                 action=next_action.name,
