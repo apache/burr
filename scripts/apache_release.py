@@ -916,7 +916,9 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str], list[tuple[str
         if os.path.exists(path):
             backup_dir = tempfile.mkdtemp(prefix="apache-release-wheel-")
             backup_path = os.path.join(backup_dir, os.path.basename(path))
-            os.replace(path, backup_path)
+            # shutil.move, not os.replace: the temp dir can be on another filesystem
+            # (tmpfs /tmp on ubuntu-26.04 runners), where a rename fails with EXDEV.
+            shutil.move(path, backup_path)
             removed_files.append((path, backup_path))
             print(f"    ✓ Temporarily excluded {path}")
 
@@ -939,7 +941,7 @@ def _cleanup_wheel_contents(
 
     for original_path, backup_path in removed_files:
         if os.path.exists(backup_path):
-            os.replace(backup_path, original_path)
+            shutil.move(backup_path, original_path)
             print(f"  Restored {original_path}")
             backup_dir = os.path.dirname(backup_path)
             if os.path.isdir(backup_dir):
