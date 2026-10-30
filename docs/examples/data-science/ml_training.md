@@ -51,7 +51,7 @@ as well as easy reuse.
 
 ### Visibility into lower-level training
 
-Similar to [hooks](https://lightning.ai/docs/pytorch/stable//extensions/callbacks.html) in pytorch lightning,
+Similar to [hooks](https://lightning.ai/docs/pytorch/stable/extensions/callbacks.html) in pytorch lightning,
 you can use Burr hooks to log metrics, visualize, etc... at each step. This allows you to have a more granular view of training that updates live
 (obviuosly depending on the UI/model-monitoring you're using.)
 
