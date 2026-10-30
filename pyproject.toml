@@ -309,6 +309,7 @@ exclude = [
   "examples/validate_examples.py",
   "examples/fastapi_mount_example.py",
   "examples/adaptive-crag/**",
+  "examples/coding-agent/**",
   "examples/conversational-rag/**",
   "examples/custom-serde/**",
   "examples/deployment/**",
