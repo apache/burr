@@ -129,7 +129,7 @@ def _validate_and_extract_signature_types(
         raise ValueError(
             f"Function fn: {fn.__qualname__} is not a valid pydantic action. "
             "The first argument of a pydantic "
-            "action must be the state object. Got signature: {sig}."
+            f"action must be the state object. Got signature: {sig}."
         )
     type_hints = typing.get_type_hints(fn)
     state_model = type_hints.get("state")
@@ -150,7 +150,7 @@ def _validate_and_extract_signature_types(
         raise ValueError(
             f"Function fn: {fn.__qualname__} is not a valid pydantic action. "
             "The return type must be a subclass of pydantic"
-            ".BaseModel. Got return type: {sig.return_annotation}."
+            f".BaseModel. Got return type: {ret_hint}."
         )
     return state_model, ret_hint
 
