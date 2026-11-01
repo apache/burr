@@ -48,8 +48,7 @@ jobs:
         run: pre-commit run --all-files
 
   test:
-    # Pinned: setup-python has no Python 3.9 build for ubuntu-latest (26.04).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -77,8 +76,7 @@ jobs:
           python -m pytest tests --ignore=tests/integrations/persisters --ignore=tests/integrations/test_bip0042_bedrock.py
 
   test-tracking-server-s3:
-    # Pinned: setup-python has no Python 3.9 build for ubuntu-latest (26.04).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -101,8 +99,7 @@ jobs:
           python -m pytest tests/tracking/test_bip0042_s3_buffering.py -v
 
   test-bedrock:
-    # Pinned: setup-python has no Python 3.9 build for ubuntu-latest (26.04).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -140,8 +137,7 @@ jobs:
           python -m pytest validate_examples.py
 
   test-persister-dbs:
-    # Pinned: setup-python has no Python 3.9 build for ubuntu-latest (26.04).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     services:
       mongodb:
         image: mongo:7.0

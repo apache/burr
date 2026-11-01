@@ -22,9 +22,9 @@ Generate burr-redirect/pyproject.toml from the template and the root pyproject.
 The redirect package (PyPI name ``burr``) exists only to point users at
 ``apache-burr``. Every extra that ``apache-burr`` declares must also exist on
 the redirect package, otherwise ``pip install burr[langfuse]`` warns about an
-unknown extra and silently installs nothing. Hand-mirroring the extras drifted
-in the past, so the ``[project.optional-dependencies]`` section is generated
-here from the extras declared in the repository root ``pyproject.toml``.
+unknown extra and silently installs nothing. Its Python requirement must also
+match ``apache-burr`` so unsupported interpreters reject both packages. These
+fields are generated from the repository root ``pyproject.toml``.
 
 Usage:
     python generate_pyproject.py <version>
@@ -65,12 +65,12 @@ def load_toml(path: Path) -> dict:
         fail(f"{path} is not valid TOML: {e}")
 
 
-def read_root_extras() -> list:
-    """Return the alphabetically sorted extra names declared by apache-burr."""
-    extras = load_toml(ROOT_PYPROJECT).get("project", {}).get("optional-dependencies")
-    if not extras:
-        fail(f"no [project.optional-dependencies] found in {ROOT_PYPROJECT}")
-    return sorted(extras)
+def read_root_project() -> dict:
+    """Return the apache-burr project metadata."""
+    project = load_toml(ROOT_PYPROJECT).get("project", {})
+    if not project:
+        fail(f"no [project] found in {ROOT_PYPROJECT}")
+    return project
 
 
 def render_extras(extras: list, version: str) -> str:
@@ -80,8 +80,8 @@ def render_extras(extras: list, version: str) -> str:
     return "\n".join(lines)
 
 
-def render_template(extras: list, version: str) -> str:
-    """Substitute the extras section and the version into the template text."""
+def render_template(extras: list, version: str, requires_python: str) -> str:
+    """Substitute root package metadata into the template text."""
     template = TEMPLATE.read_text(encoding="utf-8")
     matches = [line for line in template.splitlines() if PLACEHOLDER in line]
     if not matches:
@@ -96,10 +96,10 @@ def render_template(extras: list, version: str) -> str:
     )
     if not rendered.endswith("\n"):
         rendered += "\n"
-    return rendered.replace("VERSION", version)
+    return rendered.replace("VERSION", version).replace("REQUIRES_PYTHON", requires_python)
 
 
-def verify(extras: list, version: str) -> None:
+def verify(extras: list, version: str, requires_python: str) -> None:
     """Re-parse the written file and assert it says exactly what we intended."""
     project = load_toml(OUTPUT).get("project", {})
 
@@ -126,6 +126,12 @@ def verify(extras: list, version: str) -> None:
     if project.get("version") != version:
         fail(f"{OUTPUT} version is {project.get('version')!r}, expected {version!r}")
 
+    if project.get("requires-python") != requires_python:
+        fail(
+            f"{OUTPUT} requires-python is {project.get('requires-python')!r}, "
+            f"expected {requires_python!r}"
+        )
+
 
 def main(argv: list) -> None:
     if len(argv) != 2:
@@ -134,9 +140,20 @@ def main(argv: list) -> None:
         sys.exit(1)
 
     version = argv[1]
-    extras = read_root_extras()
-    OUTPUT.write_text(render_template(extras, version), encoding="utf-8")
-    verify(extras, version)
+    project = read_root_project()
+    extras = project.get("optional-dependencies")
+    if not extras:
+        fail(f"no [project.optional-dependencies] found in {ROOT_PYPROJECT}")
+    requires_python = project.get("requires-python")
+    if not requires_python:
+        fail(f"no project.requires-python found in {ROOT_PYPROJECT}")
+
+    extras = sorted(extras)
+    OUTPUT.write_text(
+        render_template(extras, version, requires_python),
+        encoding="utf-8",
+    )
+    verify(extras, version, requires_python)
     print(f"Wrote {OUTPUT} for version {version} with {len(extras)} extras.")
 
 
