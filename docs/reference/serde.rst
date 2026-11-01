@@ -39,6 +39,10 @@ deserialize function to use, the serialize function needs to return a dictionary
 ``burr.core.serde.KEY`` as one of the keys mapping to the appropriate value.
 This is used to identify the deserialization function to use.
 
+``burr.core.serde.KEY`` is reserved for this. A dictionary of your own that contains it is
+still saved and loaded back as is: Burr wraps it as ``burr.dict`` when serializing, so don't
+use ``burr.dict`` as the key for your own deserializer.
+
 Out of the box Implementations
 ==============================
 

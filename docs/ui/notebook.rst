@@ -32,13 +32,24 @@ Jupyter Notebook
 
 .. code-block:: python
 
-    # Load the extension and print the URL
+    # Load the extension and show the UI inline
     %load_ext burr.integrations.notebook
     %burr_ui
-    # → "Burr UI: http://127.0.0.1:7241"
 
-The magic starts the tracking server on port ``7241`` if it isn't already running and
-prints the URL to access it.
+The first time it runs, the magic starts the tracking server on port ``7241`` in a background
+process and displays the UI in an iframe below the cell. Running it again reuses that server
+(and starts a new one if the previous process has exited).
+
+It accepts two optional arguments:
+
+* ``--height`` (or ``-h``): the height of the iframe in pixels. Defaults to ``400``.
+* ``--no-iframe``: print the URL of the UI instead of embedding it.
+
+.. code-block:: python
+
+    %burr_ui --height 600
+    %burr_ui --no-iframe
+    # → "Burr UI: http://127.0.0.1:7241"
 
 --------------
 Google Colab
