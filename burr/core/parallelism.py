@@ -21,6 +21,7 @@ import dataclasses
 import hashlib
 import inspect
 import logging
+import queue
 from typing import (
     Any,
     AsyncGenerator,
@@ -38,7 +39,7 @@ from typing import (
 from burr.common import async_utils
 from burr.common.async_utils import SyncOrAsyncGenerator, SyncOrAsyncGeneratorOrItemOrList
 from burr.core import Action, ApplicationBuilder, ApplicationContext, Graph, State
-from burr.core.action import SingleStepAction
+from burr.core.action import SingleStepStreamingAction
 from burr.core.application import ApplicationIdentifiers
 from burr.core.graph import GraphBuilder
 from burr.core.persistence import BaseStateLoader, BaseStateSaver
@@ -171,6 +172,89 @@ class SubGraphTask:
         )
         return state
 
+    def stream(
+        self,
+        parent_context: ApplicationContext,
+        *,
+        task_key: str,
+        intermediate_stream_outputs: bool,
+        intermediate_nodes: bool,
+    ) -> Generator["StreamItem", None, None]:
+        """Streams results from the sub-application using Application.stream_iterate."""
+        app = self._create_app_builder(parent_context).build()
+        filtered_inputs = {
+            key: value for key, value in self.inputs.items() if not key.startswith("__")
+        }
+        for action, streaming_result in app.stream_iterate(
+            halt_after=self.graph.halt_after, inputs=filtered_inputs
+        ):
+            should_emit_node = intermediate_nodes or action.name in self.graph.halt_after
+            if intermediate_stream_outputs and should_emit_node:
+                for item in streaming_result:
+                    yield StreamItem(
+                        result=item,
+                        state_update=None,
+                        action=action,
+                        task_key=task_key,
+                        application_id=self.application_id,
+                    )
+            result, state = streaming_result.get()
+            if should_emit_node:
+                yield StreamItem(
+                    result=result,
+                    state_update=state,
+                    action=action,
+                    task_key=task_key,
+                    application_id=self.application_id,
+                )
+
+    async def astream(
+        self,
+        parent_context: ApplicationContext,
+        *,
+        task_key: str,
+        intermediate_stream_outputs: bool,
+        intermediate_nodes: bool,
+    ) -> AsyncGenerator["StreamItem", None]:
+        """Streams results from the sub-application using Application.astream_iterate."""
+        app = await self._create_app_builder(parent_context).abuild()
+        filtered_inputs = {
+            key: value for key, value in self.inputs.items() if not key.startswith("__")
+        }
+        async for action, streaming_result in app.astream_iterate(
+            halt_after=self.graph.halt_after, inputs=filtered_inputs
+        ):
+            should_emit_node = intermediate_nodes or action.name in self.graph.halt_after
+            if intermediate_stream_outputs and should_emit_node:
+                async for item in streaming_result:
+                    yield StreamItem(
+                        result=item,
+                        state_update=None,
+                        action=action,
+                        task_key=task_key,
+                        application_id=self.application_id,
+                    )
+            result, state = await streaming_result.get()
+            if should_emit_node:
+                yield StreamItem(
+                    result=result,
+                    state_update=state,
+                    action=action,
+                    task_key=task_key,
+                    application_id=self.application_id,
+                )
+
+
+@dataclasses.dataclass
+class StreamItem:
+    """Event emitted from a parallel streaming sub-application."""
+
+    result: Any
+    state_update: Optional[State]
+    action: Action
+    task_key: str
+    application_id: str
+
 
 def _stable_app_id_hash(app_id: str, child_key: str) -> str:
     """Gives a stable hash for an application. Given the parent app_id and a child key,
@@ -183,7 +267,7 @@ def _stable_app_id_hash(app_id: str, child_key: str) -> str:
     return hashlib.sha256(f"{app_id}:{child_key}".encode()).hexdigest()
 
 
-class TaskBasedParallelAction(SingleStepAction):
+class TaskBasedParallelAction(SingleStepStreamingAction):
     """The base class for actions that run a set of tasks in parallel and reduce the results.
     This is more power-user mode -- if you need fine-grained control over the set of tasks
     your parallel action utilizes, then this is for you. If not, you'll want to see:
@@ -248,8 +332,10 @@ class TaskBasedParallelAction(SingleStepAction):
     will be asynchronous as well (regardless of whether your task functions are asynchronous).
     """
 
-    def __init__(self):
+    def __init__(self, intermediate_stream_outputs: bool = True, intermediate_nodes: bool = True):
         super().__init__()
+        self._intermediate_stream_outputs = intermediate_stream_outputs
+        self._intermediate_nodes = intermediate_nodes
 
     def run_and_update(self, state: State, **run_kwargs) -> Tuple[dict, State]:
         """Runs and updates. This is not user-facing, so do not override it.
@@ -307,6 +393,142 @@ class TaskBasedParallelAction(SingleStepAction):
         if self.is_async():
             return _arun_and_update()  # type: ignore
         return _run_and_update()
+
+    def stream_run_and_update(
+        self, state: State, **run_kwargs
+    ) -> Union[Generator[Tuple[StreamItem, Optional[State]], None, None], AsyncGenerator]:
+        """Streaming counterpart to run_and_update for parallel actions."""
+        if self.is_async():
+            return self._astream_run_and_update(state, **run_kwargs)
+        return self._stream_run_and_update(state, **run_kwargs)
+
+    def _stream_run_and_update(
+        self, state: State, **run_kwargs
+    ) -> Generator[Tuple[StreamItem, Optional[State]], None, None]:
+        context: ApplicationContext = run_kwargs.get("__context")
+        if context is None:
+            raise ValueError("This action requires a context to run")
+        state_without_internals = state.wipe(
+            delete=[item for item in state.keys() if item.startswith("__")]
+        )
+        tasks = list(self.tasks(state_without_internals, context, run_kwargs))
+        emitted_results: "queue.Queue[StreamItem]" = queue.Queue()
+
+        def execute_task(task_index: int, task: SubGraphTask) -> Tuple[int, State]:
+            task_key = str(task_index)
+            final_state = None
+            for item in task.stream(
+                context,
+                task_key=task_key,
+                intermediate_stream_outputs=self._intermediate_stream_outputs,
+                intermediate_nodes=self._intermediate_nodes,
+            ):
+                if item.state_update is not None:
+                    final_state = item.state_update
+                emitted_results.put(item)
+            if final_state is None:
+                raise ValueError(
+                    "Parallel streaming task did not emit a final state update. "
+                    "Ensure the subgraph halts on a concrete node."
+                )
+            return task_index, final_state
+
+        final_states: Dict[int, State] = {}
+        with context.parallel_executor_factory() as executor:
+            if not hasattr(executor, "submit"):
+                raise TypeError("Parallel streaming requires an executor that supports submit().")
+            futures = [
+                executor.submit(execute_task, task_index, task)
+                for task_index, task in enumerate(tasks)
+            ]
+            while futures:
+                try:
+                    item = emitted_results.get(timeout=0.01)
+                    yield item, None
+                    continue
+                except queue.Empty:
+                    pass
+                still_running = []
+                for future in futures:
+                    if future.done():
+                        task_index, final_state = future.result()
+                        final_states[task_index] = final_state
+                    else:
+                        still_running.append(future)
+                futures = still_running
+            while not emitted_results.empty():
+                yield emitted_results.get(), None
+
+        def state_generator() -> Generator[State, None, None]:
+            for task_index in range(len(tasks)):
+                yield final_states[task_index]
+
+        final_state = self.reduce(state_without_internals, state_generator())
+        final_state = final_state.update(
+            **{key: value for key, value in state.get_all().items() if key.startswith("__")}
+        )
+        yield {}, final_state
+
+    async def _astream_run_and_update(
+        self, state: State, **run_kwargs
+    ) -> AsyncGenerator[Tuple[StreamItem, Optional[State]], None]:
+        context: ApplicationContext = run_kwargs.get("__context")
+        if context is None:
+            raise ValueError("This action requires a context to run")
+        state_without_internals = state.wipe(
+            delete=[item for item in state.keys() if item.startswith("__")]
+        )
+        all_tasks = await async_utils.arealize(self.tasks(state_without_internals, context, run_kwargs))
+        emitted_results: asyncio.Queue[StreamItem] = asyncio.Queue()
+
+        async def execute_task(task_index: int, task: SubGraphTask) -> Tuple[int, State]:
+            task_key = str(task_index)
+            final_state = None
+            async for item in task.astream(
+                context,
+                task_key=task_key,
+                intermediate_stream_outputs=self._intermediate_stream_outputs,
+                intermediate_nodes=self._intermediate_nodes,
+            ):
+                if item.state_update is not None:
+                    final_state = item.state_update
+                await emitted_results.put(item)
+            if final_state is None:
+                raise ValueError(
+                    "Parallel streaming task did not emit a final state update. "
+                    "Ensure the subgraph halts on a concrete node."
+                )
+            return task_index, final_state
+
+        workers = [asyncio.create_task(execute_task(i, task)) for i, task in enumerate(all_tasks)]
+        final_states: Dict[int, State] = {}
+        while workers:
+            try:
+                item = await asyncio.wait_for(emitted_results.get(), timeout=0.01)
+                yield item, None
+                continue
+            except asyncio.TimeoutError:
+                pass
+            pending_workers = []
+            for worker in workers:
+                if worker.done():
+                    task_index, final_state = await worker
+                    final_states[task_index] = final_state
+                else:
+                    pending_workers.append(worker)
+            workers = pending_workers
+        while not emitted_results.empty():
+            yield await emitted_results.get(), None
+
+        async def state_generator() -> AsyncGenerator[State, None]:
+            for task_index in range(len(all_tasks)):
+                yield final_states[task_index]
+
+        final_state = await self.reduce(state_without_internals, state_generator())
+        final_state = final_state.update(
+            **{key: value for key, value in state.get_all().items() if key.startswith("__")}
+        )
+        yield {}, final_state
 
     def is_async(self) -> bool:
         """This says whether or not the action is async. Note you have to override this if you have async tasks
