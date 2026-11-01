@@ -68,3 +68,20 @@ def test_deserialize_pandas_df_without_pandas_kwargs(tmp_path):
     serialized = og.serialize(pandas_kwargs={"path": tmp_path})
     ng = state.State.deserialize(serialized)
     pd.testing.assert_frame_equal(ng["df"], df)
+
+
+@pytest.mark.parametrize(
+    "df_1,df_2",
+    [
+        (pd.DataFrame({"a": [1, 2]}), pd.DataFrame({"a": [9, 9]})),
+        (pd.DataFrame({"a": [[1, 2], [3]]}), pd.DataFrame({"a": [[9], [9, 9]]})),
+    ],
+    ids=["scalar_cells", "list_cells"],
+)
+def test_serde_of_same_shape_dataframes_keeps_each_dataframe(tmp_path, df_1, df_2):
+    serialized_1 = state.State({"df": df_1}).serialize(pandas_kwargs={"path": tmp_path})
+    serialized_2 = state.State({"df": df_2}).serialize(pandas_kwargs={"path": tmp_path})
+    assert serialized_1["df"]["path"] != serialized_2["df"]["path"]
+
+    pd.testing.assert_frame_equal(state.State.deserialize(serialized_1)["df"], df_1)
+    pd.testing.assert_frame_equal(state.State.deserialize(serialized_2)["df"], df_2)

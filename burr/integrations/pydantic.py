@@ -41,6 +41,7 @@ from burr.core import Action, Graph, State
 from burr.core.action import (
     FunctionBasedAction,
     FunctionBasedStreamingAction,
+    UnionType,
     bind,
     derive_inputs_from_fn,
 )
@@ -269,7 +270,7 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+PartialType = Union[Type[pydantic.BaseModel], Type[dict], UnionType]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -290,11 +291,13 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict], UnionType]],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel],
+    Type[pydantic.BaseModel],
+    Union[Type[dict], Type[pydantic.BaseModel], UnionType],
 ]:
     if stream_type is None:
         # TODO -- derive from the signature

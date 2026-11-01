@@ -28,11 +28,31 @@ const getSystemPrefersDark = (): boolean =>
   window.matchMedia &&
   window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-const getStoredPreference = (): ThemePreference => {
+/**
+ * localStorage is not always reachable: a sandboxed iframe raises SecurityError
+ * on access, browsers with storage disabled omit it, and Node's own experimental
+ * `localStorage` global shadows jsdom's when the UI runs under vitest. Treat it
+ * as best-effort so the theme falls back to the system preference rather than
+ * taking the whole app down.
+ */
+const getStorage = (): Storage | null => {
   if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const getStoredPreference = (): ThemePreference => {
+  let stored: string | null = null;
+  try {
+    stored = getStorage()?.getItem(STORAGE_KEY) ?? null;
+  } catch {
     return 'system';
   }
-  const stored = window.localStorage.getItem(STORAGE_KEY);
   if (stored === 'light' || stored === 'dark' || stored === 'system') {
     return stored;
   }
@@ -86,10 +106,16 @@ export const useTheme = () => {
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
-    if (next === 'system') {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, next);
+    try {
+      const storage = getStorage();
+      if (next === 'system') {
+        storage?.removeItem(STORAGE_KEY);
+      } else {
+        storage?.setItem(STORAGE_KEY, next);
+      }
+    } catch {
+      // Storage is unavailable or full -- the theme still applies for this
+      // session, it just will not be remembered.
     }
   }, []);
 

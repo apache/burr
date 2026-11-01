@@ -75,7 +75,8 @@ If you're in an async context, you can run `astep` instead:
 
 Step can also take in ``inputs`` as a dictionary, which will be passed to the action's run function as keyword arguments.
 This is specifically meant for a "human in the loop" scenario, where the action needs to ask for input from a user. In this case,
-the control flow is meant to be interrupted to allow for the user to provide input. See :ref:`inputs <inputref>` for more information.
+the control flow is meant to be interrupted to allow for the user to provide input. See :ref:`inputs <inputref>` and
+:ref:`human in the loop <human-in-the-loop>` for more information.
 
 .. code-block:: python
 
@@ -171,7 +172,7 @@ in a web-server (create a graph once, application many times), import the graph 
 
 .. code-block:: python
 
-    from burr.core import ApplicationBuilder, default, expr
+    from burr.core import ApplicationBuilder, GraphBuilder
     graph = (
         GraphBuilder()
         .with_actions(human_input, ai_response)
@@ -183,7 +184,7 @@ in a web-server (create a graph once, application many times), import the graph 
     app = (
         ApplicationBuilder()
         .with_graph(graph)
-        with_state(chat_history=[])
+        .with_state(chat_history=[])
         .with_entrypoint("human_input")
         .build()
     )

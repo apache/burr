@@ -157,7 +157,7 @@ def _render_mermaid(
     for transition in transitions:
         source = action_ids[transition.from_.name]
         target = action_ids[transition.to.name]
-        if include_conditions and transition.condition is not default:
+        if include_conditions and transition.condition is not default and transition.condition.name:
             label = _escape_mermaid_label(transition.condition.name)
             lines.append(f'    {source} -. "{label}" .-> {target}')
         elif transition.condition is not default:
@@ -165,6 +165,31 @@ def _render_mermaid(
         else:
             lines.append(f"    {source} --> {target}")
     return "\n".join(lines) + "\n"
+
+
+def _get_state_label(action: Action) -> str:
+    """Builds a graphviz node label displaying the action's name with its
+    reads and writes each on their own line, e.g.::
+
+        action_name
+        reads:
+          read_1
+        writes:
+          write_1
+
+    Uses graphviz's ``\\l`` escape so lines are left-justified, keeping the
+    indentation visible.
+    """
+    if not action.reads and not action.writes:
+        return action.name
+    lines = [action.name]
+    if action.reads:
+        lines.append("reads:")
+        lines.extend(f"  {read}" for read in action.reads)
+    if action.writes:
+        lines.append("writes:")
+        lines.extend(f"  {write}" for write in action.writes)
+    return "\\l".join(lines) + "\\l"
 
 
 @dataclasses.dataclass
@@ -296,17 +321,16 @@ class Graph:
             ),
         )
         for g_key, g_value in engine_kwargs.items():
+            if g_value is None and g_key.endswith("_attr"):
+                # Same as not passing it: keep Burr's defaults.
+                continue
             if isinstance(g_value, dict):
-                digraph_attr[g_key].update(**g_value)
+                digraph_attr.setdefault(g_key, {}).update(**g_value)
             else:
                 digraph_attr[g_key] = g_value
         digraph = graphviz.Digraph(**digraph_attr)
         for action in self.actions:
-            label = (
-                action.name
-                if not include_state
-                else f"{action.name}({', '.join(action.reads)}): {', '.join(action.writes)}"
-            )
+            label = action.name if not include_state else _get_state_label(action)
             digraph.node(action.name, label=label, shape="box", style="rounded,filled")
             required_inputs, optional_inputs = action.optional_and_required_inputs
             for input_ in required_inputs | optional_inputs:

@@ -24,6 +24,19 @@ import sys
 import textwrap
 import types
 import typing
+
+# types.UnionType was added in Python 3.10 to represent PEP 604 `X | Y`
+# syntax. Burr supports Python >= 3.9, so on 3.9 we fall back to a sentinel
+# type that keeps Union annotations well-formed. No PEP 604 union can ever
+# exist on 3.9, so isinstance() checks against it simply never match.
+if sys.version_info >= (3, 10):
+    UnionType = types.UnionType
+else:  # pragma: no cover - exercised on Python 3.9 CI only
+
+    class UnionType:  # type: ignore[no-redef]
+        """Placeholder for ``types.UnionType`` on Python < 3.10."""
+
+
 from collections.abc import AsyncIterator
 from typing import (
     TYPE_CHECKING,
@@ -517,8 +530,9 @@ class _SafeExprValidator(ast.NodeVisitor):
 
     def visit_Dict(self, node: ast.Dict) -> None:
         for k in node.keys:
-            if k is not None:
-                self.visit(k)
+            if k is None:
+                self._reject(node, "dictionary unpacking")
+            self.visit(k)
         for v in node.values:
             self.visit(v)
 
@@ -566,11 +580,11 @@ class _SafeExprInterpreter:
         return node.value
 
     def _eval_Name(self, node: ast.Name):
-        # Builtins on the allowlist resolve to the builtin; otherwise look up state.
-        if node.id in _SAFE_EXPR_BUILTINS:
-            return _SAFE_EXPR_BUILTINS[node.id]
+        # State wins over an allowlisted builtin of the same name, as in expr().
         if node.id in self._names:
             return self._names[node.id]
+        if node.id in _SAFE_EXPR_BUILTINS:
+            return _SAFE_EXPR_BUILTINS[node.id]
         raise NameError(f"safe_expr: name '{node.id}' is not defined")
 
     def _eval_Attribute(self, node: ast.Attribute):
@@ -810,7 +824,7 @@ class Condition(Function):
         - ``BoolOp``: ``and``, ``or``.
         - ``UnaryOp``: ``not``, unary ``-``, unary ``+``.
         - ``BinOp`` arithmetic: ``+``, ``-``, ``*``, ``/``, ``//``, ``%``, ``**``.
-        - Literal containers: tuple, list, set, dict.
+        - Literal containers: tuple, list, set, dict. Unpacking is not supported.
         - ``Call`` only to a tight allowlist of safe builtins by name:
           ``len``, ``abs``, ``min``, ``max``, ``sum``, ``all``, ``any``, ``str``,
           ``int``, ``float``, ``bool``. All other calls are rejected.
@@ -832,16 +846,18 @@ class Condition(Function):
         # disallowed node exists we raise here, before constructing the Condition.
         _SafeExprValidator().visit(tree)
 
-        # Collect Name references for keys, mirroring expr().
-        all_builtins = builtins.__dict__
-
+        # Collect Name references for keys. A called name always resolves to an
+        # allowlisted builtin; any other name is read from state first.
         class _NameCollector(ast.NodeVisitor):
             def __init__(self):
                 self.names = set()
 
+            def visit_Call(self, node):
+                for arg in node.args:
+                    self.visit(arg)
+
             def visit_Name(self, node):
-                if node.id not in all_builtins:
-                    self.names.add(node.id)
+                self.names.add(node.id)
 
         collector = _NameCollector()
         collector.visit(tree)
@@ -1919,7 +1935,7 @@ class streaming_action:
         writes: List[str],
         state_input_type: Type["BaseModel"],
         state_output_type: Type["BaseModel"],
-        stream_type: Union[Type["BaseModel"], Type[dict]],
+        stream_type: Union[Type["BaseModel"], Type[dict], UnionType],
         tags: Optional[List[str]] = None,
     ) -> Callable:
         """Creates a streaming action that uses pydantic models.

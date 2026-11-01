@@ -66,6 +66,9 @@ class FullSpanContext:
     action_span: ActionSpan
     partition_key: str
     app_id: str
+    # The tracker that owns this span. Spans can end on a thread where tracker_context is unset,
+    # so we carry the tracker with the span instead of relying only on the context var.
+    tracker: Optional[SyncTrackingClient] = None
 
 
 span_map = {}
@@ -77,7 +80,7 @@ def cache_span(span: Span, context: FullSpanContext) -> Span:
 
 
 def uncache_span(span: Span) -> Span:
-    del span_map[span.get_span_context().span_id]
+    span_map.pop(span.get_span_context().span_id, None)
     return span
 
 
@@ -412,6 +415,7 @@ class OpenTelemetryTracker(
                 ),
                 partition_key=partition_key,
                 app_id=app_id,
+                tracker=self.burr_tracker,
             ),
         )
 
@@ -476,9 +480,14 @@ class BurrTrackingSpanProcessor(SpanProcessor):
     def tracker(self):
         """Quick trick to get closer to the right tracker. This is suboptimal as we don't really
         have guarentees that we'll be *in* the right context when it gets logged, but the way OpenTel
-        is implemented we will (with the immediate span processor). TODO -- track a map of span ID -> tracker
+        is implemented we will (with the immediate span processor). When the context is not set
+        (e.g. a span ending on a worker thread), we fall back to the tracker cached with the span.
         """
         return tracker_context.get()
+
+    def _tracker_for(self, cached_span: FullSpanContext) -> Optional[SyncTrackingClient]:
+        tracker = self.tracker
+        return tracker if tracker is not None else cached_span.tracker
 
     def on_start(
         self,
@@ -491,16 +500,18 @@ class BurrTrackingSpanProcessor(SpanProcessor):
             parent_span = get_cached_span(span.parent.span_id)
             # If it exists, we can spawn a new span and cache that
             if parent_span is not None:
+                tracker = self._tracker_for(parent_span)
                 cache_span(
                     span,
                     context := FullSpanContext(
                         action_span=parent_span.action_span.spawn(span.name),
                         partition_key=parent_span.partition_key,
                         app_id=parent_span.app_id,
+                        tracker=tracker,
                     ),
                 )
-                if self.tracker is not None:
-                    self.tracker.pre_start_span(
+                if tracker is not None:
+                    tracker.pre_start_span(
                         action=context.action_span.action,
                         action_sequence_id=context.action_span.action_sequence_id,
                         span=context.action_span,
@@ -512,9 +523,13 @@ class BurrTrackingSpanProcessor(SpanProcessor):
     def on_end(self, span: "Span") -> None:
         cached_span = get_cached_span(span.get_span_context().span_id)
         # If this is none it means we're outside of the burr context
-        if cached_span is not None and self.tracker is not None:
-            # TODO -- get tracker context to work
-            self.tracker.post_end_span(
+        if cached_span is None:
+            return
+        # Always drop the entry first so it cannot leak, even if no tracker is found or logging fails
+        uncache_span(span)
+        tracker = self._tracker_for(cached_span)
+        if tracker is not None:
+            tracker.post_end_span(
                 action=cached_span.action_span.action,
                 action_sequence_id=cached_span.action_span.action_sequence_id,
                 span=cached_span.action_span,
@@ -522,9 +537,8 @@ class BurrTrackingSpanProcessor(SpanProcessor):
                 app_id=cached_span.app_id,
                 partition_key=cached_span.partition_key,
             )
-            uncache_span(span)
             if len(span.attributes) > 0:
-                self.tracker.do_log_attributes(
+                tracker.do_log_attributes(
                     attributes=dict(**span.attributes),
                     action=cached_span.action_span.action,
                     action_sequence_id=cached_span.action_span.action_sequence_id,

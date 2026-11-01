@@ -26,6 +26,7 @@ from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
+from opentelemetry.trace import get_current_span
 
 from burr.core import ApplicationBuilder, State, action
 from burr.integrations.langfuse import BURR_TRACER_NAME, LangfuseBridge, burr_span_export_filter
@@ -276,3 +277,83 @@ def test_burr_span_export_filter():
     assert burr_span_export_filter(
         _make_readable_span("some.other.scope", {"gen_ai.system": "openai"})
     )
+
+
+@action(reads=[], writes=["x"])
+def maybe_failing_action(state: State, fail: bool = False) -> Tuple[dict, State]:
+    if fail:
+        raise RuntimeError("boom")
+    result = {"x": 1}
+    return result, state.update(**result)
+
+
+@pytest.fixture
+def propagation_attributes(monkeypatch):
+    attributes = ContextVar("propagation_attributes", default=None)
+
+    @contextmanager
+    def capture_propagation_attributes(**kwargs):
+        token = attributes.set(kwargs)
+        try:
+            yield
+        finally:
+            attributes.reset(token)
+
+    monkeypatch.setattr(
+        "burr.integrations.langfuse.propagate_attributes", capture_propagation_attributes
+    )
+    return attributes
+
+
+def _build_stream_app(bridge: LangfuseBridge):
+    return (
+        ApplicationBuilder()
+        .with_actions(a=maybe_failing_action, b=finish_action)
+        .with_transitions(("a", "b"))
+        .with_entrypoint("a")
+        .with_identifiers(app_id="test-app-id", partition_key="test-user")
+        .with_hooks(bridge)
+        .build()
+    )
+
+
+def _assert_no_context_left_and_next_run_traced(app, exporter, propagation_attributes):
+    assert not get_current_span().is_recording()
+    assert propagation_attributes.get() is None
+    exporter.clear()
+    app.run(halt_after=["b"])
+    spans_by_name = {span.name: span for span in exporter.get_finished_spans()}
+    assert set(spans_by_name) == {"run", "a", "b"}
+    assert spans_by_name["run"].parent is None
+
+
+@pytest.mark.parametrize(
+    "halt_after,inputs,error",
+    [(["b"], {"fail": True}, RuntimeError), (["nope"], {}, ValueError)],
+    ids=["failing_fast_forward", "unknown_halt_after"],
+)
+def test_langfuse_bridge_stream_result_failure_closes_trace(
+    span_capture, propagation_attributes, halt_after, inputs, error
+):
+    exporter, tracer = span_capture
+    app = _build_stream_app(LangfuseBridge(langfuse_client=Mock(), tracer=tracer))
+    with pytest.raises(error):
+        app.stream_result(halt_after=halt_after, inputs=inputs)
+
+    root = {span.name: span for span in exporter.get_finished_spans()}["stream_result"]
+    assert not root.status.is_ok
+    _assert_no_context_left_and_next_run_traced(app, exporter, propagation_attributes)
+
+
+@pytest.mark.asyncio
+async def test_langfuse_bridge_astream_result_failure_closes_trace(
+    span_capture, propagation_attributes
+):
+    exporter, tracer = span_capture
+    app = _build_stream_app(LangfuseBridge(langfuse_client=Mock(), tracer=tracer))
+    with pytest.raises(RuntimeError):
+        await app.astream_result(halt_after=["b"], inputs={"fail": True})
+
+    root = {span.name: span for span in exporter.get_finished_spans()}["stream_result"]
+    assert not root.status.is_ok
+    _assert_no_context_left_and_next_run_traced(app, exporter, propagation_attributes)

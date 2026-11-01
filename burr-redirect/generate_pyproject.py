@@ -82,7 +82,7 @@ def render_extras(extras: list, version: str) -> str:
 
 def render_template(extras: list, version: str) -> str:
     """Substitute the extras section and the version into the template text."""
-    template = TEMPLATE.read_text()
+    template = TEMPLATE.read_text(encoding="utf-8")
     matches = [line for line in template.splitlines() if PLACEHOLDER in line]
     if not matches:
         fail(
@@ -135,7 +135,7 @@ def main(argv: list) -> None:
 
     version = argv[1]
     extras = read_root_extras()
-    OUTPUT.write_text(render_template(extras, version))
+    OUTPUT.write_text(render_template(extras, version), encoding="utf-8")
     verify(extras, version)
     print(f"Wrote {OUTPUT} for version {version} with {len(extras)} extras.")
 

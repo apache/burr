@@ -39,7 +39,8 @@ export const ThemeToggle = (props: { showLabel?: boolean }) => {
         'group flex items-center gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold',
         'text-gray-700 hover:bg-gray-50 hover:text-dwdarkblue',
         'dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white'
-      )}>
+      )}
+    >
       <Icon className="h-6 w-6 shrink-0 text-gray-400 group-hover:text-dwdarkblue dark:group-hover:text-white" />
       {props.showLabel && <span>{isDark ? 'Light mode' : 'Dark mode'}</span>}
     </button>

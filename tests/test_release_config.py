@@ -34,6 +34,23 @@ else:
     tomllib = None
 
 
+def test_sdist_license_only_covers_files_shipped_in_sdist():
+    project_root = Path(__file__).parent.parent
+    source_license = (project_root / "LICENSE").read_text(encoding="utf-8")
+    sdist_license = (project_root / "LICENSE-sdist").read_text(encoding="utf-8")
+
+    assert "examples/deep-researcher" in sdist_license
+    assert "website/" not in sdist_license
+    assert "Magic UI" not in sdist_license
+    assert "shadcn" not in sdist_license
+
+    # The full source archive still ships the website, so its LICENSE must
+    # retain the corresponding third-party license entries.
+    assert "website/" in source_license
+    assert "Magic UI" in source_license
+    assert "shadcn" in source_license
+
+
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib requires Python 3.11+")
 def test_examples_include_exclude_coverage():
     """

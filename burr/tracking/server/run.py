@@ -342,15 +342,20 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
     @ui_app.get("/api/v0/version")
     async def version() -> dict:
         """Returns the burr version"""
-        import pkg_resources
+        # importlib.metadata rather than pkg_resources: setuptools is not a
+        # declared dependency, is absent from a modern venv, and dropped
+        # pkg_resources in 81.0. Using it here made this endpoint raise
+        # ModuleNotFoundError on a clean install.
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as _version
 
         try:
-            burr_version = pkg_resources.get_distribution("apache-burr").version
-        except pkg_resources.DistributionNotFound:
+            burr_version = _version("apache-burr")
+        except PackageNotFoundError:
             try:
                 # Fallback for older installations or development
-                burr_version = pkg_resources.get_distribution("burr").version
-            except pkg_resources.DistributionNotFound:
+                burr_version = _version("burr")
+            except PackageNotFoundError:
                 burr_version = "unknown"
         return {"version": burr_version}
 

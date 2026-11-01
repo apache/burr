@@ -54,6 +54,8 @@ class RedisBasePersister(persistence.BaseStatePersister):
     so this is an attempt to fix that in a backwards compatible way.
     """
 
+    PARTITION_KEY_DEFAULT = ""
+
     @classmethod
     def from_config(cls, config: dict) -> "RedisBasePersister":
         """Creates a new instance of the RedisBasePersister from a configuration dictionary."""
@@ -105,14 +107,16 @@ class RedisBasePersister(persistence.BaseStatePersister):
         """Sets the serde_kwargs for the persister."""
         self.serde_kwargs = serde_kwargs
 
-    def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+    def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
         """List the app ids for a given partition key."""
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         app_ids = self.connection.zrevrange(namespaced_partition_key, 0, -1)
         return [app_id.decode() for app_id in app_ids]
 
     def load(
-        self, partition_key: str, app_id: str, sequence_id: int = None, **kwargs
+        self, partition_key: Optional[str], app_id: str, sequence_id: int = None, **kwargs
     ) -> Optional[persistence.PersistedStateData]:
         """Load the state data for a given partition key, app id, and sequence id.
 
@@ -124,6 +128,8 @@ class RedisBasePersister(persistence.BaseStatePersister):
         :param kwargs:
         :return: Value or None.
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         if sequence_id is None:
             sequence_id = self.connection.zscore(namespaced_partition_key, app_id)
@@ -153,7 +159,7 @@ class RedisBasePersister(persistence.BaseStatePersister):
 
     def save(
         self,
-        partition_key: str,
+        partition_key: Optional[str],
         app_id: str,
         sequence_id: int,
         position: str,
@@ -172,6 +178,8 @@ class RedisBasePersister(persistence.BaseStatePersister):
         :param kwargs:
         :return:
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         key = self.create_key(app_id, partition_key, sequence_id)
         if self.connection.exists(key):
             raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")
@@ -235,6 +243,8 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
     It inherits from the AsyncBaseStatePersister class.
     """
 
+    PARTITION_KEY_DEFAULT = ""
+
     @classmethod
     def from_config(cls, config: dict) -> "AsyncRedisBasePersister":
         """Creates a new instance of the RedisBasePersister from a configuration dictionary."""
@@ -286,14 +296,16 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         """Sets the serde_kwargs for the persister."""
         self.serde_kwargs = serde_kwargs
 
-    async def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+    async def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
         """List the app ids for a given partition key."""
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         app_ids = await self.connection.zrevrange(namespaced_partition_key, 0, -1)
         return [app_id.decode() for app_id in app_ids]
 
     async def load(
-        self, partition_key: str, app_id: str, sequence_id: int = None, **kwargs
+        self, partition_key: Optional[str], app_id: str, sequence_id: int = None, **kwargs
     ) -> Optional[persistence.PersistedStateData]:
         """Load the state data for a given partition key, app id, and sequence id.
 
@@ -305,6 +317,8 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         :param kwargs:
         :return: Value or None.
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         if sequence_id is None:
             sequence_id = await self.connection.zscore(namespaced_partition_key, app_id)
@@ -334,7 +348,7 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
 
     async def save(
         self,
-        partition_key: str,
+        partition_key: Optional[str],
         app_id: str,
         sequence_id: int,
         position: str,
@@ -353,6 +367,8 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         :param kwargs:
         :return:
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         key = self.create_key(app_id, partition_key, sequence_id)
         if await self.connection.exists(key):
             raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")

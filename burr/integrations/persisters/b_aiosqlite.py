@@ -188,6 +188,7 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
         return self._initialized
 
     async def list_app_ids(self, partition_key: Optional[str] = None, **kwargs) -> list[str]:
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         partition_key = (
             partition_key
             if partition_key is not None
@@ -196,9 +197,10 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
 
         cursor = await self.connection.cursor()
         await cursor.execute(
-            f"SELECT DISTINCT app_id FROM {self.table_name} "
+            f"SELECT app_id FROM {self.table_name} "
             f"WHERE partition_key = ? "
-            f"ORDER BY created_at DESC",
+            f"GROUP BY app_id "
+            f"ORDER BY MAX(created_at) DESC",
             (partition_key,),
         )
         app_ids = [row[0] for row in await cursor.fetchall()]
@@ -229,11 +231,11 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
         logger.debug("Loading %s, %s, %s", partition_key, app_id, sequence_id)
         cursor = await self.connection.cursor()
         if app_id is None:
-            # get latest for all app_ids
+            # CURRENT_TIMESTAMP has second precision; break ties by insertion order.
             await cursor.execute(
                 f"SELECT position, state, sequence_id, app_id, created_at, status FROM {self.table_name} "
                 f"WHERE partition_key = ? "
-                f"ORDER BY CREATED_AT DESC LIMIT 1",
+                f"ORDER BY created_at DESC, rowid DESC LIMIT 1",
                 (partition_key,),
             )
         elif sequence_id is None:

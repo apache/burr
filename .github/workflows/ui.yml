@@ -39,12 +39,14 @@ jobs:
       matrix:
         node-version: [22.x]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
-    - run: npm install --ignore-scripts
+    - run: npm ci --ignore-scripts
     - run: npm run build
-    - run: npm run lint:fix
-    - run: npm run format:fix
+    # `npm test` starts vitest in watch mode, which never exits on CI.
+    - run: npx vitest run
+    - run: npm run lint
+    - run: npm run format

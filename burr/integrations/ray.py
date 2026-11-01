@@ -47,7 +47,7 @@ class RayExecutor(concurrent.futures.Executor):
     def shutdown(self, wait=True, **kwargs):
         """Shuts down the executor by shutting down ray
 
-        :param wait: Whether to wait -- required for hte API but not respected (yet)
+        :param wait: Whether to wait -- required for the API but not respected (yet)
         :param kwargs: Keyword arguments -- not used yet
         """
         if self.shutdown_on_end:

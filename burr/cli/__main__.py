@@ -50,7 +50,7 @@ except ImportError as e:
 setup_logging(logging.INFO)
 
 
-def _command(command: str, capture_output: bool, addl_env: dict | None = None) -> str:
+def _command(command: str, capture_output: bool, addl_env: Optional[dict] = None) -> str:
     """Runs a simple command"""
     if addl_env is None:
         addl_env = {}
@@ -97,10 +97,13 @@ def _locate_package_root() -> Optional[str]:
     return None
 
 
+OPEN_WHEN_READY_TIMEOUT_SECONDS = 5
+
+
 def open_when_ready(check_url: str, open_url: str):
     while True:
         try:
-            response = requests.get(check_url)
+            response = requests.get(check_url, timeout=OPEN_WHEN_READY_TIMEOUT_SECONDS)
             if response.status_code == 200:
                 webbrowser.open(open_url)
                 return
@@ -477,14 +480,14 @@ def create_test_case(
     if target_file_name:
         # if it already exists, load it up and append to it
         if os.path.exists(target_file_name):
-            with open(target_file_name, "r") as f:
+            with open(target_file_name, "r", encoding="utf-8") as f:
                 # assumes it's a list of test cases
                 current_testcases = json.load(f)
             current_testcases.append(tc_json)
         else:
             current_testcases = [tc_json]
         print(f"\nWriting data to file {target_file_name}")
-        with open(target_file_name, "w") as f:
+        with open(target_file_name, "w", encoding="utf-8") as f:
             json.dump(current_testcases, f, indent=2)
     else:
         logger.info(json.dumps(tc_json, indent=2))

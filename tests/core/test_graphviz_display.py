@@ -19,6 +19,7 @@ import pathlib
 
 import pytest
 
+from burr.core import ApplicationBuilder
 from burr.core.graph import GraphBuilder
 
 from tests.core.test_graph import PassedInAction
@@ -97,3 +98,69 @@ def test_visualize_mermaid_rejects_graphviz_options(graph):
 def test_visualize_mermaid_rejects_invalid_direction(graph):
     with pytest.raises(ValueError, match="Invalid Mermaid direction"):
         graph.visualize(engine="mermaid", direction="sideways")
+
+
+@pytest.mark.parametrize(
+    "reads, writes, expected_label",
+    [
+        ([], [], "label=counter"),
+        (["count"], [], r"counter\lreads:\l  count\l"),
+        ([], ["count"], r"counter\lwrites:\l  count\l"),
+        (
+            ["count", "user_input"],
+            ["count"],
+            r"counter\lreads:\l  count\l  user_input\lwrites:\l  count\l",
+        ),
+    ],
+)
+def test_visualize_include_state_multiline_label(reads: list, writes: list, expected_label: str):
+    """Reads and writes should each be displayed on their own line (issue #402)"""
+    action = PassedInAction(
+        reads=reads,
+        writes=writes,
+        fn=lambda state: {"count": state.get("count", 0) + 1},
+        update_fn=lambda result, state: state.update(**result),
+        inputs=[],
+    )
+    graph = (
+        GraphBuilder().with_actions(counter=action).with_transitions(("counter", "counter")).build()
+    )
+
+    digraph = graph.visualize(include_state=True)
+
+    assert expected_label in digraph.source
+
+
+def test_visualize_engine_kwargs_attr_dicts(graph):
+    """Attribute dicts passed through ``engine_kwargs`` reach the graphviz.Digraph,
+    including ones (like ``edge_attr``) that have no Burr default to merge into."""
+    digraph = graph.visualize(
+        graph_attr={"rankdir": "LR"},
+        node_attr={"fontname": "Courier"},
+        edge_attr={"color": "red"},
+    )
+
+    assert digraph.graph_attr["rankdir"] == "LR"
+    assert digraph.graph_attr["ranksep"] == "0.4"  # Burr default is kept
+    assert digraph.node_attr["fontname"] == "Courier"
+    assert digraph.node_attr["fillcolor"] == "#b4d8e4"  # Burr default is kept
+    assert digraph.edge_attr == {"color": "red"}
+
+
+def test_application_visualize_edge_attr(graph):
+    """``Application.visualize`` is the path users call; it forwards ``edge_attr``."""
+    app = ApplicationBuilder().with_graph(graph).with_entrypoint("counter").build()
+
+    digraph = app.visualize(edge_attr={"color": "red"})
+
+    assert digraph.edge_attr == {"color": "red"}
+    assert digraph.graph_attr["rankdir"] == "TB"  # Burr default is kept
+
+
+def test_visualize_none_attr_keeps_defaults(graph):
+    """Passing ``graph_attr=None`` behaves like not passing it."""
+    digraph = graph.visualize(graph_attr=None, node_attr=None, edge_attr=None)
+
+    assert digraph.graph_attr["rankdir"] == "TB"
+    assert digraph.node_attr["fillcolor"] == "#b4d8e4"
+    assert digraph.edge_attr == {}

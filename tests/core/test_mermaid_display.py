@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pytest
+
 from burr.core import Condition
 from burr.core.graph import GraphBuilder
 
@@ -62,3 +64,26 @@ def test_mermaid_ignores_framework_injected_inputs():
 
     assert "__context" not in diagram
     assert "input: prompt" in diagram
+
+
+@pytest.mark.parametrize("name", [None, ""])
+@pytest.mark.parametrize("include_conditions", [True, False])
+def test_mermaid_unnamed_condition(name, include_conditions):
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=_action(), result=_action())
+        .with_transitions(
+            (
+                "counter",
+                "result",
+                Condition(["count"], lambda state: state["count"] < 10, name=name),
+            ),
+            ("result", "counter"),
+        )
+        .build()
+    )
+
+    diagram = graph.visualize(engine="mermaid", include_conditions=include_conditions)
+
+    assert "action_0 -.-> action_1" in diagram
+    assert "action_1 --> action_0" in diagram

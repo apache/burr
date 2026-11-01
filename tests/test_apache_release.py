@@ -17,9 +17,12 @@
 
 import hashlib
 import importlib.util
+import subprocess
 import sys
+import tarfile
 from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,6 +38,98 @@ def _load_release_module():
 
 
 release = _load_release_module()
+
+
+def test_build_sdist_uses_artifact_specific_license(monkeypatch, tmp_path):
+    project_files = {
+        "LICENSE": "full source license\nwebsite/src/components/ui/\n",
+        "LICENSE-sdist": "sdist license\nexamples/deep-researcher\n",
+        "pyproject.toml": '[project]\nname = "apache-burr"\n',
+    }
+    output_dir = tmp_path / "artifacts"
+
+    def fake_check_git_working_tree():
+        return None
+
+    def fake_run_command(command, **kwargs):
+        if command[:3] == ["git", "archive", "HEAD"]:
+            archive_path = Path(command[command.index("--output") + 1])
+            with tarfile.open(archive_path, "w") as archive:
+                for name, contents in project_files.items():
+                    source = tmp_path / name
+                    source.write_text(contents, encoding="utf-8")
+                    archive.add(source, arcname=name)
+        elif command == ["flit", "build", "--format", "sdist"]:
+            source_tree = Path(kwargs["cwd"])
+            assert (source_tree / "LICENSE").read_text(encoding="utf-8") == project_files[
+                "LICENSE-sdist"
+            ]
+            assert not (source_tree / "LICENSE-sdist").exists()
+
+            built_sdist = source_tree / "dist" / "apache_burr-0.42.0.tar.gz"
+            built_sdist.parent.mkdir()
+            with tarfile.open(built_sdist, "w:gz") as archive:
+                archive.add(source_tree / "LICENSE", arcname="apache_burr-0.42.0/LICENSE")
+        else:
+            pytest.fail(f"Unexpected command: {command}")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(release, "_check_git_working_tree", fake_check_git_working_tree)
+    monkeypatch.setattr(release, "_git_source_date_epoch", lambda: 987654321)
+    monkeypatch.setattr(release, "_run_command", fake_run_command)
+
+    artifact = Path(release._build_sdist_from_git("0.42.0", str(output_dir)))
+
+    assert artifact == output_dir / "apache-burr-0.42.0-incubating-sdist.tar.gz"
+    with tarfile.open(artifact, "r:gz") as archive:
+        license_text = archive.extractfile("apache_burr-0.42.0/LICENSE").read().decode()
+        assert license_text == project_files["LICENSE-sdist"]
+        assert all(not name.endswith("/LICENSE-sdist") for name in archive.getnames())
+
+
+def test_git_source_date_epoch_ignores_ambient_epoch_and_anchors_repo(monkeypatch, capsys):
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "123456789")
+    calls = []
+
+    def fake_run_command(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(stdout="987654321\n")
+
+    monkeypatch.setattr(release, "_run_command", fake_run_command)
+
+    assert release._git_source_date_epoch() == 987654321
+    assert calls[0][0] == [
+        "git",
+        "-C",
+        str(release.PROJECT_ROOT),
+        "-c",
+        "log.showSignature=false",
+        "show",
+        "-s",
+        "--format=%ct",
+        "HEAD",
+    ]
+    assert "Ignoring ambient SOURCE_DATE_EPOCH=123456789" in capsys.readouterr().out
+
+
+def test_wheel_source_date_epoch_uses_explicit_rebuild_epoch(monkeypatch):
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "123456789")
+
+    assert release._wheel_source_date_epoch() == 123456789
+
+
+def test_wheel_source_date_epoch_treats_blank_as_unset(monkeypatch):
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "  ")
+    monkeypatch.setattr(release, "_git_source_date_epoch", lambda: 987654321)
+
+    assert release._wheel_source_date_epoch() == 987654321
+
+
+def test_environment_source_date_epoch_rejects_non_integer(monkeypatch):
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "not-an-epoch")
+
+    with pytest.raises(SystemExit):
+        release._environment_source_date_epoch()
 
 
 def _write_artifact_set(directory: Path, version: str, wheel_name: str = None) -> None:
@@ -191,3 +286,28 @@ def test_cmd_verify_skip_signing_succeeds_without_asc_files(tmp_path):
 
     args = Namespace(version=version, rc_num="0", artifacts_dir=str(tmp_path), skip_signing=True)
     assert release.cmd_verify(args) is True
+
+
+def test_wheel_exclusions_survive_cross_device_temp_dir(monkeypatch, tmp_path):
+    """Excluded files must move to and from a temp dir on another filesystem."""
+    import errno
+
+    excluded = tmp_path / "burr/tracking/server/s3/deployment/terraform/.gitignore"
+    excluded.parent.mkdir(parents=True)
+    excluded.write_text("*.tfstate\n")
+    (tmp_path / "examples").mkdir()
+    (tmp_path / "examples/__init__.py").write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    def cross_device(*args, **kwargs):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(release.os, "rename", cross_device)
+    monkeypatch.setattr(release.os, "replace", cross_device)
+
+    ok, was_symlink, symlink_target, removed = release._prepare_wheel_contents()
+    assert ok
+    assert not excluded.exists()
+
+    release._cleanup_wheel_contents(was_symlink, symlink_target, removed)
+    assert excluded.read_text() == "*.tfstate\n"

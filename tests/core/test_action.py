@@ -418,6 +418,26 @@ def test_safe_expr_literal_containers():
     assert _eval_value(Condition.safe_expr("{'a': 1, 'b': 2}"), {}) == {"a": 1, "b": 2}
 
 
+def test_safe_expr_dict_with_none_key():
+    cond = Condition.safe_expr("{None: 'fallback', 'allowed': True}[None] == 'fallback'")
+    assert cond.run(State({})) == {Condition.KEY: True}
+
+
+@pytest.mark.parametrize(
+    "expr_str",
+    [
+        "{**mapping}",
+        "{'allowed': True, **mapping}",
+        "{**first, **second}",
+        "[{**mapping}]",
+        "False and {**mapping}",
+    ],
+)
+def test_safe_expr_rejects_dict_unpacking_at_call_time(expr_str):
+    with pytest.raises(ValueError, match="dictionary unpacking"):
+        Condition.safe_expr(expr_str)
+
+
 def test_safe_expr_all_allowed_builtins():
     pairs = [
         ("len(items)", {"items": [1, 2, 3]}, 3),
@@ -434,6 +454,21 @@ def test_safe_expr_all_allowed_builtins():
     ]
     for expr_str, state, expected in pairs:
         assert _eval_value(Condition.safe_expr(expr_str), state) == expected, expr_str
+
+
+def test_safe_expr_state_key_shadows_builtin():
+    state = State({"count": 3, "max": 5, "sum": 0, "any": False})
+    for expr_str, reads in [
+        ("count < max", ["count", "max"]),
+        ("sum == 0", ["sum"]),
+        ("any", ["any"]),
+    ]:
+        cond = Condition.safe_expr(expr_str)
+        assert cond.run(state) == Condition.expr(expr_str).run(state), expr_str
+        assert sorted(cond.reads) == reads, expr_str
+    call = Condition.safe_expr("max(count, sum) == 3")
+    assert call.run(state) == {Condition.KEY: True}
+    assert sorted(call.reads) == ["count", "sum"]
 
 
 def test_safe_expr_reads_collected_correctly():

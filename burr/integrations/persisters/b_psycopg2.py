@@ -151,12 +151,13 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         return self._initialized
 
     def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
-        """Lists the app_ids for a given partition_key."""
+        """Lists the app_ids for a given partition_key, each once, most recently saved first."""
         cursor = self.connection.cursor()
         cursor.execute(
-            f"SELECT DISTINCT app_id, created_at FROM {self.table_name} "
+            f"SELECT app_id FROM {self.table_name} "
             "WHERE partition_key = %s "
-            "ORDER BY created_at DESC",
+            "GROUP BY app_id "
+            "ORDER BY MAX(created_at) DESC",
             (partition_key,),
         )
         app_ids = [row[0] for row in cursor.fetchall()]
@@ -216,7 +217,7 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
 
     def save(
         self,
-        partition_key: str,
+        partition_key: Optional[str],
         app_id: str,
         sequence_id: int,
         position: str,
@@ -241,6 +242,8 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
             before the action was applied.
         :return: None
         """
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         logger.debug(
             "saving %s, %s, %s, %s, %s, %s",
             partition_key,
