@@ -2707,8 +2707,9 @@ class ApplicationBuilder(Generic[StateType]):
                     self.start = last_position
                     self.reset_to_entrypoint()
             else:
-                # self.start is already set to the default. We don't need to do anything.
-                pass
+                # self.start is already set to the default, but the loaded state still has the
+                # prior step, which would otherwise decide the next action. Clear it.
+                self.reset_to_entrypoint()
 
     def _load_from_sync_persister(self):
         """Loads from the set sync persister and into this current object.
