@@ -284,8 +284,10 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
         finally:
             await self._release_connection(conn, acquired)
 
-    async def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+    async def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
         """Lists the app_ids for a given partition_key, each once, most recently saved first."""
+        if partition_key is None:
+            partition_key = self.PARTITION_KEY_DEFAULT
         conn, acquired = await self._get_connection()
         try:
             query = (
