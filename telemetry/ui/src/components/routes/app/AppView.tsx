@@ -33,6 +33,7 @@ import { AppStateView } from './StateMachine';
 import { createContext, useEffect, useState } from 'react';
 import { Status, useLocationParams } from '../../../utils';
 import { GraphView } from './GraphView';
+import type { HoveredAction } from './hoverHighlight';
 import { useSearchParams } from 'react-router-dom';
 
 export const REFRESH_INTERVAL = 500;
@@ -117,6 +118,9 @@ export type HighlightState = {
   currentSelectedIndex?: SequenceLocation;
   setCurrentHoverIndex: (index: SequenceLocation | undefined) => void;
   currentHoverIndex?: SequenceLocation;
+  // Graph hover. Separate from currentHoverIndex because one action maps to many sequences.
+  setCurrentHoverAction: (action: HoveredAction | undefined) => void;
+  currentHoverAction?: HoveredAction;
   currentEditingAnnotationContext?: AnnotationEditingContext;
   setCurrentEditingAnnotationContext: (
     annotationContext: AnnotationEditingContext | undefined
@@ -145,6 +149,8 @@ export const AppContext = createContext<HighlightState>({
   currentSelectedIndex: undefined,
   setCurrentHoverIndex: () => {},
   currentHoverIndex: undefined,
+  setCurrentHoverAction: () => {},
+  currentHoverAction: undefined,
   currentEditingAnnotationContext: undefined,
   setCurrentEditingAnnotationContext: () => {},
   createAnnotation: () => {
@@ -222,6 +228,20 @@ export const AppView = (props: {
   const { projectId } = props;
   // const [currentActionIndex, setCurrentActionIndex] = useState<number | undefined>(undefined);
   const [hoverIndex, setHoverIndex] = useState<SequenceLocation | undefined>(undefined);
+  const [hoveredAction, setHoveredAction] = useState<HoveredAction | undefined>(undefined);
+  // The two hover sources are exclusive: a row hover is one sequence, a graph hover is an action.
+  const setCurrentHoverIndex = (index: SequenceLocation | undefined) => {
+    setHoverIndex(index);
+    if (index !== undefined) {
+      setHoveredAction(undefined);
+    }
+  };
+  const setCurrentHoverAction = (action: HoveredAction | undefined) => {
+    setHoveredAction(action);
+    if (action !== undefined) {
+      setHoverIndex(undefined);
+    }
+  };
   const [autoRefresh, setAutoRefresh] = useState(props.defaultAutoRefresh || false);
   const shouldQuery = projectId !== undefined && appID !== undefined;
   const [minimizedTable, setMinimizedTable] = useState(false);
@@ -471,8 +491,10 @@ export const AppView = (props: {
           setInspectViewOpen(loc !== undefined);
         },
         currentSelectedIndex: currentSequenceLocation,
-        setCurrentHoverIndex: setHoverIndex,
+        setCurrentHoverIndex: setCurrentHoverIndex,
         currentHoverIndex: hoverIndex,
+        setCurrentHoverAction: setCurrentHoverAction,
+        currentHoverAction: hoveredAction,
         currentEditingAnnotationContext: currentEditingAnnotationContext,
         setCurrentEditingAnnotationContext: setCurrentEditingAnnotationContext,
         // TODO -- handle span ID
@@ -544,6 +566,8 @@ export const AppView = (props: {
                   // highlightedActions={previousActions}
                   highlightedActions={undefined}
                   hoverAction={hoverAction}
+                  appId={appID}
+                  partitionKey={partitionKey}
                 />
               </div>
             )}
@@ -558,6 +582,10 @@ export const AppView = (props: {
             highlightedActions={undefined}
             hoverAction={hoverAction}
             currentActionLocation={currentSequenceLocation}
+            graphAppId={currentFocusStepsData !== undefined ? currentFocusAppID : appID}
+            graphPartitionKey={
+              currentFocusStepsData !== undefined ? currentFocusPartitionKey : partitionKey
+            }
             displayGraphAsTab={displayGraphAsTabs} // in this case we want the graph as a tab
             setMinimized={(min: boolean) => setInspectViewOpen(!min)}
             isMinimized={!inspectViewOpen}

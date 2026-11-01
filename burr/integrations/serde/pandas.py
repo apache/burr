@@ -52,6 +52,12 @@ def serialize_pandas_df(
     hash_object = hashlib.sha256()
     hash_value = str(value.columns) + str(value.shape) + str(value.dtypes)
     hash_object.update(hash_value.encode())
+    try:
+        content = pd.util.hash_pandas_object(value, index=True).values
+    except TypeError:
+        # cells such as lists cannot be hashed by pandas, so hash the parquet bytes instead
+        content = value.to_parquet()
+    hash_object.update(content)
 
     # Return the hexadecimal representation of the hash
     file_name = f"df_{hash_object.hexdigest()}.parquet"

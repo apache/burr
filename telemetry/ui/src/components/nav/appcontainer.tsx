@@ -332,7 +332,6 @@ export const AppContainer = (props: { children: React.ReactNode }) => {
                                     'flex items-center w-full text-left rounded-md p-2 gap-x-3 text-sm leading-6 font-semibold text-gray-700 dark:text-gray-200'
                                   )}
                                 >
-
                                   <item.icon
                                     className="h-6 w-6 shrink-0 text-gray-400 dark:text-gray-500"
                                     aria-hidden="true"

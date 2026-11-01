@@ -15,6 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pickle
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from burr.core import State
@@ -74,6 +77,57 @@ def test_persistence_lists_app_ids(persistence):
     assert set(app_ids) == set(["app_id1", "app_id2"])
 
 
+def test_sqlite_persister_list_app_ids_is_unique_and_newest_first():
+    """Each app appears once, ordered by its most recent save."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    persister.initialize()
+    saves = [
+        ("a-app", 0, "2026-01-01 00:00:01"),
+        ("z-app", 0, "2026-01-01 00:00:02"),
+        ("a-app", 1, "2026-01-01 00:00:03"),
+    ]
+    for app_id, sequence_id, created_at in saves:
+        persister.save("pk", app_id, sequence_id, "position", State({}), "completed")
+        persister.connection.execute(
+            "UPDATE test_table SET created_at = ? WHERE app_id = ? AND sequence_id = ?",
+            (created_at, app_id, sequence_id),
+        )
+    persister.connection.commit()
+    assert persister.list_app_ids("pk") == ["a-app", "z-app"]
+
+
+@pytest.mark.parametrize("partition_key", [None, "partition_key"])
+@pytest.mark.parametrize("has_saved_app", [False, True])
+def test_memory_persistence_missing_load_preserves_app_ids(partition_key, has_saved_app):
+    persistence = InMemoryPersister()
+    if has_saved_app:
+        for sequence_id in (1, 2):
+            persistence.save(
+                partition_key,
+                "saved",
+                sequence_id,
+                "position",
+                State({"step": sequence_id}),
+                "status",
+            )
+    expected_app_ids = ["saved"] if has_saved_app else []
+
+    assert persistence.load(partition_key, None) is None
+    for sequence_id in (None, 99):
+        assert persistence.load(partition_key, "missing", sequence_id) is None
+        assert persistence.list_app_ids(partition_key) == expected_app_ids
+
+    if has_saved_app:
+        assert persistence.load(partition_key, "saved", 99) is None
+        assert persistence.load(partition_key, "saved")["state"] == State({"step": 2})
+        assert persistence.load(partition_key, "saved", 1)["state"] == State({"step": 1})
+        assert persistence.list_app_ids(partition_key) == expected_app_ids
+
+    persistence.save(partition_key, "missing", 1, "position", State({"step": 3}), "status")
+    assert set(persistence.list_app_ids(partition_key)) == set(expected_app_ids + ["missing"])
+    assert persistence.load(partition_key, "missing")["state"] == State({"step": 3})
+
+
 def test_persistence_is_initialized_false(initializing_persistence):
     assert not initializing_persistence.is_initialized()
 
@@ -92,6 +146,31 @@ def test_sqlite_persistence_is_initialized_true_new_connection(tmp_path):
     assert p2.is_initialized()
     p.cleanup()
     p2.cleanup()
+
+
+@pytest.mark.parametrize("factory", ["from_values", "from_config"])
+@pytest.mark.parametrize("recreate", ["copy", "pickle"])
+def test_sqlite_factory_preserves_connection_options(tmp_path, factory, recreate):
+    config = {
+        "db_path": str(tmp_path / "state.db"),
+        "table_name": "checkpoints",
+        "connect_kwargs": {"timeout": 0.123, "check_same_thread": False},
+    }
+    persister = (
+        SQLLitePersister.from_values(**config)
+        if factory == "from_values"
+        else SQLLitePersister.from_config(config)
+    )
+    with persister:
+        persister.initialize()
+        persister.save("tenant", "agent", 1, "checkpoint", State({"count": 1}), "completed")
+        restored = persister.copy() if recreate == "copy" else pickle.loads(pickle.dumps(persister))
+        with restored:
+            assert restored.connection is not persister.connection
+            assert restored.connection.execute("PRAGMA busy_timeout").fetchone()[0] == 123
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                loaded = executor.submit(restored.load, "tenant", "agent").result(timeout=5)
+            assert loaded["state"] == State({"count": 1})
 
 
 def test_sqlite_persister_load_without_initialize_raises_runtime_error():
@@ -129,6 +208,46 @@ def test_sqlite_persister_list_app_ids_without_initialize_raises_runtime_error()
             persister.list_app_ids("partition_key")
     finally:
         persister.cleanup()
+
+
+@pytest.mark.parametrize("partition_key", [None, "partition"])
+@pytest.mark.parametrize("latest_app,latest_sequence", [("a-app", 12), ("z-app", 0)])
+def test_sqlite_load_latest_breaks_timestamp_ties(
+    tmp_path, partition_key, latest_app, latest_sequence
+):
+    db_path = str(tmp_path / "checkpoints.db")
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        persister.initialize()
+        persister.save(partition_key, "a-app", 11, "first", State({"step": 1}), "completed")
+        persister.save(
+            partition_key, latest_app, latest_sequence, "second", State({"step": 2}), "completed"
+        )
+        persister.save("other-partition", "other-app", 999, "other", State({}), "completed")
+        # Model saves within the same second without depending on wall-clock timing.
+        persister.connection.execute("UPDATE test_table SET created_at = '2026-01-01 00:00:00'")
+        persister.connection.commit()
+
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        loaded = persister.load(partition_key, None)
+        assert loaded["app_id"] == latest_app
+        assert loaded["sequence_id"] == latest_sequence
+        assert loaded["position"] == "second"
+        assert loaded["state"] == State({"step": 2})
+        assert loaded["status"] == "completed"
+        assert persister.load(partition_key, "a-app", 11)["state"] == State({"step": 1})
+
+
+def test_sqlite_load_latest_prioritizes_timestamp(initializing_persistence):
+    persister = initializing_persistence
+    persister.initialize()
+    persister.save("partition", "a-app", 1, "first", State({"step": 1}), "completed")
+    persister.save("partition", "z-app", 0, "second", State({"step": 2}), "completed")
+    persister.connection.execute(
+        "UPDATE test_table SET created_at = CASE app_id "
+        "WHEN 'a-app' THEN '2026-01-02 00:00:00' ELSE '2026-01-01 00:00:00' END"
+    )
+    persister.connection.commit()
+    assert persister.load("partition", None)["state"] == State({"step": 1})
 
 
 @pytest.mark.parametrize(
@@ -209,6 +328,45 @@ async def test_async_persistence_lists_app_ids(async_persistence):
     )
     app_ids = await async_persistence.list_app_ids("partition_key")
     assert set(app_ids) == set(["app_id1", "app_id2"])
+
+
+@pytest.mark.parametrize("partition_key", [None, "partition_key"])
+@pytest.mark.parametrize("has_saved_app", [False, True])
+async def test_async_persistence_missing_load_preserves_app_ids(
+    async_persistence, partition_key, has_saved_app
+):
+    if has_saved_app:
+        for sequence_id in (1, 2):
+            await async_persistence.save(
+                partition_key,
+                "saved",
+                sequence_id,
+                "position",
+                State({"step": sequence_id}),
+                "status",
+            )
+    expected_app_ids = ["saved"] if has_saved_app else []
+
+    assert await async_persistence.load(partition_key, None) is None
+    for sequence_id in (None, 99):
+        assert await async_persistence.load(partition_key, "missing", sequence_id) is None
+        assert await async_persistence.list_app_ids(partition_key) == expected_app_ids
+
+    if has_saved_app:
+        assert await async_persistence.load(partition_key, "saved", 99) is None
+        assert (await async_persistence.load(partition_key, "saved"))["state"] == State({"step": 2})
+        assert (await async_persistence.load(partition_key, "saved", 1))["state"] == State(
+            {"step": 1}
+        )
+        assert await async_persistence.list_app_ids(partition_key) == expected_app_ids
+
+    await async_persistence.save(
+        partition_key, "missing", 1, "position", State({"step": 3}), "status"
+    )
+    assert set(await async_persistence.list_app_ids(partition_key)) == set(
+        expected_app_ids + ["missing"]
+    )
+    assert (await async_persistence.load(partition_key, "missing"))["state"] == State({"step": 3})
 
 
 @pytest.mark.parametrize(

@@ -30,6 +30,7 @@
    concepts/index
    reference/index
    contributing/index
+   security
    ecosystem
 
 .. toctree::

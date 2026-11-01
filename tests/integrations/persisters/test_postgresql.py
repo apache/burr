@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import datetime
 import os
 import pickle
 
@@ -49,12 +50,39 @@ def test_save_and_load_state(postgresql_persister):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+def test_save_and_load_with_default_partition_key(postgresql_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    postgresql_persister.save(None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed")
+    data = postgresql_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+
+
 def test_list_app_ids(postgresql_persister):
     postgresql_persister.save("pk", "app_id1", 1, "pos1", state.State({"a": 1}), "completed")
     postgresql_persister.save("pk", "app_id2", 2, "pos2", state.State({"b": 2}), "completed")
     app_ids = postgresql_persister.list_app_ids("pk")
     assert "app_id1" in app_ids
     assert "app_id2" in app_ids
+
+
+def test_list_app_ids_is_unique_and_newest_first(postgresql_persister):
+    saves = [
+        ("a-app", 0, "2026-01-01 00:00:01"),
+        ("z-app", 0, "2026-01-01 00:00:02"),
+        ("a-app", 1, "2026-01-01 00:00:03"),
+    ]
+    cursor = postgresql_persister.connection.cursor()
+    for app_id, sequence_id, created_at in saves:
+        postgresql_persister.save(
+            "list-order", app_id, sequence_id, "pos", state.State({}), "completed"
+        )
+        cursor.execute(
+            "UPDATE testtable SET created_at = %s "
+            "WHERE partition_key = %s AND app_id = %s AND sequence_id = %s",
+            (created_at, "list-order", app_id, sequence_id),
+        )
+    postgresql_persister.connection.commit()
+    assert postgresql_persister.list_app_ids("list-order") == ["a-app", "z-app"]
 
 
 def test_load_nonexistent_key(postgresql_persister):
@@ -146,6 +174,15 @@ async def test_async_save_and_load_state(asyncpostgresql_persister):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+async def test_async_save_and_load_with_default_partition_key(asyncpostgresql_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    await asyncpostgresql_persister.save(
+        None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed"
+    )
+    data = await asyncpostgresql_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+
+
 async def test_async_list_app_ids(asyncpostgresql_persister):
     await asyncpostgresql_persister.save(
         "pk", "app_id1", 1, "pos1", state.State({"a": 1}), "completed"
@@ -156,6 +193,27 @@ async def test_async_list_app_ids(asyncpostgresql_persister):
     app_ids = await asyncpostgresql_persister.list_app_ids("pk")
     assert "app_id1" in app_ids
     assert "app_id2" in app_ids
+
+
+async def test_async_list_app_ids_is_unique_and_newest_first(asyncpostgresql_persister):
+    saves = [
+        ("a-app", 0, "2026-01-01 00:00:01"),
+        ("z-app", 0, "2026-01-01 00:00:02"),
+        ("a-app", 1, "2026-01-01 00:00:03"),
+    ]
+    for app_id, sequence_id, created_at in saves:
+        await asyncpostgresql_persister.save(
+            "list-order", app_id, sequence_id, "pos", state.State({}), "completed"
+        )
+        await asyncpostgresql_persister.connection.execute(
+            "UPDATE testtable_async SET created_at = $1 "
+            "WHERE partition_key = $2 AND app_id = $3 AND sequence_id = $4",
+            datetime.datetime.fromisoformat(created_at),
+            "list-order",
+            app_id,
+            sequence_id,
+        )
+    assert await asyncpostgresql_persister.list_app_ids("list-order") == ["a-app", "z-app"]
 
 
 async def test_async_load_nonexistent_key(asyncpostgresql_persister):

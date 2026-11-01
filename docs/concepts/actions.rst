@@ -322,6 +322,8 @@ We need to pass in `client` and `prompt` somehow. Here are the ways to do that:
 For instance, say you have a chatbot. The first step will likely declare the ``input`` parameter ``prompt`` --
 it will take that, process it, and put the result in state. The subsequent steps will read the result of that from state.
 
+To stop before an action that needs a person, then resume with ``inputs``, see :ref:`human in the loop <human-in-the-loop>`.
+
 ---------------
 Tagging Actions
 ---------------

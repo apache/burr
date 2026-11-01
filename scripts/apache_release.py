@@ -48,6 +48,7 @@ PROJECT_SHORT_NAME = "burr"
 VERSION_FILE = "pyproject.toml"
 VERSION_PATTERN = r'version\s*=\s*"(\d+\.\d+\.\d+)"'
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DOWNLOADS_URL = f"https://downloads.apache.org/incubator/{PROJECT_SHORT_NAME}/"
 DEFAULT_DEV_SVN_ROOT = f"https://dist.apache.org/repos/dist/dev/incubator/{PROJECT_SHORT_NAME}"
 DEFAULT_RELEASE_SVN_ROOT = (
@@ -683,63 +684,131 @@ def _create_git_archive(
 # ============================================================================
 
 
-def _remove_ui_build_artifacts() -> None:
-    """Remove pre-built UI artifacts to ensure clean build."""
-    ui_build_dir = os.path.join("burr", "tracking", "server", "build")
-    if os.path.exists(ui_build_dir):
-        print(f"  Removing UI build artifacts: {ui_build_dir}")
-        shutil.rmtree(ui_build_dir)
-        print("    ✓ UI build artifacts removed")
-
-
-def _build_sdist_from_git(version: str, output_dir: str = "dist") -> str:
-    """Build source distribution from git using flit."""
-    _print_step(1, 2, "Building sdist with flit")
-
-    os.makedirs(output_dir, exist_ok=True)
-    _remove_ui_build_artifacts()
-    _check_git_working_tree()
-
+def _release_build_environment(source_date_epoch: int) -> dict[str, str]:
+    """Return the shared environment for reproducible Flit builds."""
     env = os.environ.copy()
     env["FLIT_USE_VCS"] = "0"
-    source_epoch = _source_date_epoch(version, output_dir)
-    if source_epoch is not None:
-        env["SOURCE_DATE_EPOCH"] = str(source_epoch)
-    _run_command(
-        ["flit", "build", "--format", "sdist"],
-        description="Running flit build --format sdist...",
-        error_message="Failed to build sdist",
-        success_message="flit sdist created successfully",
-        env=env,
+    env["SOURCE_DATE_EPOCH"] = str(source_date_epoch)
+    return env
+
+
+def _git_source_date_epoch() -> int:
+    """Return the anchored HEAD commit timestamp for official release builds."""
+    result = _run_command(
+        [
+            "git",
+            "-C",
+            str(PROJECT_ROOT),
+            "-c",
+            "log.showSignature=false",
+            "show",
+            "-s",
+            "--format=%ct",
+            "HEAD",
+        ],
+        description="Reading the source commit timestamp...",
+        error_message="Could not determine the HEAD commit timestamp",
     )
+    raw_epoch = result.stdout.strip()
+    if not raw_epoch.isdigit():
+        _fail(f"Git returned an invalid commit timestamp: {raw_epoch!r}")
 
-    # Find and rename sdist
-    expected_pattern = f"dist/apache_burr-{version.lower()}.tar.gz"
-    sdist_files = glob.glob(expected_pattern)
+    ambient_epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if ambient_epoch and ambient_epoch != raw_epoch:
+        print(
+            "  ⚠️  Ignoring ambient SOURCE_DATE_EPOCH="
+            f"{ambient_epoch}; using HEAD commit timestamp {raw_epoch}"
+        )
+    return int(raw_epoch)
 
-    if not sdist_files:
-        _fail(f"Could not find sdist: {expected_pattern}")
 
-    original_sdist = sdist_files[0]
-    apache_sdist = os.path.join(
-        output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
-    )
+def _environment_source_date_epoch() -> Optional[int]:
+    """Return an explicitly configured rebuild epoch, treating blank as unset."""
+    raw_epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if not raw_epoch:
+        return None
+    try:
+        return int(raw_epoch)
+    except ValueError:
+        _fail("SOURCE_DATE_EPOCH must be an integer Unix timestamp")
 
-    if os.path.exists(apache_sdist):
-        os.remove(apache_sdist)
 
-    shutil.move(original_sdist, apache_sdist)
+def _wheel_source_date_epoch() -> int:
+    """Use an explicit rebuild epoch, or the anchored commit timestamp in Git."""
+    configured_epoch = _environment_source_date_epoch()
+    return configured_epoch if configured_epoch is not None else _git_source_date_epoch()
+
+
+def _build_sdist_from_git(
+    version: str, output_dir: str = "dist", source_date_epoch: Optional[int] = None
+) -> str:
+    """Build the sdist from a staged copy of the committed source tree.
+
+    The complete source release and the Python sdist contain different files,
+    so each needs a LICENSE describing its own contents.  Keep the repository's
+    LICENSE intact for the source release and install LICENSE-sdist as LICENSE
+    only in the isolated tree used to build the sdist.
+    """
+    _print_step(1, 2, "Building sdist with flit")
+
+    output_dir = os.path.abspath(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    _check_git_working_tree()
+
+    epoch = source_date_epoch if source_date_epoch is not None else _git_source_date_epoch()
+
+    with tempfile.TemporaryDirectory(prefix="apache-burr-sdist-") as temp_dir:
+        temp_path = Path(temp_dir)
+        source_tree = temp_path / "source"
+        source_tree.mkdir()
+        source_archive = temp_path / "source.tar"
+
+        _run_command(
+            ["git", "archive", "HEAD", "--format=tar", "--output", str(source_archive)],
+            description="Staging committed source files...",
+            error_message="Failed to stage source files for the sdist",
+        )
+        unpack_options: dict[str, Any] = {}
+        if sys.version_info >= (3, 12):
+            # This archive was just produced from our own Git repository. Be
+            # explicit on newer Python versions while retaining Python 3.10-3.11
+            # compatibility, where shutil has no filter argument.
+            unpack_options["filter"] = "fully_trusted"
+        shutil.unpack_archive(str(source_archive), str(source_tree), format="tar", **unpack_options)
+
+        sdist_license = source_tree / "LICENSE-sdist"
+        if not sdist_license.is_file():
+            _fail("LICENSE-sdist is missing from the committed source tree")
+        shutil.copyfile(sdist_license, source_tree / "LICENSE")
+        sdist_license.unlink()
+
+        # A clean git archive normally has no ignored UI build output, but
+        # remove this defensively in case it becomes tracked in the future.
+        shutil.rmtree(source_tree / "burr" / "tracking" / "server" / "build", ignore_errors=True)
+
+        _run_command(
+            ["flit", "build", "--format", "sdist"],
+            description="Running flit build --format sdist...",
+            error_message="Failed to build sdist",
+            success_message="flit sdist created successfully",
+            env=_release_build_environment(epoch),
+            cwd=source_tree,
+        )
+
+        original_sdist = source_tree / "dist" / f"apache_burr-{version.lower()}.tar.gz"
+        if not original_sdist.is_file():
+            _fail(f"Could not find sdist: {original_sdist}")
+
+        apache_sdist = os.path.join(
+            output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
+        )
+        if os.path.exists(apache_sdist):
+            os.remove(apache_sdist)
+        shutil.move(original_sdist, apache_sdist)
+
     print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
 
     return apache_sdist
-
-
-def _source_date_epoch(version: str, output_dir: str = "dist") -> Optional[int]:
-    """Use the source archive timestamp when available so local rebuilds are comparable."""
-    source_archive = os.path.join(output_dir, f"apache-burr-{version}-incubating-src.tar.gz")
-    if os.path.exists(source_archive):
-        return int(os.path.getmtime(source_archive))
-    return None
 
 
 # ============================================================================
@@ -847,7 +916,9 @@ def _prepare_wheel_contents() -> tuple[bool, bool, Optional[str], list[tuple[str
         if os.path.exists(path):
             backup_dir = tempfile.mkdtemp(prefix="apache-release-wheel-")
             backup_path = os.path.join(backup_dir, os.path.basename(path))
-            os.replace(path, backup_path)
+            # shutil.move, not os.replace: the temp dir can be on another filesystem
+            # (tmpfs /tmp on ubuntu-26.04 runners), where a rename fails with EXDEV.
+            shutil.move(path, backup_path)
             removed_files.append((path, backup_path))
             print(f"    ✓ Temporarily excluded {path}")
 
@@ -870,14 +941,16 @@ def _cleanup_wheel_contents(
 
     for original_path, backup_path in removed_files:
         if os.path.exists(backup_path):
-            os.replace(backup_path, original_path)
+            shutil.move(backup_path, original_path)
             print(f"  Restored {original_path}")
             backup_dir = os.path.dirname(backup_path)
             if os.path.isdir(backup_dir):
                 shutil.rmtree(backup_dir)
 
 
-def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str:
+def _build_wheel_from_current_dir(
+    version: str, output_dir: str = "dist", source_date_epoch: Optional[int] = None
+) -> str:
     """Build wheel from current directory (matches what voters do).
 
     This is MUCH simpler than the old approach:
@@ -894,18 +967,14 @@ def _build_wheel_from_current_dir(version: str, output_dir: str = "dist") -> str
     _print_step(3, 3, "Building wheel with flit")
 
     try:
-        env = os.environ.copy()
-        env["FLIT_USE_VCS"] = "0"
-        source_epoch = _source_date_epoch(version, output_dir)
-        if source_epoch is not None:
-            env["SOURCE_DATE_EPOCH"] = str(source_epoch)
+        epoch = source_date_epoch if source_date_epoch is not None else _wheel_source_date_epoch()
 
         _run_command(
             ["flit", "build", "--format", "wheel"],
             description="",
             error_message="Wheel build failed",
             success_message="Wheel built successfully",
-            env=env,
+            env=_release_build_environment(epoch),
         )
 
         # Find the wheel
@@ -1486,6 +1555,7 @@ def cmd_all(args) -> bool:
     _verify_project_root()
     _validate_version(args.version)
     _check_git_working_tree()
+    source_date_epoch = _git_source_date_epoch()
 
     # Step 1: Git Archive
     _print_step(1, 4, "Creating git archive")
@@ -1493,14 +1563,18 @@ def cmd_all(args) -> bool:
 
     # Step 2: Build sdist
     _print_step(2, 4, "Building sdist")
-    sdist_path = _build_sdist_from_git(args.version, args.output_dir)
+    sdist_path = _build_sdist_from_git(
+        args.version, args.output_dir, source_date_epoch=source_date_epoch
+    )
     _sign_artifact(sdist_path, skip_signing=skip_signing)
     if not _verify_artifact_complete(sdist_path, skip_signing=skip_signing):
         _fail("sdist verification failed!")
 
     # Step 3: Build wheel
     _print_step(3, 4, "Building wheel")
-    wheel_path = _build_wheel_from_current_dir(args.version, args.output_dir)
+    wheel_path = _build_wheel_from_current_dir(
+        args.version, args.output_dir, source_date_epoch=source_date_epoch
+    )
     if not _verify_wheel_with_twine(wheel_path):
         _fail("Twine verification failed!")
     _sign_artifact(wheel_path, skip_signing=skip_signing)

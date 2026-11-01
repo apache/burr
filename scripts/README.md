@@ -52,7 +52,7 @@ Specifically, we set the following guidelines:
 
 
 Prerequisites:
-- Python 3.9+
+- Python 3.10+
 - `flit` for building (`pip install flit`)
 - `twine` for package validation (`pip install twine`)
 - GPG key configured for signing

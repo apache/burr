@@ -63,10 +63,12 @@ from burr.core.application import (
 from burr.core.graph import Graph, GraphBuilder, Transition
 from burr.core.persistence import (
     AsyncDevNullPersister,
+    AsyncInMemoryPersister,
     BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
     PersistedStateData,
+    PersisterHookAsync,
     SQLLitePersister,
 )
 from burr.core.typing import TypingSystem
@@ -1898,6 +1900,60 @@ async def test_app_astep():
     assert action.name == "counter_async"
     assert result == {"count": 1}
     assert state[PRIOR_STEP] == "counter_async"  # internal contract, not part of the public API
+
+
+async def test_app_astep_sync_action_persists_executed_state():
+    persister = AsyncInMemoryPersister()
+    tracker = ActionTrackerAsync()
+    counter_action = base_counter_action.with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(counter_action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0)
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister), tracker)
+        .abuild()
+    )
+
+    action, result, state = await app.astep()
+
+    persisted_state = await persister.load("pk", "app")
+    assert action.name == "counter"
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert app.state["count"] == 1
+    assert tracker.post_called[0][1]["result"] == {"count": 1}
+    assert tracker.post_called[0][1]["state"]["count"] == 1
+    assert tracker.post_called[0][1]["exception"] is None
+    assert persisted_state["state"]["count"] == 1
+    assert persisted_state["status"] == "completed"
+
+
+async def test_app_astep_sync_single_step_action_persists_executed_state():
+    persister = AsyncInMemoryPersister()
+    counter_action = base_single_step_counter.with_name("counter")
+    app = await (
+        ApplicationBuilder()
+        .with_actions(counter_action)
+        .with_transitions()
+        .with_entrypoint("counter")
+        .with_state(count=0, tracker=[])
+        .with_identifiers(app_id="app", partition_key="pk")
+        .with_hooks(PersisterHookAsync(persister))
+        .abuild()
+    )
+
+    _, result, state = await app.astep()
+
+    persisted_state = await persister.load("pk", "app")
+    assert result == {"count": 1}
+    assert state["count"] == 1
+    assert state["tracker"] == [1]
+    assert persisted_state["state"]["count"] == 1
+    assert persisted_state["state"]["tracker"] == [1]
+    assert persisted_state["status"] == "completed"
 
 
 def test_app_step_context():
@@ -4198,6 +4254,105 @@ def test_remap_context_variable_without_mangled_context():
         "foo": "foo_value",
     }
     assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+class AsyncActionWithContext(Action):
+    """Class-based async action whose run() takes the injected ``__context``.
+    Python name-mangles the parameter to ``_AsyncActionWithContext__context``."""
+
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def run(self, state: State, __context: ApplicationContext) -> dict:
+        return {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class StreamingActionWithContext(StreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def stream_run(
+        self, state: State, __context: ApplicationContext
+    ) -> Generator[dict, None, None]:
+        yield {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class AsyncStreamingActionWithContext(AsyncStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def stream_run(self, state: State, __context: ApplicationContext) -> AsyncGenerator:
+        yield {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+def _build_context_app(action_: Action) -> Application:
+    return (
+        ApplicationBuilder()
+        .with_actions(ctx_action=action_)
+        .with_transitions()
+        .with_entrypoint("ctx_action")
+        .with_identifiers(app_id="context-app-id")
+        .build()
+    )
+
+
+async def test_astep_class_based_action_receives_context():
+    app = _build_context_app(AsyncActionWithContext())
+    _, result, state = await app.astep()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_stream_result_class_based_streaming_action_receives_context():
+    app = _build_context_app(StreamingActionWithContext())
+    _, container = app.stream_result(halt_after=["ctx_action"])
+    result, state = container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astream_result_class_based_async_streaming_action_receives_context():
+    app = _build_context_app(AsyncStreamingActionWithContext())
+    _, container = await app.astream_result(halt_after=["ctx_action"])
+    result, state = await container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
 
 
 async def test_async_application_builder_initialize_raises_on_broken_persistor():

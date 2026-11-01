@@ -16,14 +16,14 @@
 # under the License.
 
 [build-system]
-requires = ["flit_core >=3.2,<4"]
+requires = ["flit_core >=3.11,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
 name = "apache-burr"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [] # yes, there are none
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
   {name = "Elijah ben Izzy", email = "elijah@apache.org"},
   {name = "Stefan Krawczyk", email = "stefan@apache.org"},
@@ -31,9 +31,12 @@ authors = [
 maintainers = [
   {name = "Elijah ben Izzy", email = "elijah@apache.org"},
   {name = "Stefan Krawczyk", email = "stefan@apache.org"},
+  {name = "Jernej Frank", email = "jernejfrank@apache.org"},
+  {name = "André Ahlert", email = "andre@aex.partners"},
 ]
 description = "Apache Burr (incubating) makes it easy to develop applications that make decisions (chatbots, agents, simulations, etc...) from simple python building blocks."
 readme = "README.md"
+license = "Apache-2.0"
 license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]
 keywords = ["mlops", "data", "state-machine", "llmops"]
 classifiers = [
@@ -88,6 +91,7 @@ release = [
 tests = [
   "pytest",
   "pytest-asyncio",
+  "apache-burr[graphviz]",
   "apache-burr[hamilton]",
   "langchain_core",
   "langchain_community",

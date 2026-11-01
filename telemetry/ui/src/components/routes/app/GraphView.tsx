@@ -20,7 +20,7 @@
 import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
-import React, { createContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   BaseEdge,
   Controls,
@@ -35,7 +35,7 @@ import ReactFlow, {
 } from 'reactflow';
 
 import 'reactflow/dist/style.css';
-import { backgroundColorsForIndex } from './AppView';
+import { AppContext, backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
 import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
 
@@ -79,10 +79,14 @@ type EdgeType = {
 };
 
 const ActionNode = (props: { data: NodeData }) => {
+  const { setCurrentHoverAction } = React.useContext(AppContext);
   const {
     highlightedActions: previousActions,
     hoverAction,
-    currentAction
+    currentAction,
+    hoveredActionName,
+    appId,
+    partitionKey
   } = React.useContext(NodeStateProvider);
   const highlightedActions = [currentAction, ...(previousActions || [])].reverse();
   const name = props.data.label;
@@ -98,7 +102,8 @@ const ActionNode = (props: { data: NodeData }) => {
       : shouldHighlight
         ? 'bg-gray-100'
         : '';
-  const opacity = hoverAction?.step_start_log.action === name ? 'opacity-50' : '';
+  const opacity =
+    hoverAction?.step_start_log.action === name || hoveredActionName === name ? 'opacity-50' : '';
   const additionalClasses = isCurrentAction
     ? 'border-dwlightblue/50 text-white border-2'
     : shouldHighlight
@@ -109,6 +114,14 @@ const ActionNode = (props: { data: NodeData }) => {
       <Handle type="target" position={Position.Top} />
       <div
         className={`${bgColor} ${opacity} ${additionalClasses} text-xl font-sans p-4 rounded-md border`}
+        onMouseEnter={() =>
+          setCurrentHoverAction({
+            actionName: name,
+            appId,
+            partitionKey
+          })
+        }
+        onMouseLeave={() => setCurrentHoverAction(undefined)}
       >
         {name}
       </div>
@@ -305,13 +318,19 @@ const edgeTypes = {
 
 type NodeState = {
   highlightedActions: Step[] | undefined; // one for each highlighted action, in order from most recent to least recent
-  hoverAction: Step | undefined; // the action currently being hovered over
+  hoverAction: Step | undefined; // the action currently being hovered over in the telemetry list
   currentAction: Step | undefined; // the action currently being viewed
+  hoveredActionName: string | undefined; // graph-node hover, already scoped to this application
+  appId: string;
+  partitionKey: string | null;
 };
 const NodeStateProvider = createContext<NodeState>({
   highlightedActions: undefined,
   hoverAction: undefined,
-  currentAction: undefined
+  currentAction: undefined,
+  hoveredActionName: undefined,
+  appId: '',
+  partitionKey: null
 });
 
 export const _Graph = (props: {
@@ -319,6 +338,8 @@ export const _Graph = (props: {
   currentAction: Step | undefined;
   previousActions: Step[] | undefined;
   hoverAction: Step | undefined;
+  appId: string;
+  partitionKey: string | null;
 }) => {
   const [showInputs, setShowInputs] = useState(true);
 
@@ -326,6 +347,19 @@ export const _Graph = (props: {
   const [edges, setEdges] = useState<EdgeType[]>([]);
 
   const { fitView } = useReactFlow();
+  const { currentHoverAction, setCurrentHoverAction } = React.useContext(AppContext);
+  const hoveredActionName =
+    currentHoverAction?.appId === props.appId &&
+    currentHoverAction.partitionKey === props.partitionKey
+      ? currentHoverAction.actionName
+      : undefined;
+  const setCurrentHoverActionRef = useRef(setCurrentHoverAction);
+  setCurrentHoverActionRef.current = setCurrentHoverAction;
+  useEffect(() => {
+    return () => {
+      setCurrentHoverActionRef.current(undefined);
+    };
+  }, []);
 
   // Keyed on the rendered structure rather than object identity: refetches and focus
   // switches that don't change the graph must not trigger a full relayout.
@@ -357,9 +391,19 @@ export const _Graph = (props: {
     () => ({
       highlightedActions: props.previousActions,
       hoverAction: props.hoverAction,
-      currentAction: props.currentAction
+      currentAction: props.currentAction,
+      hoveredActionName,
+      appId: props.appId,
+      partitionKey: props.partitionKey
     }),
-    [props.previousActions, props.hoverAction, props.currentAction]
+    [
+      props.previousActions,
+      props.hoverAction,
+      props.currentAction,
+      hoveredActionName,
+      props.appId,
+      props.partitionKey
+    ]
   );
 
   return (
@@ -392,6 +436,8 @@ export const GraphView = (props: {
   currentAction: Step | undefined;
   highlightedActions: Step[] | undefined;
   hoverAction: Step | undefined;
+  appId: string;
+  partitionKey: string | null;
 }) => {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const childRef = useRef<HTMLDivElement | null>(null);
@@ -405,6 +451,8 @@ export const GraphView = (props: {
             currentAction={props.currentAction}
             previousActions={props.highlightedActions}
             hoverAction={props.hoverAction}
+            appId={props.appId}
+            partitionKey={props.partitionKey}
           />
         </ReactFlowProvider>
       </div>

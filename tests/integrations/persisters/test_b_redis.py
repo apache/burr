@@ -51,6 +51,25 @@ def test_save_and_load_state(redis_persister):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+def test_save_and_load_with_default_partition_key(redis_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    redis_persister.save(None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed")
+    data = redis_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+    # None is stored under the default partition key, so it reads back as "" as well
+    assert data["partition_key"] == ""
+    assert redis_persister.load("", "no_pk_app")["sequence_id"] == 1
+    assert "no_pk_app" in redis_persister.list_app_ids(None)
+
+
+def test_save_and_load_with_default_partition_key_with_ns(redis_persister_with_ns):
+    """An application without a partition key saves and loads with partition_key=None."""
+    redis_persister_with_ns.save(None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed")
+    data = redis_persister_with_ns.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+    assert "no_pk_app" in redis_persister_with_ns.list_app_ids(None)
+
+
 def test_list_app_ids(redis_persister):
     redis_persister.save("pk", "app_id1", 1, "pos1", state.State({"a": 1}), "completed")
     redis_persister.save("pk", "app_id2", 2, "pos2", state.State({"b": 2}), "completed")
@@ -134,6 +153,16 @@ async def test_async_save_and_load_state(async_redis_persister):
     )
     data = await async_redis_persister.load("pk", "app_id", 1)
     assert data["state"].get_all() == {"a": 1, "b": 2}
+
+
+async def test_async_save_and_load_with_default_partition_key(async_redis_persister):
+    """An application without a partition key saves and loads with partition_key=None."""
+    await async_redis_persister.save(
+        None, "no_pk_app", 1, "pos", state.State({"a": 1}), "completed"
+    )
+    data = await async_redis_persister.load(None, "no_pk_app")
+    assert data["state"].get_all() == {"a": 1}
+    assert "no_pk_app" in await async_redis_persister.list_app_ids(None)
 
 
 async def test_async_list_app_ids(async_redis_persister):

@@ -18,11 +18,14 @@
 #-->
 # Validates the Apache release pipeline on every PR: builds the real release
 # artifacts (git archive, sdist, wheel) using the release script with
-# --skip-signing, runs Apache RAT on the source tarball, then installs the
-# wheel into a fresh venv outside the source tree and smoke-tests the server.
+# --skip-signing, runs Apache RAT on the source tarball, checks that
+# LICENSE-wheel still covers the npm packages bundled into the compiled UI,
+# then installs the wheel into a fresh venv outside the source tree and
+# smoke-tests the server.
 #
 # This is designed to catch the class of bugs that have broken recent RCs:
-# license/header issues (RAT), examples missing from the wheel (smoke test),
+# license/header issues (RAT), a LICENSE-wheel that no longer matches the
+# bundled UI dependencies, examples missing from the wheel (smoke test),
 # and general "voter tries to install this and it breaks" failures.
 
 name: Release Validation
@@ -55,7 +58,7 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: check
@@ -81,20 +84,20 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: telemetry/ui/package-lock.json
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -107,7 +110,7 @@ jobs:
 
       - name: Cache Apache RAT
         id: cache-rat
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/apache-rat
           key: apache-rat-0.18
@@ -142,6 +145,14 @@ jobs:
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
           test -f "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
 
+      # RAT excludes burr/tracking/server/build/**, so it never inspects the
+      # compiled UI -- the only content the wheel adds over the sdist. This
+      # step covers that gap: it re-derives the bundled npm packages from a
+      # sourcemap build and fails if LICENSE-wheel no longer matches, which
+      # is what silently drifts on a dependency bump.
+      - name: Check LICENSE-wheel covers the bundled UI dependencies
+        run: python scripts/generate_wheel_license.py --check
+
       - name: Run Apache RAT on source and sdist tarballs
         run: |
           python scripts/verify_apache_artifacts.py licenses \
@@ -149,7 +160,7 @@ jobs:
             --artifacts-dir dist
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-artifacts
           path: |
@@ -169,19 +180,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is skipped because burr/cli/__main__.py uses PEP 604 union syntax
-        # (dict | None) which requires Python 3.10+. Tracked separately.
         python-version: ['3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-artifacts
           path: dist
@@ -195,7 +204,7 @@ jobs:
 
       - name: Upload smoke workspace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-workspace-${{ matrix.python-version }}
           path: /tmp/burr-smoke-*
@@ -213,14 +222,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-artifacts
           path: dist
@@ -251,20 +260,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: telemetry/ui/package-lock.json
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -276,7 +285,7 @@ jobs:
         run: pip install flit twine jinja2
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-artifacts
           path: dist
@@ -286,7 +295,11 @@ jobs:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
           mkdir -p /tmp/sdist-extract /tmp/sdist-wheel
-          tar -xzf "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz" \
+          SDIST_PATH="dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
+          export SOURCE_DATE_EPOCH=$(python -c \
+            "import sys, tarfile; print(int(tarfile.open(sys.argv[1]).next().mtime))" \
+            "$SDIST_PATH")
+          tar -xzf "$SDIST_PATH" \
             -C /tmp/sdist-extract
           # Find the single top-level directory the tarball extracted into
           SDIST_ROOT=$(find /tmp/sdist-extract -maxdepth 1 -mindepth 1 -type d | head -1)

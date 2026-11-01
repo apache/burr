@@ -41,6 +41,7 @@ from burr.core import Action, Graph, State
 from burr.core.action import (
     FunctionBasedAction,
     FunctionBasedStreamingAction,
+    UnionType,
     bind,
     derive_inputs_from_fn,
 )
@@ -188,25 +189,41 @@ class PydanticActionSchema(ActionSchema[StateInputType, StateOutputType, Interme
     def intermediate_result_type(self) -> type[IntermediateResultType]:
         return self._intermediate_result_type
 
-    def convert_state_before_run(self, state: State) -> StateInputType:
-        return model_from_state(model=self._input_type, state=state)
+    @staticmethod
+    def _model_with_optional_fields(
+        model: Type[ModelType], required_keys: List[str]
+    ) -> Type[ModelType]:
+        """Keep model behavior while allowing fields outside the current action state to be absent."""
+        optional_fields = {}
+        for name, field in model.model_fields.items():
+            if name not in required_keys and field.is_required():
+                field = copy.deepcopy(field)
+                field.default = None
+                field.annotation = Optional[field.annotation]
+                optional_fields[name] = (field.annotation, field)
+        if not optional_fields:
+            return model
+        return pydantic.create_model(model.__name__ + "_partial", __base__=model, **optional_fields)
+
+    def convert_state_before_run(self, state: State, read_keys: List[str]) -> StateInputType:
+        model = self._model_with_optional_fields(self._input_type, read_keys)
+        return model_from_state(model=model, state=state)
 
     def convert_state_before_update(self, state: State) -> StateOutputType:
-        return model_from_state(model=self._output_type, state=state)
+        model = self._model_with_optional_fields(self._output_type, list(state.keys()))
+        return model_from_state(model=model, state=state)
 
     def convert_state_after_update(
-        self, state: StateOutputType, original_state: State
+        self, state: StateOutputType, original_state: State, write_keys: List[str]
     ) -> State:
         if not isinstance(state, self._output_type):
             raise TypeError(
                 f"Expected update() to return {self._output_type.__name__}, "
                 f"got {type(state).__name__}."
             )
-        return merge_to_state(
-            model=state,
-            write_keys=list(self._output_type.model_fields),
-            state=original_state,
-        )
+        output_type = subset_model(self._output_type, write_keys, [], "_writes")
+        output = output_type(**model_to_dict(state, include=write_keys))
+        return merge_to_state(model=output, write_keys=write_keys, state=original_state)
 
 
 def pydantic_action(
@@ -289,7 +306,7 @@ def pydantic_action(
     return decorator
 
 
-PartialType = Union[Type[pydantic.BaseModel], Type[dict]]
+PartialType = Union[Type[pydantic.BaseModel], Type[dict], UnionType]
 
 PydanticStreamingActionFunctionSync = Callable[
     ..., Generator[Tuple[Union[pydantic.BaseModel, dict], Optional[pydantic.BaseModel]], None, None]
@@ -310,11 +327,13 @@ PydanticStreamingActionFunctionVar = TypeVar(
 
 def _validate_and_extract_signature_types_streaming(
     fn: PydanticStreamingActionFunction,
-    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict]]],
+    stream_type: Optional[Union[Type[pydantic.BaseModel], Type[dict], UnionType]],
     state_input_type: Optional[Type[pydantic.BaseModel]] = None,
     state_output_type: Optional[Type[pydantic.BaseModel]] = None,
 ) -> Tuple[
-    Type[pydantic.BaseModel], Type[pydantic.BaseModel], Union[Type[dict], Type[pydantic.BaseModel]]
+    Type[pydantic.BaseModel],
+    Type[pydantic.BaseModel],
+    Union[Type[dict], Type[pydantic.BaseModel], UnionType],
 ]:
     if stream_type is None:
         # TODO -- derive from the signature
