@@ -31,7 +31,7 @@ name = "burr"
 version = "VERSION"
 description = "This package has moved to apache-burr. Install apache-burr instead."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = ["apache-burr==VERSION"]
 
