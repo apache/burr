@@ -286,3 +286,28 @@ def test_cmd_verify_skip_signing_succeeds_without_asc_files(tmp_path):
 
     args = Namespace(version=version, rc_num="0", artifacts_dir=str(tmp_path), skip_signing=True)
     assert release.cmd_verify(args) is True
+
+
+def test_wheel_exclusions_survive_cross_device_temp_dir(monkeypatch, tmp_path):
+    """Excluded files must move to and from a temp dir on another filesystem."""
+    import errno
+
+    excluded = tmp_path / "burr/tracking/server/s3/deployment/terraform/.gitignore"
+    excluded.parent.mkdir(parents=True)
+    excluded.write_text("*.tfstate\n")
+    (tmp_path / "examples").mkdir()
+    (tmp_path / "examples/__init__.py").write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    def cross_device(*args, **kwargs):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(release.os, "rename", cross_device)
+    monkeypatch.setattr(release.os, "replace", cross_device)
+
+    ok, was_symlink, symlink_target, removed = release._prepare_wheel_contents()
+    assert ok
+    assert not excluded.exists()
+
+    release._cleanup_wheel_contents(was_symlink, symlink_target, removed)
+    assert excluded.read_text() == "*.tfstate\n"
