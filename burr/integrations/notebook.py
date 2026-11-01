@@ -18,6 +18,7 @@
 import enum
 import os
 import subprocess
+import sys
 
 from IPython.core.magic import Magics, line_magic, magics_class
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
@@ -83,7 +84,7 @@ def launch_ui_colab():
     burr_ui_url = eval_js(f"google.colab.kernel.proxyPort({PORT})")
     process = subprocess.Popen(
         [
-            "python",
+            sys.executable,
             "-c",
             f"import uvicorn; from burr.tracking.server.run import app; uvicorn.run(app, host='127.0.0.1', port={PORT})",
         ],
@@ -102,7 +103,7 @@ def launch_ui_jupyter():
     PORT = 7241
     process = subprocess.Popen(
         [
-            "python",
+            sys.executable,
             "-c",
             f"import uvicorn; from burr.tracking.server.run import app; uvicorn.run(app, host='{HOST}', port={PORT})",
         ],
