@@ -2527,6 +2527,35 @@ async def test_astream_result_failing_non_streaming_action_does_not_end_stream()
     assert stream_event_tracker.post_end_stream_calls == []
 
 
+async def test_astream_result_failing_streaming_action_ends_the_stream_it_started():
+    """The guard must not skip cleanup for a stream that really did start.
+
+    ``astream_result`` fires pre_start_stream before rejecting a synchronous streaming
+    action, so the error path still owes a matching post_end_stream -- hooks that keep
+    per-stream state would otherwise leave that stream open forever.
+    """
+    stream_event_tracker = StreamEventCaptureTracker()
+    sync_streaming_action = SingleStepStreamingCounter().with_name("counter")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(sync_streaming_action)
+        .with_entrypoint("counter")
+        .with_state(count=0)
+        .with_hooks(stream_event_tracker)
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="is marked as streaming"):
+        await app.astream_result(halt_after=["counter"])
+
+    assert (
+        [call[0] for call in stream_event_tracker.pre_start_stream_calls]
+        == [call[0] for call in stream_event_tracker.post_end_stream_calls]
+        == ["counter"]
+    )
+
+
 def test_stream_result_halt_after_unique_ordered_sequence_id():
     action_tracker = CallCaptureTracker()
     stream_event_tracker = StreamEventCaptureTracker()
