@@ -36,3 +36,4 @@ Integrations -- we will be adding more
    haystack
    ray
    bedrock
+   s3

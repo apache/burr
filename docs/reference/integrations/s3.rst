@@ -1,0 +1,158 @@
+..
+   Licensed to the Apache Software Foundation (ASF) under one
+   or more contributor license agreements.  See the NOTICE file
+   distributed with this work for additional information
+   regarding copyright ownership.  The ASF licenses this file
+   to you under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+
+
+.. _s3-artifacts-integration:
+
+===================
+S3 Artifact Storage
+===================
+
+An :py:class:`ArtifactStore <burr.core.artifacts.ArtifactStore>` backed by an
+`AWS S3 <https://aws.amazon.com/s3/>`_ bucket. See :doc:`../../concepts/artifact-storage` for
+background on artifact storage in general.
+
+Install the optional extra (pulls ``boto3`` and ``aiobotocore``):
+
+.. code-block:: bash
+
+   pip install "apache-burr[s3]"
+
+-------------
+Quick Example
+-------------
+
+.. code-block:: python
+
+    from burr.core import ApplicationBuilder
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    object_store = S3ArtifactStore.from_values(
+        bucket="my-bucket",
+        prefix="burr-artifacts",  # optional
+    )
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(...)
+        .with_transitions(...)
+        .with_state(...)
+        .with_entrypoint(...)
+        .with_object_store(object_store)
+        .build()
+    )
+
+If you already have a boto3 client (e.g. reusing a connection, custom endpoint for testing with
+`moto <https://github.com/getmoto/moto>`_ or a local S3-compatible server), construct the store
+directly and pass it in:
+
+.. code-block:: python
+
+    import boto3
+    from burr.integrations.artifacts.s3 import S3ArtifactStore
+
+    client = boto3.client("s3", region_name="us-east-1")
+    object_store = S3ArtifactStore(bucket="my-bucket", prefix="burr-artifacts", client=client)
+
+Note that a store built around a client you passed in can't be pickled (its credentials and
+configuration can't be reproduced), which matters if you run sub-applications with
+:py:class:`RayExecutor <burr.integrations.ray.RayExecutor>` -- Ray pickles each task, including
+the application's object store. Prefer ``from_values(..., client_kwargs={...})`` (or
+``S3ArtifactStore(bucket, client_kwargs={...})``) in that case: the store then drops its client
+when pickled and rebuilds it from ``client_kwargs`` on the worker.
+
+------------------------------
+Writes, digests & consistency
+------------------------------
+
+* Writes are **conditional** (``PutObject`` with ``IfNoneMatch="*"``): an existing object is never
+  overwritten, so concurrent writers to the same key can't silently clobber each other -- the
+  loser's :py:meth:`put_artifact <burr.core.artifacts.ArtifactStore.put_artifact>` verifies what
+  won and raises if it differs. This requires ``botocore>=1.35.2`` (pulled in by the ``s3``
+  extra) and S3, or an S3-compatible store, that supports conditional writes -- a store that
+  ignores ``If-None-Match`` silently loses this protection.
+* Each object's SHA-256 digest is recorded in its metadata (``x-amz-meta-burr-sha256``), so
+  re-writing content that already exists (e.g. when the same value is serialized on every step)
+  is verified with a ``HEAD`` request rather than a full download. Objects written by other tools
+  without that metadata are verified by downloading them.
+
+--------------------------
+Async (non-blocking) Usage
+--------------------------
+
+``S3ArtifactStore`` performs blocking network I/O through ``boto3`` -- calling it from an async
+action blocks the event loop for the duration of each upload/download. For async applications
+(built with :py:meth:`abuild <burr.core.application.ApplicationBuilder.abuild>`), use
+:py:class:`AsyncS3ArtifactStore <burr.integrations.artifacts.s3.AsyncS3ArtifactStore>` instead,
+which is backed by `aiobotocore <https://github.com/aio-libs/aiobotocore>`_:
+
+.. code-block:: python
+
+    from burr.core import ApplicationBuilder
+    from burr.integrations.artifacts.s3 import AsyncS3ArtifactStore
+
+    async with await AsyncS3ArtifactStore.acreate(
+        bucket="my-bucket",
+        prefix="burr-artifacts",  # optional
+    ) as object_store:
+        app = await (
+            ApplicationBuilder()
+            .with_actions(...)
+            .with_transitions(...)
+            .with_state(...)
+            .with_entrypoint(...)
+            .with_object_store(object_store)
+            .abuild()
+        )
+        await app.arun(...)
+    # the underlying aiobotocore client is closed automatically here, even on exception.
+
+``acreate`` opens and owns its underlying ``aiobotocore`` client. Using ``async with`` (shown
+above) is the recommended way to release it, since it closes the client safely even on
+exceptions and early returns. You can also call ``await object_store.aclose()`` directly
+(e.g. on app shutdown) -- it's idempotent, so calling it more than once is safe. If you already
+have an open ``aiobotocore`` client, pass it directly via the constructor's ``client`` argument
+instead.
+
+---------------
+IAM Permissions
+---------------
+
+The runtime identity used by Burr needs:
+
+* ``s3:PutObject`` and ``s3:GetObject`` on the objects (e.g. ``arn:aws:s3:::my-bucket/burr-artifacts/*``).
+  ``HeadObject`` requests (existence/digest checks) are authorized by ``s3:GetObject`` -- there is
+  no separate ``s3:HeadObject`` action.
+* ``s3:ListBucket`` on the bucket itself (``arn:aws:s3:::my-bucket``, optionally restricted to the
+  prefix with an ``s3:prefix`` condition). Without it, S3 answers requests for a *missing* key with
+  ``403 Forbidden`` instead of ``404 Not Found``, so existence checks fail with an error instead of
+  returning ``False`` -- and new artifacts can't be written.
+
+----------------
+API Reference
+----------------
+
+.. autoclass:: burr.integrations.artifacts.s3.S3ArtifactStore
+   :members:
+
+   .. automethod:: __init__
+
+.. autoclass:: burr.integrations.artifacts.s3.AsyncS3ArtifactStore
+   :members:
+
+   .. automethod:: __init__

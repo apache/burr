@@ -38,6 +38,7 @@ Overview of the concepts -- read these to get a mental model for how Burr works.
     tracking
     s3-tracking-aws
     state-persistence
+    artifact-storage
     serde
     streaming-actions
     state-typing

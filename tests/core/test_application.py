@@ -17,6 +17,7 @@
 
 import asyncio
 import collections
+import concurrent.futures
 import datetime
 import logging
 import typing
@@ -4146,6 +4147,192 @@ def test_with_state_persister_is_initialized_not_implemented():
     persister = FakePersister()
     # Add the persister to the builder, expecting no exceptions
     builder.with_state_persister(persister)
+
+
+def test_with_object_store_defaults_to_none():
+    builder = ApplicationBuilder()
+    assert builder.object_store is None
+
+
+def test_with_object_store_sets_builder_field():
+    from burr.core.artifacts import LocalFileSystemArtifactStore
+
+    store = LocalFileSystemArtifactStore(root_dir="/tmp/burr-test-object-store")
+    builder = ApplicationBuilder().with_object_store(store)
+    assert builder.object_store is store
+
+
+def test_with_object_store_exposed_through_application_context(tmp_path):
+    from burr.core.artifacts import ArtifactRef, LocalFileSystemArtifactStore
+
+    store = LocalFileSystemArtifactStore(root_dir=str(tmp_path))
+    seen_context: Dict[str, Optional[ApplicationContext]] = {"context": None}
+
+    @action(reads=[], writes=["doc"])
+    def ingest(state: State, __context: ApplicationContext) -> State:
+        seen_context["context"] = __context
+        ref = __context.object_store.put_artifact(b"hello world", media_type="text/plain")
+        return state.update(doc=ref)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(ingest=ingest, terminal=Result("doc"))
+        .with_transitions(("ingest", "terminal"))
+        .with_entrypoint("ingest")
+        .with_state()
+        .with_object_store(store)
+        .build()
+    )
+
+    *_, state = app.run(halt_after=["terminal"])
+
+    assert seen_context["context"] is not None
+    assert seen_context["context"].object_store is store
+
+    ref = state["doc"]
+    assert isinstance(ref, ArtifactRef)
+    assert ref.read(store) == b"hello world"
+
+
+def test_without_object_store_application_context_has_none():
+    @action(reads=[], writes=["ran"])
+    def check_no_store(state: State, __context: ApplicationContext) -> State:
+        assert __context.object_store is None
+        return state.update(ran=True)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(check_no_store=check_no_store, terminal=Result("ran"))
+        .with_transitions(("check_no_store", "terminal"))
+        .with_entrypoint("check_no_store")
+        .with_state()
+        .build()
+    )
+
+    *_, state = app.run(halt_after=["terminal"])
+    assert state["ran"] is True
+
+
+def test_application_context_backwards_compatible_without_object_store_kwarg():
+    """ApplicationContext is public, exported API. Constructing it the way code did before
+    `object_store` was added (i.e. omitting the kwarg entirely) must keep working -- the field
+    must have a trailing `None` default, not become a newly-required positional/keyword arg."""
+    context = ApplicationContext(
+        app_id="app_id",
+        partition_key=None,
+        sequence_id=0,
+        tracker=None,
+        parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
+        state_initializer=None,
+        state_persister=None,
+        action_name="some_action",
+        # note: no object_store kwarg passed at all
+    )
+    assert context.object_store is None
+
+
+def _make_in_memory_async_store():
+    """Builds a minimal `AsyncArtifactStore` test double -- in-memory, so tests don't need
+    network/disk. Imported lazily to match this file's convention of importing
+    `burr.core.artifacts` within individual tests rather than at module scope."""
+    from burr.core.artifacts import AsyncArtifactStore
+
+    class InMemoryAsyncArtifactStore(AsyncArtifactStore):
+        def __init__(self):
+            self._data: Dict[str, bytes] = {}
+
+        async def put(self, data: bytes, key: str) -> None:
+            self._data[key] = data
+
+        async def get(self, key: str) -> bytes:
+            if key not in self._data:
+                raise FileNotFoundError(key)
+            return self._data[key]
+
+        async def exists(self, key: str) -> bool:
+            return key in self._data
+
+    return InMemoryAsyncArtifactStore()
+
+
+def test_build_accepts_async_object_store_but_rejects_sync_execution():
+    """`.build()` must accept an async object store (e.g. needed when a sync persister/
+    initializer forces .build() even though the object store is async -- see
+    SubGraphTask.arun()). The store is only rejected once a synchronous execution method
+    (step()/run()/iterate()) is actually invoked, since that's where awaiting it would be
+    required outside of an event loop."""
+    store = _make_in_memory_async_store()
+    app = (
+        ApplicationBuilder()
+        .with_actions(terminal=Result())
+        .with_transitions()
+        .with_entrypoint("terminal")
+        .with_state()
+        .with_object_store(store)
+        .build()
+    )
+    with pytest.raises(ValueError, match="async object store"):
+        app.run(halt_after=["terminal"])
+
+
+async def test_abuild_exposes_async_object_store_through_application_context():
+    store = _make_in_memory_async_store()
+    seen_context: Dict[str, Optional[ApplicationContext]] = {"context": None}
+
+    @action(reads=[], writes=["doc"])
+    async def ingest(state: State, __context: ApplicationContext) -> State:
+        seen_context["context"] = __context
+        ref = await __context.object_store.put_artifact(b"hello async world")
+        return state.update(doc=ref)
+
+    app = await (
+        ApplicationBuilder()
+        .with_actions(ingest=ingest, terminal=Result("doc"))
+        .with_transitions(("ingest", "terminal"))
+        .with_entrypoint("ingest")
+        .with_state()
+        .with_object_store(store)
+        .abuild()
+    )
+
+    *_, state = await app.arun(halt_after=["terminal"])
+
+    assert seen_context["context"] is not None
+    assert seen_context["context"].object_store is store
+
+    ref = state["doc"]
+    assert await ref.aread(store) == b"hello async world"
+
+
+async def test_build_with_sync_persister_and_async_object_store_runs_via_arun():
+    """Regression test for the combination skrawcz flagged: a sync state persister/initializer
+    forces construction through .build() (since .abuild() requires async persistence), but the
+    application must still support an async object store as long as it is executed via arun().
+    """
+    store = _make_in_memory_async_store()
+    persister = DummyPersister()
+
+    @action(reads=[], writes=["doc"])
+    async def ingest(state: State, __context: ApplicationContext) -> State:
+        assert __context.object_store is store
+        ref = await __context.object_store.put_artifact(b"hello from sync persister app")
+        return state.update(doc=ref)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(ingest=ingest, terminal=Result("doc"))
+        .with_transitions(("ingest", "terminal"))
+        .with_entrypoint("ingest")
+        .with_state()
+        .with_state_persister(persister)
+        .with_object_store(store)
+        .build()
+    )
+
+    *_, state = await app.arun(halt_after=["terminal"])
+
+    ref = state["doc"]
+    assert await ref.aread(store) == b"hello from sync persister app"
 
 
 class ActionWithoutContext(Action):
