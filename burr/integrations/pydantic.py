@@ -189,6 +189,42 @@ class PydanticActionSchema(ActionSchema[StateInputType, StateOutputType, Interme
     def intermediate_result_type(self) -> type[IntermediateResultType]:
         return self._intermediate_result_type
 
+    @staticmethod
+    def _model_with_optional_fields(
+        model: Type[ModelType], required_keys: List[str]
+    ) -> Type[ModelType]:
+        """Keep model behavior while allowing fields outside the current action state to be absent."""
+        optional_fields = {}
+        for name, field in model.model_fields.items():
+            if name not in required_keys and field.is_required():
+                field = copy.deepcopy(field)
+                field.default = None
+                field.annotation = Optional[field.annotation]
+                optional_fields[name] = (field.annotation, field)
+        if not optional_fields:
+            return model
+        return pydantic.create_model(model.__name__ + "_partial", __base__=model, **optional_fields)
+
+    def convert_state_before_run(self, state: State, read_keys: List[str]) -> StateInputType:
+        model = self._model_with_optional_fields(self._input_type, read_keys)
+        return model_from_state(model=model, state=state)
+
+    def convert_state_before_update(self, state: State) -> StateOutputType:
+        model = self._model_with_optional_fields(self._output_type, list(state.keys()))
+        return model_from_state(model=model, state=state)
+
+    def convert_state_after_update(
+        self, state: StateOutputType, original_state: State, write_keys: List[str]
+    ) -> State:
+        if not isinstance(state, self._output_type):
+            raise TypeError(
+                f"Expected update() to return {self._output_type.__name__}, "
+                f"got {type(state).__name__}."
+            )
+        output_type = subset_model(self._output_type, write_keys, [], "_writes")
+        output = output_type(**model_to_dict(state, include=write_keys))
+        return merge_to_state(model=output, write_keys=write_keys, state=original_state)
+
 
 def pydantic_action(
     reads: List[str],

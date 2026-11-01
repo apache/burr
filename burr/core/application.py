@@ -183,10 +183,12 @@ def _run_function(function: Function, state: State, inputs: Dict[str, Any], name
             "instead...)"
         )
     state_to_use = state.subset(*function.reads)
+    schema = getattr(function, "schema", DEFAULT_SCHEMA)
+    state_to_use = schema.convert_state_before_run(state_to_use, function.reads)
     function.validate_inputs(inputs)
     inputs = _remap_injected_inputs(function.run, inputs)
     result = function.run(state_to_use, **inputs)
-    _validate_result(result, name)
+    _validate_result(result, name, schema)
     return result
 
 
@@ -196,10 +198,12 @@ async def _arun_function(
     """Runs a function, returning the result of running the function.
     Async version of the above."""
     state_to_use = state.subset(*function.reads)
+    schema = getattr(function, "schema", DEFAULT_SCHEMA)
+    state_to_use = schema.convert_state_before_run(state_to_use, function.reads)
     function.validate_inputs(inputs)
     inputs = _remap_injected_inputs(function.run, inputs)
     result = await function.run(state_to_use, **inputs)
-    _validate_result(result, name)
+    _validate_result(result, name, schema)
     return result
 
 
@@ -257,7 +261,10 @@ def _run_reducer(reducer: Reducer, state: State, result: dict, name: str) -> Sta
     :return:
     """
     # TODO -- better guarding on state reads/writes
-    new_state = reducer.update(result, state)
+    schema = getattr(reducer, "schema", DEFAULT_SCHEMA)
+    state_to_use = schema.convert_state_before_update(state)
+    new_state = reducer.update(result, state_to_use)
+    new_state = schema.convert_state_after_update(new_state, state, reducer.writes)
     keys_in_new_state = set(new_state.keys())
     new_keys = keys_in_new_state - set(state.keys())
     extra_keys = new_keys - set(reducer.writes)

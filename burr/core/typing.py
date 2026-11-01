@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, Generic, Type, TypeVar
+from typing import TYPE_CHECKING, Generic, List, Type, TypeVar
 
 BaseType = TypeVar("BaseType")
 # SpecificType = TypeVar('SpecificType', bound=BaseType)
@@ -125,6 +125,20 @@ class ActionSchema(
     @abc.abstractmethod
     def intermediate_result_type() -> Type[IntermediateResultType]:
         pass
+
+    def convert_state_before_run(self, state: State, read_keys: List[str]) -> StateInputType:
+        """Convert Burr state into the value passed to ``Action.run``."""
+        return state  # type: ignore[return-value]
+
+    def convert_state_before_update(self, state: State) -> StateOutputType:
+        """Convert Burr state into the value passed to ``Action.update``."""
+        return state  # type: ignore[return-value]
+
+    def convert_state_after_update(
+        self, state: StateOutputType, original_state: State, write_keys: List[str]
+    ) -> State:
+        """Convert the value returned by ``Action.update`` back to Burr state using the declared writes."""
+        return state  # type: ignore[return-value]
 
 
 class DictBasedTypingSystem(TypingSystem[dict]):
