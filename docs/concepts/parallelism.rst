@@ -89,9 +89,9 @@ This looks as follows -- in this case we're running the same LLM over different 
 
 .. code-block:: python
 
-    from burr.core import action, state
+    from burr.core import action, Action, ApplicationContext, State
     from burr.core.parallelism import MapStates, RunnableGraph
-    from typing import Callable, Generator, List
+    from typing import Any, Callable, Dict, Generator, List
 
     @action(reads=["prompt"], writes=["llm_output"])
     def query_llm(state: State) -> State:
@@ -100,9 +100,8 @@ This looks as follows -- in this case we're running the same LLM over different 
     class TestMultiplePrompts(MapStates):
 
         def action(self, state: State, inputs: Dict[str, Any]) -> Action | Callable | RunnableGraph:
-            # make sure to add a name to the action
-            # This is not necessary for subgraphs, as actions will already have names
-            return query_llm.with_name("query_llm")
+            # functions are named for you, so they can be returned directly
+            return query_llm
 
         def states(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[State, None, None]:
             # You could easily have a list_prompts upstream action that writes to "prompts" in state
@@ -136,12 +135,13 @@ Then, to run the application:
 
     app = (
         ApplicationBuilder()
-        .with_action(
+        .with_actions(
             prompt_generator=generate_prompts, # not defined above, this writes to prompts
             multi_prompt_test=TestMultiplePrompts(),
         ).with_transitions(
             ("prompt_generator", "multi_prompt_test"),
         )
+        .with_entrypoint("prompt_generator")
         .build()
     )
 
@@ -161,9 +161,9 @@ For case (2) (mapping actions over the same state) you implement the ``MapAction
 
 .. code-block:: python
 
-    from burr.core import action, state
+    from burr.core import action, Action, ApplicationContext, State
     from burr.core.parallelism import MapActions, RunnableGraph
-    from typing import Callable, Generator, List, Dict, Any
+    from typing import Any, Callable, Dict, Generator, List
 
     @action(reads=["prompt", "model"], writes=["llm_output"])
     def query_llm(state: State, model: str) -> State:
@@ -173,15 +173,15 @@ For case (2) (mapping actions over the same state) you implement the ``MapAction
     class TestMultipleModels(MapActions):
 
         def actions(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[Action | Callable | RunnableGraph, None, None]:
-            # Make sure to add a name to the action if you use bind() with a function,
-            # note that these can be different actions, functions, etc...
+            # Functions (including bound ones) are named for you, so they can be yielded directly.
+            # Note that these can be different actions, functions, etc...
             # in this case we're using `.bind()` to create multiple actions, but we can use some mix of
             # subgraphs, functions, action objects, etc...
             for action in [
-                query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                query_llm.bind(model="o1").with_name("o1_answer"),
-                query_llm.bind(model="claude").with_name("claude_answer"),
-            ]
+                query_llm.bind(model="gpt-4"),
+                query_llm.bind(model="o1"),
+                query_llm.bind(model="claude"),
+            ]:
                 yield action
 
         def state(self, state: State, inputs: Dict[str, Any]) -> State:
@@ -208,12 +208,13 @@ Then, it's almost identical to the ``MapStates`` case:
 
     app = (
         ApplicationBuilder()
-        .with_action(
+        .with_actions(
             prompt_generator=generate_prompts, # not defined above, this writes to prompts
             multi_prompt_test=TestMultipleModels(),
         ).with_transitions(
             ("prompt_generator", "multi_prompt_test"),
         )
+        .with_entrypoint("prompt_generator")
         .build()
     )
 
@@ -229,25 +230,24 @@ For tracking which states/actions belong to which actions, we recommend you use 
 
 .. code-block:: python
 
-    from burr.core import action, state
+    from burr.core import action, Action, ApplicationContext, State
     from burr.core.parallelism import MapActionsAndStates, RunnableGraph
-    from typing import Callable, Generator, List
+    from typing import Any, Callable, Dict, Generator, List
 
-    @action(reads=["prompt", "model"], writes=["llm_output"])
+    @action(reads=["prompt"], writes=["llm_output", "model"])
     def query_llm(state: State, model: str) -> State:
         # TODO -- implement _query_my_llm to call litellm or something
-        return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model))
+        return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model), model=model)
 
     class TestModelsOverPrompts(MapActionsAndStates):
 
         def actions(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[Action | Callable | RunnableGraph, None, None]:
-            # make sure to add a name to the action
-            # This is not necessary for subgraphs, as actions will already have names
+            # functions (including bound ones) are named for you, so they can be yielded directly
             for action in [
-                query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                query_llm.bind(model="o1").with_name("o1_answer"),
-                query_llm.bind(model="claude").with_name("claude_answer"),
-            ]
+                query_llm.bind(model="gpt-4"),
+                query_llm.bind(model="o1"),
+                query_llm.bind(model="claude"),
+            ]:
                 yield action
 
         def states(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[State, None, None]:
@@ -295,16 +295,16 @@ This might look as follows -- say we have a simple subflow that takes in a raw p
 
 .. code-block:: python
 
-    from typing import Dict, Any
-    from burr.core import action, state
-    from burr.core.graph import Graph
-    from burr.core.parallelism import RunnableGraph
+    from typing import Any, Callable, Dict, Generator, List
+    from burr.core import action, Action, ApplicationContext, State
+    from burr.core.graph import GraphBuilder
+    from burr.core.parallelism import MapStates, RunnableGraph
 
     @action(reads=["prompt"], writes=["processed_prompt"])
     def process_prompt(state: State) -> State:
         processed_prompt = f"The user has asked: {state['prompt']}. Please respond directly to that prompt, but only in riddles."
         return state.update(
-            processed_prompt=state["prompt"],
+            processed_prompt=processed_prompt,
         )
 
     @action(reads=["processed_prompt"], writes=["llm_output"])
@@ -313,9 +313,9 @@ This might look as follows -- say we have a simple subflow that takes in a raw p
 
     graph = (
         GraphBuilder()
-        .with_action(
+        .with_actions(
             process_prompt=process_prompt,
-            query_llm=query
+            query_llm=query_llm
         ).with_transitions(
             ("process_prompt", "query_llm")
         ).build()
@@ -358,14 +358,16 @@ This looks as follows:
 
 .. code-block:: python
 
-    from burr.core import action, State, ApplicationContext
-    from burr.core.graph import Graph
+    from typing import Any, Callable, Dict, Generator, List, Tuple
+    from burr.core import action, Action, State, ApplicationContext
+    from burr.core.graph import GraphBuilder
+    from burr.core.parallelism import MapStates, RunnableGraph
 
     @action(reads=["prompt"], writes=["processed_prompt"])
     def process_prompt(state: State) -> State:
         processed_prompt = f"The user has asked: {state['prompt']}. Please respond directly to that prompt, but only in riddles."
         return state.update(
-            prompt=state["prompt"],
+            processed_prompt=processed_prompt,
         )
 
     @action(reads=["processed_prompt"], writes=["llm_output"])
@@ -374,9 +376,9 @@ This looks as follows:
 
     graph = (
         GraphBuilder()
-        .with_action(
+        .with_actions(
             process_prompt=process_prompt,
-            query_llm=query
+            query_llm=query_llm
         ).with_transitions(
             ("process_prompt", "query_llm")
         ).build()
@@ -385,7 +387,7 @@ This looks as follows:
     runnable_graph = RunnableGraph(
         graph=graph,
         entrypoint="process_prompt",
-        halt_after="query_llm"
+        halt_after=["query_llm"]
     )
 
     class TestMultiplePromptsWithSubgraph(MapStates):
@@ -425,9 +427,10 @@ This looks as follows:
 
 .. code-block:: python
 
-    from burr.core import action, state, ApplicationContext
-    from burr.core.parallelism import MapStates, RunnableGraph
-    from typing import Callable, Generator, List
+    import hashlib
+    from burr.core import action, State, ApplicationContext
+    from burr.core.parallelism import RunnableGraph, SubGraphTask, TaskBasedParallelAction
+    from typing import Any, Dict, Generator
 
     @action(reads=["prompt", "model"], writes=["llm_output"])
     def query_llm(state: State, model: str) -> State:
@@ -435,19 +438,15 @@ This looks as follows:
         return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model))
 
     class MultipleTaskExample(TaskBasedParallelAction):
-        def tasks(state: State, context: ApplicationContext) -> Generator[SubGraphTask, None, None]:
+        def tasks(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[SubGraphTask, None, None]:
             for prompt in state["prompts"]:
-                for action in [
-                    query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                    query_llm.bind(model="o1").with_name("o1_answer"),
-                    query_llm.bind(model="claude").with_name("claude_answer"),
-                ]
+                for model in ["gpt-4", "o1", "claude"]:
                     yield SubGraphTask(
-                        action=action, # can be a RunnableGraph as well
-                        state=state.update(prompt=prompt),
+                        graph=RunnableGraph.create(query_llm.bind(model=model)), # can be any RunnableGraph
+                        state=state.update(prompt=prompt, model=model),
                         inputs={},
                         # stable hash -- up to you to ensure uniqueness
-                        application_id=hashlib.sha256(context.application_id + action.name + prompt).hexdigest(),
+                        application_id=hashlib.sha256((context.app_id + model + prompt).encode()).hexdigest(),
                         # a few other parameters we might add -- see advanced usage -- failure conditions, etc...
                     )
 
@@ -643,18 +642,18 @@ Burr also supports asynchronous parallelism. When working in an async context, y
 1. Make your methods async
 ---------------------------
 
-The `action`, `states`, `reduce`, and other methods should be defined as async:
+The `actions`, `states`, `reduce`, and other methods should be defined as async:
 
 .. code-block:: python
 
     class AsyncMapActionsAndStatesExample(MapActionsAndStates):
 
-        async def action(self, state: State, inputs: Dict[str, Any]) -> AsyncGenerator[Action, None]:
+        async def actions(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> AsyncGenerator[Action, None]:
             # Yield multiple model components to run in parallel
             for i, model_config in enumerate(self._model_configs):
                 yield ModelResponse(config=model_config).with_name(f"model_{i}")
 
-        async def states(self, state: State, inputs: Dict[str, Any]) -> AsyncGenerator[State, None]:
+        async def states(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> AsyncGenerator[State, None]:
             # Prepare the state with the user query
             for prompt in [
                 "What is the meaning of life?",
@@ -682,7 +681,6 @@ You must override the `is_async` method to return `True`:
 
     class AsyncMapActionsAndStatesExample(MapActionsAndStates):
 
-        @property
         def is_async(self) -> bool:
             return True
 
@@ -710,7 +708,7 @@ When using state persistence with async parallelism, make sure to use the async 
     app = await (
         ApplicationBuilder()
         .with_state_persister(persister)
-        .with_action(
+        .with_actions(
             async_parallel_action=AsyncMapActionsAndStatesExample(),
         )
         .abuild()
