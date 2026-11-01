@@ -1540,11 +1540,23 @@ class Application(Generic[ApplicationStateType]):
                         results=results, final_state=state
                     )
             self._increment_sequence_id()
+            if not next_action.streaming:
+                # In this case we are halting at a non-streaming condition
+                # This is allowed as we want to maintain a more consistent API
+                # _step owns the whole step here (as step() does): it processes the inputs
+                # before firing pre_run_step, so the hook and the action get the same dict
+                # and the inputs are only ever processed once.
+                action, result, state = self._step(inputs=inputs, _run_hooks=True)
+                call_execute_method_wrapper.call_post(self, None)
+                return action, StreamingResultContainer.pass_through(
+                    results=result, final_state=state
+                )
+            action_inputs = self._process_inputs(inputs, next_action)
             self._adapter_set.call_all_lifecycle_hooks_sync(
                 "pre_run_step",
                 action=next_action,
                 state=self._state,
-                inputs=inputs,
+                inputs=action_inputs,
                 sequence_id=self.sequence_id,
                 app_id=self._uid,
                 partition_key=self._partition_key,
@@ -1587,26 +1599,6 @@ class Application(Generic[ApplicationStateType]):
                     partition_key=self._partition_key,
                 )
 
-            action_inputs = self._process_inputs(inputs, next_action)
-            if not next_action.streaming:
-                # In this case we are halting at a non-streaming condition
-                # This is allowed as we want to maintain a more consistent API
-                action, result, state = self._step(inputs=inputs, _run_hooks=False)
-                self._adapter_set.call_all_lifecycle_hooks_sync(
-                    "post_run_step",
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                    action=next_action,
-                    state=self._state,
-                    result=result,
-                    sequence_id=self.sequence_id,
-                    exception=None,
-                )
-                out = action, StreamingResultContainer.pass_through(
-                    results=result, final_state=state
-                )
-                call_execute_method_wrapper.call_post(self, None)
-                return out
             # Both the next cases start with this
             self._adapter_set.call_all_lifecycle_hooks_sync(
                 "pre_start_stream",
@@ -1797,11 +1789,22 @@ class Application(Generic[ApplicationStateType]):
                         results=results, final_state=state
                     )
             self._increment_sequence_id()
+            if not next_action.streaming:
+                # In this case we are halting at a non-streaming condition
+                # This is allowed as we want to maintain a more consistent API
+                # _astep owns the whole step here (as astep() does), so the inputs are
+                # processed once and the hook sees what the action gets.
+                action, result, state = await self._astep(inputs=inputs, _run_hooks=True)
+                await call_execute_method_wrapper.acall_post(self, None)
+                return action, AsyncStreamingResultContainer.pass_through(
+                    results=result, final_state=state
+                )
+            action_inputs = self._process_inputs(inputs, next_action)
             await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "pre_run_step",
                 action=next_action,
                 state=self._state,
-                inputs=inputs,
+                inputs=action_inputs,
                 sequence_id=self.sequence_id,
                 app_id=self._uid,
                 partition_key=self._partition_key,
@@ -1842,25 +1845,6 @@ class Application(Generic[ApplicationStateType]):
                 )
                 await call_execute_method_wrapper.acall_post(self, exc)
 
-            action_inputs = self._process_inputs(inputs, next_action)
-            if not next_action.streaming:
-                # In this case we are halting at a non-streaming condition
-                # This is allowed as we want to maintain a more consistent API
-                action, result, state = await self._astep(inputs=inputs, _run_hooks=False)
-                await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                    "post_run_step",
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                    action=next_action,
-                    state=self._state,
-                    result=result,
-                    sequence_id=self.sequence_id,
-                    exception=None,
-                )
-                await call_execute_method_wrapper.acall_post(self, None)
-                return action, AsyncStreamingResultContainer.pass_through(
-                    results=result, final_state=state
-                )
             await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "pre_start_stream",
                 action=next_action.name,
