@@ -84,6 +84,10 @@ redis = [
   "redis"
 ]
 
+google-sheets = [
+  "gspread"
+]
+
 release = [
   "jinja2",
 ]
@@ -103,6 +107,7 @@ tests = [
   "apache-burr[psycopg2]",
   "apache-burr[pymongo]",
   "apache-burr[redis]",
+  "apache-burr[google-sheets]",
   "apache-burr[opentelemetry]",
   "apache-burr[langfuse]",
   "apache-burr[haystack]",

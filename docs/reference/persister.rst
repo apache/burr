@@ -42,6 +42,9 @@ We currently support the following database integrations:
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
     | MongoDB     | pymongo   | :ref:`MongoDBBasePersister <syncmongoref>`          | ❌            | ❌                                                  |
     +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
+    | Google      | gspread   | :ref:`GoogleSheetsBasePersister <syncsheetsref>`    | ❌            | ❌                                                  |
+    | Sheets      |           |                                                     |               |                                                     |
+    +-------------+-----------+-----------------------------------------------------+---------------+-----------------------------------------------------+
 
 We follow the naming convention ``b_dependency-library``, where the ``b_`` is used to avoid name
 clashing with the underlying library. We chose the library name in case we implement the same database
@@ -125,6 +128,13 @@ Currently we support the following, although we highly recommend you contribute 
 .. _syncmongoref:
 
 .. autoclass:: burr.integrations.persisters.b_pymongo.MongoDBBasePersister
+   :members:
+
+   .. automethod:: __init__
+
+.. _syncsheetsref:
+
+.. autoclass:: burr.integrations.persisters.b_google_sheets.GoogleSheetsBasePersister
    :members:
 
    .. automethod:: __init__
