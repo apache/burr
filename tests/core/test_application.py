@@ -4459,6 +4459,7 @@ def test_initialize_from_applies_override_state_values():
 async def test_stream_result_processes_inputs_before_pre_run_step_hook():
     """Verify stream_result and astream_result process inputs before pre_run_step,
     so hooks see injected dependencies and filtered action inputs (issue #1017)."""
+
     class InputCaptureHook(PreRunStepHook):
         def __init__(self):
             self.captured_inputs = []
@@ -4498,7 +4499,9 @@ async def test_stream_result_processes_inputs_before_pre_run_step_hook():
         .with_hooks(hook_async)
         .build()
     )
-    _, container = await app_async.astream_result(halt_after=["async_act"], inputs={"value": 1, "noise": 2})
+    _, container = await app_async.astream_result(
+        halt_after=["async_act"], inputs={"value": 1, "noise": 2}
+    )
     await container.get()
     assert len(hook_async.captured_inputs) == 1
     assert "value" in hook_async.captured_inputs[0]
@@ -4509,6 +4512,7 @@ async def test_stream_result_processes_inputs_before_pre_run_step_hook():
 async def test_stream_result_validates_inputs_before_pre_run_step_hook():
     """Verify stream_result and astream_result validate inputs before invoking pre_run_step,
     and do not fire pre_run_step or post_run_step on rejection (issue #1017)."""
+
     class StepSpy(PreRunStepHook, PostRunStepHook):
         def __init__(self):
             self.pre_count = 0
@@ -4530,7 +4534,13 @@ async def test_stream_result_validates_inputs_before_pre_run_step_hook():
 
     # 1. Missing required input in stream_result
     spy1 = StepSpy()
-    app1 = ApplicationBuilder().with_actions(sync_req).with_entrypoint("sync_req").with_hooks(spy1).build()
+    app1 = (
+        ApplicationBuilder()
+        .with_actions(sync_req)
+        .with_entrypoint("sync_req")
+        .with_hooks(spy1)
+        .build()
+    )
     with pytest.raises(ValueError):
         app1.stream_result(halt_after=["sync_req"], inputs={})
     assert spy1.pre_count == 0
@@ -4538,7 +4548,13 @@ async def test_stream_result_validates_inputs_before_pre_run_step_hook():
 
     # 2. Reserved __ input in stream_result
     spy2 = StepSpy()
-    app2 = ApplicationBuilder().with_actions(sync_req).with_entrypoint("sync_req").with_hooks(spy2).build()
+    app2 = (
+        ApplicationBuilder()
+        .with_actions(sync_req)
+        .with_entrypoint("sync_req")
+        .with_hooks(spy2)
+        .build()
+    )
     with pytest.raises(ValueError):
         app2.stream_result(halt_after=["sync_req"], inputs={"__reserved": 1, "required_param": 1})
     assert spy2.pre_count == 0
@@ -4546,7 +4562,13 @@ async def test_stream_result_validates_inputs_before_pre_run_step_hook():
 
     # 3. Missing required input in astream_result
     spy3 = StepSpy()
-    app3 = ApplicationBuilder().with_actions(async_req).with_entrypoint("async_req").with_hooks(spy3).build()
+    app3 = (
+        ApplicationBuilder()
+        .with_actions(async_req)
+        .with_entrypoint("async_req")
+        .with_hooks(spy3)
+        .build()
+    )
     with pytest.raises(ValueError):
         await app3.astream_result(halt_after=["async_req"], inputs={})
     assert spy3.pre_count == 0
@@ -4554,9 +4576,17 @@ async def test_stream_result_validates_inputs_before_pre_run_step_hook():
 
     # 4. Reserved __ input in astream_result
     spy4 = StepSpy()
-    app4 = ApplicationBuilder().with_actions(async_req).with_entrypoint("async_req").with_hooks(spy4).build()
+    app4 = (
+        ApplicationBuilder()
+        .with_actions(async_req)
+        .with_entrypoint("async_req")
+        .with_hooks(spy4)
+        .build()
+    )
     with pytest.raises(ValueError):
-        await app4.astream_result(halt_after=["async_req"], inputs={"__reserved": 1, "required_param": 1})
+        await app4.astream_result(
+            halt_after=["async_req"], inputs={"__reserved": 1, "required_param": 1}
+        )
     assert spy4.pre_count == 0
     assert spy4.post_count == 0
 
@@ -4597,4 +4627,3 @@ async def test_stream_result_shares_one_processed_inputs_dict():
     assert hook_contexts == created_contexts
     assert action_contexts == created_contexts
     assert hook_contexts[0] is action_contexts[0]
-
