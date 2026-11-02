@@ -81,6 +81,17 @@ class AerospikePersistenceUncertainOutcomeError(AerospikePersistenceError):
     """Raised when a write retry budget is exhausted without a definitive result."""
 
 
+class _RetryableReconciliationError(AerospikePersistenceError):
+    """Internal signal that a reconciliation read failed with a retryable error."""
+
+    def __init__(self, cause: aerospike.exception.AerospikeError):
+        super().__init__(f"Reconciliation read failed transiently: {cause}")
+        self.cause = cause
+
+
+_UNOBSERVED = object()
+
+
 class AerospikeBasePersister(persistence.BaseStatePersister):
     """Synchronous Aerospike-backed implementation of Burr's ``BaseStatePersister``.
 
@@ -407,9 +418,12 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             membership_pages = results.batch_records
             if len(membership_pages) != len(keys):
                 raise AerospikePersistenceConsistencyError("Membership batch read was incomplete")
-            for membership_page in membership_pages:
+            for offset, membership_page in enumerate(membership_pages):
                 if membership_page.result == _RECORD_NOT_FOUND_CODE:
-                    continue
+                    raise AerospikePersistenceConsistencyError(
+                        f"Membership page {first_page + offset} is advertised by the root "
+                        "tail_page but missing"
+                    )
                 if membership_page.result != 0:
                     raise AerospikePersistenceError(
                         f"Membership batch entry failed with result code {membership_page.result}"
@@ -542,6 +556,17 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
             return self._client.get(key, policy=read_policy)
         except aerospike.exception.RecordNotFound:
             return None
+        except aerospike.exception.AerospikeError as e:
+            if self._is_retryable(e):
+                raise _RetryableReconciliationError(e) from e
+            raise AerospikePersistenceError(f"Record read failed: {e}") from e
+
+    def _reconcile(self, read_callable):
+        """Run a reconciliation read; retryable failures return ``_UNOBSERVED``."""
+        try:
+            return read_callable()
+        except _RetryableReconciliationError:
+            return _UNOBSERVED
 
     def _is_retryable(self, exc: aerospike.exception.AerospikeError) -> bool:
         return getattr(exc, "code", None) in _RETRYABLE_CODES
@@ -587,6 +612,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         except aerospike.exception.RecordNotFound:
             return None
         except aerospike.exception.AerospikeError as e:
+            if self._is_retryable(e):
+                raise _RetryableReconciliationError(e) from e
             raise AerospikePersistenceError(f"Membership read failed: {e}") from e
 
     def _read_membership_root(self, key) -> Optional[tuple[dict, int]]:
@@ -602,6 +629,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
         except aerospike.exception.RecordNotFound:
             return None
         except aerospike.exception.AerospikeError as e:
+            if self._is_retryable(e):
+                raise _RetryableReconciliationError(e) from e
             raise AerospikePersistenceError(f"Membership read failed: {e}") from e
 
     def _advance_membership_tail(self, root_key, expected: int) -> int:
@@ -621,8 +650,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                     raise AerospikePersistenceError(
                         f"Membership tail allocation failed: {e}"
                     ) from e
-                root = self._read_membership_root(root_key)
-                if root is not None and root[1] > expected:
+                root = self._reconcile(lambda: self._read_membership_root(root_key))
+                if root is not None and root is not _UNOBSERVED and root[1] > expected:
                     return root[1]
                 if attempt == _MAX_WRITE_ATTEMPTS:
                     raise AerospikePersistenceUncertainOutcomeError(
@@ -673,7 +702,15 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 self._set_tail_hint(membership_key, current_page)
                 return
             except aerospike.exception.FilteredOut:
-                root = self._read_membership_root(membership_key)
+                root = self._reconcile(lambda: self._read_membership_root(membership_key))
+                if root is _UNOBSERVED:
+                    if uncertain_attempt == _MAX_WRITE_ATTEMPTS:
+                        raise AerospikePersistenceUncertainOutcomeError(
+                            "Membership root could not be reconciled within the retry budget"
+                        )
+                    self._backoff(uncertain_attempt)
+                    uncertain_attempt += 1
+                    continue
                 if root is None:
                     raise AerospikePersistenceConsistencyError(
                         "Membership root disappeared after filtering"
@@ -683,7 +720,15 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 current_key = self._membership_page_key(partition_key, current_page)
                 uncertain_attempt = 1
             except aerospike.exception.RecordTooBig as e:
-                root = self._read_membership_root(membership_key)
+                root = self._reconcile(lambda: self._read_membership_root(membership_key))
+                if root is _UNOBSERVED:
+                    if uncertain_attempt == _MAX_WRITE_ATTEMPTS:
+                        raise AerospikePersistenceUncertainOutcomeError(
+                            "Membership root could not be reconciled within the retry budget"
+                        )
+                    self._backoff(uncertain_attempt)
+                    uncertain_attempt += 1
+                    continue
                 if root is None:
                     raise AerospikePersistenceConsistencyError(
                         "Membership root disappeared during rollover"
@@ -700,15 +745,32 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                     raise AerospikePersistenceUncertainOutcomeError(
                         "Membership rollover retry budget exhausted"
                     ) from e
+                candidate_key = self._membership_page_key(partition_key, authoritative_tail + 1)
+                for populate_attempt in range(1, _MAX_WRITE_ATTEMPTS + 1):
+                    try:
+                        self._put_membership_page(candidate_key, app_id)
+                        break
+                    except aerospike.exception.AerospikeError as populate_error:
+                        if not self._is_retryable(populate_error):
+                            raise AerospikePersistenceError(
+                                f"Membership page population failed: {populate_error}"
+                            ) from populate_error
+                        app_ids = self._reconcile(lambda: self._read_membership_page(candidate_key))
+                        if app_ids is not _UNOBSERVED and app_ids is not None and app_id in app_ids:
+                            break
+                        if populate_attempt == _MAX_WRITE_ATTEMPTS:
+                            raise AerospikePersistenceUncertainOutcomeError(
+                                "Membership page population failed with an uncertain outcome"
+                            ) from populate_error
+                        self._backoff(populate_attempt)
                 current_page = self._advance_membership_tail(membership_key, authoritative_tail)
                 self._set_tail_hint(membership_key, current_page)
-                current_key = self._membership_page_key(partition_key, current_page)
-                uncertain_attempt = 1
+                return
             except aerospike.exception.AerospikeError as e:
                 if not self._is_retryable(e):
                     raise AerospikePersistenceError(f"Membership registration failed: {e}") from e
-                app_ids = self._read_membership_page(current_key)
-                if app_ids is not None and app_id in app_ids:
+                app_ids = self._reconcile(lambda: self._read_membership_page(current_key))
+                if app_ids is not _UNOBSERVED and app_ids is not None and app_id in app_ids:
                     self._set_tail_hint(membership_key, current_page)
                     return
                 if uncertain_attempt == _MAX_WRITE_ATTEMPTS:
@@ -757,14 +819,21 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 self._write_history_once(history_key, bins)
                 return None
             except aerospike.exception.RecordExistsError:
-                existing = self._read_history(history_key)
+                existing = self._reconcile(lambda: self._read_history(history_key))
+                if existing is _UNOBSERVED:
+                    if attempt == _MAX_WRITE_ATTEMPTS:
+                        raise AerospikePersistenceUncertainOutcomeError(
+                            "History record exists but could not be reconciled within the retry budget"
+                        )
+                    self._backoff(attempt)
+                    continue
                 self._ensure_history_content_matches(existing, bins)
                 return existing
             except aerospike.exception.AerospikeError as e:
                 if self._is_retryable(e):
                     # Reconcile: if the record is now present, the write succeeded.
-                    existing = self._read_history(history_key)
-                    if existing is not None:
+                    existing = self._reconcile(lambda: self._read_history(history_key))
+                    if existing is not None and existing is not _UNOBSERVED:
                         self._ensure_history_content_matches(existing, bins)
                         return existing
                     if attempt == _MAX_WRITE_ATTEMPTS:
@@ -874,8 +943,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 )
             except aerospike.exception.FilteredOut:
                 # The record exists and the condition was false. Read and classify.
-                existing = self._read_head(head_key)
-                if existing is None:
+                existing = self._reconcile(lambda: self._read_head(head_key))
+                if existing is None or existing is _UNOBSERVED:
                     if attempt == _MAX_WRITE_ATTEMPTS:
                         raise AerospikePersistenceUncertainOutcomeError(
                             "Head update was filtered out but the record could not be reconciled"
@@ -897,8 +966,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                 continue
             except aerospike.exception.AerospikeError as e:
                 if self._is_retryable(e):
-                    existing = self._read_head(head_key)
-                    if existing is not None:
+                    existing = self._reconcile(lambda: self._read_head(head_key))
+                    if existing is not None and existing is not _UNOBSERVED:
                         stored_seq, membership_registered = self._validate_head_identity(
                             existing,
                             partition_canonical,
@@ -973,8 +1042,8 @@ class AerospikeBasePersister(persistence.BaseStatePersister):
                     raise AerospikePersistenceError(
                         f"Head membership confirmation failed: {e}"
                     ) from e
-                existing = self._read_head(head_key)
-                if existing is not None:
+                existing = self._reconcile(lambda: self._read_head(head_key))
+                if existing is not None and existing is not _UNOBSERVED:
                     _, membership_registered = self._validate_head_identity(
                         existing, partition_canonical, key_prefix_canonical, app_id
                     )

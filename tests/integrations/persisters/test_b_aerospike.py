@@ -35,6 +35,7 @@ from burr.core.persistence import BaseStatePersister
 from burr.integrations.persisters.b_aerospike import (
     AerospikeBasePersister,
     AerospikePersistenceConsistencyError,
+    AerospikePersistenceError,
     AerospikePersistenceUncertainOutcomeError,
 )
 
@@ -654,6 +655,108 @@ def test_membership_registration_exhausts_uncertain_retry_budget():
     assert client.operate_calls == 4
 
 
+class AmbiguousHeadClient:
+    """Head operate() always fails ambiguously; get() replays queued results."""
+
+    def __init__(self, get_results):
+        self.get_results = list(get_results)
+        self.get_calls = 0
+        self.operate_calls = 0
+
+    def put(self, key, bins, policy):
+        return None
+
+    def operate(self, key, operations, policy):
+        self.operate_calls += 1
+        raise aerospike.exception.TimeoutError()
+
+    def get(self, key, policy):
+        self.get_calls += 1
+        result = self.get_results.pop(0) if self.get_results else aerospike.exception.TimeoutError()
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def _confirmed_head():
+    return (
+        ("test", "burr_head", "key"),
+        {},
+        {
+            "partition": '"pk"',
+            "key_prefix": '""',
+            "app_id": "app",
+            "sequence_id": 1,
+            "member_confirm": True,
+        },
+    )
+
+
+def test_ambiguous_head_write_retries_transient_reconciliation_read_failures():
+    client = AmbiguousHeadClient([aerospike.exception.TimeoutError(), _confirmed_head()])
+    persister = AerospikeBasePersister(client=client)
+
+    with patch.object(persister, "_backoff") as backoff:
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    assert client.operate_calls == 2
+    assert client.get_calls == 2
+    backoff.assert_called_once_with(1)
+
+
+def test_ambiguous_head_write_exhausts_budget_when_reconciliation_reads_stay_transient():
+    client = AmbiguousHeadClient([])
+    persister = AerospikeBasePersister(client=client)
+
+    with patch.object(persister, "_backoff"), pytest.raises(
+        AerospikePersistenceUncertainOutcomeError, match="uncertain outcome"
+    ):
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    assert client.operate_calls == 3
+    assert client.get_calls == 3
+
+
+def test_non_retryable_reconciliation_read_failure_raises_a_wrapped_error():
+    client = AmbiguousHeadClient([aerospike.exception.InvalidRequest()])
+    persister = AerospikeBasePersister(client=client)
+
+    with pytest.raises(AerospikePersistenceError, match="Record read failed"):
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+
+def test_membership_root_reconciliation_retries_transient_read_failure():
+    client = Mock()
+    head_responses = iter(
+        [
+            (("test", "burr_head", "k"), {}, {"sequence_id": 1}),
+            (("test", "burr_head", "k"), {}, {"sequence_id": 1, "member_confirm": True}),
+        ]
+    )
+    membership_responses = iter(
+        [
+            aerospike.exception.FilteredOut(),
+            (("test", "burr_apps", "k"), {}, {}),
+        ]
+    )
+
+    def operate(key, operations, policy):
+        result = next(head_responses) if key[1] == "burr_head" else next(membership_responses)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    client.operate.side_effect = operate
+    client.select.side_effect = [aerospike.exception.TimeoutError()]
+    persister = AerospikeBasePersister(client=client)
+
+    with patch.object(persister, "_backoff") as backoff:
+        persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    assert client.select.call_count == 1
+    backoff.assert_called_once_with(1)
+
+
 def test_list_app_ids_uses_one_membership_primary_key_read():
     client = Mock()
     client.select.return_value = (
@@ -705,6 +808,75 @@ def test_list_app_ids_propagates_non_iterable_membership_map():
 
     with pytest.raises(AerospikePersistenceConsistencyError, match="application-ID map"):
         persister.list_app_ids("pk")
+
+
+def test_list_app_ids_raises_when_an_advertised_page_is_missing():
+    """A page at or below the published tail_page must exist; skipping it would return an incomplete list."""
+    client = Mock()
+    client.select.return_value = (
+        ("test", "burr_apps", "digest"),
+        {},
+        {"app_ids": {"a": 1}, "tail_page": 1},
+    )
+    missing_page = Mock()
+    missing_page.result = 2  # RECORD_NOT_FOUND
+    missing_page.record = None
+    results = Mock()
+    results.batch_records = [missing_page]
+    client.batch_read.return_value = results
+    persister = AerospikeBasePersister(client=client)
+
+    with pytest.raises(AerospikePersistenceConsistencyError, match="advertised"):
+        persister.list_app_ids("pk")
+
+
+class RolloverOrderClient:
+    """Records membership operate() calls in order; the first page write overflows."""
+
+    def __init__(self):
+        self.membership_calls = []
+        self.head_operates = 0
+
+    def put(self, key, bins, policy):
+        return None
+
+    def select(self, key, bins, policy):
+        return (key, {}, {"app_ids": {}, "tail_page": 0})
+
+    def operate(self, key, operations, policy):
+        if key[1] == "burr_head":
+            self.head_operates += 1
+            if self.head_operates == 1:
+                return key, {}, {"sequence_id": 1}
+            return key, {}, {"sequence_id": 1, "member_confirm": True}
+        self.membership_calls.append((key, operations))
+        if len(self.membership_calls) == 1:
+            raise aerospike.exception.RecordTooBig()
+        if all(op.get("bin") == "tail_page" for op in operations):
+            return key, {}, {"tail_page": 1}
+        return key, {}, {}
+
+
+def test_membership_rollover_populates_the_page_before_publishing_the_tail():
+    client = RolloverOrderClient()
+    persister = AerospikeBasePersister(client=client)
+
+    persister.save("pk", "app", 1, "position", state.State({"value": 1}), "completed")
+
+    populate_index = next(
+        i
+        for i, (_, operations) in enumerate(client.membership_calls)
+        if all(op.get("bin") == "app_ids" for op in operations)
+    )
+    publish_index = next(
+        i
+        for i, (_, operations) in enumerate(client.membership_calls)
+        if all(op.get("bin") == "tail_page" for op in operations)
+    )
+    populate_key = client.membership_calls[populate_index][0]
+
+    assert populate_index < publish_index
+    assert populate_key == persister._membership_page_key("pk", 1)
 
 
 def test_initialize_is_idempotent_without_remote_calls():
