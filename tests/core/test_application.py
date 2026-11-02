@@ -4627,3 +4627,111 @@ async def test_stream_result_shares_one_processed_inputs_dict():
     assert hook_contexts == created_contexts
     assert action_contexts == created_contexts
     assert hook_contexts[0] is action_contexts[0]
+
+
+async def test_stream_result_sequence_id_matches_context_and_hook():
+    """Verify stream_result and astream_result increment sequence_id before injecting
+    dependencies, so __context.sequence_id matches the hook and action sequence_id."""
+
+    class SequenceSpy(PreRunStepHook):
+        def __init__(self):
+            self.hook_sequence_ids = []
+
+        def pre_run_step(self, *, sequence_id, **kwargs):
+            self.hook_sequence_ids.append(sequence_id)
+
+    @action(reads=[], writes=["val"])
+    def sync_act(state: State, __context: ApplicationContext) -> State:
+        return state.update(val=__context.sequence_id)
+
+    @action(reads=[], writes=["val"])
+    async def async_act(state: State, __context: ApplicationContext) -> State:
+        return state.update(val=__context.sequence_id)
+
+    # 1. Fresh application stream_result
+    spy1 = SequenceSpy()
+    app1 = (
+        ApplicationBuilder()
+        .with_actions(sync_act)
+        .with_entrypoint("sync_act")
+        .with_hooks(spy1)
+        .build()
+    )
+    _, container1 = app1.stream_result(halt_after=["sync_act"], inputs={})
+    _, state1 = container1.get()
+    assert spy1.hook_sequence_ids == [0]
+    assert state1["val"] == 0
+
+    # 2. Resumed application stream_result
+    spy2 = SequenceSpy()
+    app2 = (
+        ApplicationBuilder()
+        .with_actions(sync_act)
+        .with_entrypoint("sync_act")
+        .with_identifiers(sequence_id=5)
+        .with_hooks(spy2)
+        .build()
+    )
+    _, container2 = app2.stream_result(halt_after=["sync_act"], inputs={})
+    _, state2 = container2.get()
+    assert spy2.hook_sequence_ids == [6]
+    assert state2["val"] == 6
+
+    # 3. Fresh application astream_result
+    spy3 = SequenceSpy()
+    app3 = (
+        ApplicationBuilder()
+        .with_actions(async_act)
+        .with_entrypoint("async_act")
+        .with_hooks(spy3)
+        .build()
+    )
+    _, container3 = await app3.astream_result(halt_after=["async_act"], inputs={})
+    _, state3 = await container3.get()
+    assert spy3.hook_sequence_ids == [0]
+    assert state3["val"] == 0
+
+    # 4. Resumed application astream_result
+    spy4 = SequenceSpy()
+    app4 = (
+        ApplicationBuilder()
+        .with_actions(async_act)
+        .with_entrypoint("async_act")
+        .with_identifiers(sequence_id=5)
+        .with_hooks(spy4)
+        .build()
+    )
+    _, container4 = await app4.astream_result(halt_after=["async_act"], inputs={})
+    _, state4 = await container4.get()
+    assert spy4.hook_sequence_ids == [6]
+    assert state4["val"] == 6
+
+
+async def test_astep_pre_run_step_receives_processed_action_inputs():
+    """Verify astep's pre_run_step hook receives processed action_inputs containing
+    injected dependencies rather than raw inputs."""
+
+    class AstepInputHook(PreRunStepHook):
+        def __init__(self):
+            self.captured_inputs = []
+
+        def pre_run_step(self, *, inputs, **kwargs):
+            self.captured_inputs.append(inputs)
+
+    @action(reads=[], writes=["val"])
+    async def async_act(state: State, value: int, __context: ApplicationContext) -> State:
+        return state.update(val=value)
+
+    hook = AstepInputHook()
+    app = (
+        ApplicationBuilder()
+        .with_actions(async_act)
+        .with_entrypoint("async_act")
+        .with_hooks(hook)
+        .build()
+    )
+    await app.astep(inputs={"value": 42, "unwanted_noise": 99})
+    assert len(hook.captured_inputs) == 1
+    assert "value" in hook.captured_inputs[0]
+    assert "__context" in hook.captured_inputs[0]
+    assert "unwanted_noise" not in hook.captured_inputs[0]

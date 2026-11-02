@@ -1127,7 +1127,7 @@ class Application(Generic[ApplicationStateType]):
                     "pre_run_step",
                     action=next_action,
                     state=self._state,
-                    inputs=inputs,
+                    inputs=action_inputs,
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
@@ -1559,8 +1559,8 @@ class Application(Generic[ApplicationStateType]):
                     return next_action, StreamingResultContainer.pass_through(
                         results=results, final_state=state
                     )
-            action_inputs = self._process_inputs(inputs, next_action)
             self._increment_sequence_id()
+            action_inputs = self._process_inputs(inputs, next_action)
             self._adapter_set.call_all_lifecycle_hooks_sync(
                 "pre_run_step",
                 action=next_action,
@@ -1818,8 +1818,8 @@ class Application(Generic[ApplicationStateType]):
                     return next_action, AsyncStreamingResultContainer.pass_through(
                         results=results, final_state=state
                     )
-            action_inputs = self._process_inputs(inputs, next_action)
             self._increment_sequence_id()
+            action_inputs = self._process_inputs(inputs, next_action)
             await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "pre_run_step",
                 action=next_action,
