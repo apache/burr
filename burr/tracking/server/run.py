@@ -27,6 +27,7 @@ from starlette import status
 
 # TODO -- remove this, just for testing
 from burr.log_setup import setup_logging
+from burr.tracking.server import workspace
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
@@ -150,10 +151,13 @@ async def lifespan(app: FastAPI):
             await event_consumer_task
         except asyncio.CancelledError:
             pass
-    await backend.lifespan(app).__anext__()
+    try:
+        await workspace.cleanup_processes()
+    finally:
+        await backend.lifespan(app).__anext__()
 
 
-def _get_app_spec() -> BackendSpec:
+def _get_app_spec(supports_workspace: bool = False) -> BackendSpec:
     """Computes the backend spec from the current backend configuration."""
     is_indexing_backend = isinstance(backend, IndexingBackendMixin)
     is_snapshotting_backend = isinstance(backend, SnapshottingBackendMixin)
@@ -164,6 +168,7 @@ def _get_app_spec() -> BackendSpec:
         snapshotting=is_snapshotting_backend,
         supports_demos=supports_demos,
         supports_annotations=is_annotations_backend,
+        supports_workspace=supports_workspace,
     )
 
 
@@ -189,7 +194,9 @@ if app_spec.snapshotting:
     )(save_snapshot)
 
 
-def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
+def create_burr_ui_app(
+    serve_static: bool = SERVE_STATIC, enable_workspace: Optional[bool] = None
+) -> FastAPI:
     """Create a fully-configured Burr UI FastAPI application.
 
     This factory creates a new FastAPI instance with all Burr UI routes,
@@ -197,8 +204,14 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
 
     :param serve_static: Whether to serve the React UI static files. Defaults to
         the BURR_SERVE_STATIC environment variable (true by default).
+    :param enable_workspace: Whether to mount the workspace routes, which read files and
+        run Python scripts on this machine. Defaults to the BURR_ENABLE_WORKSPACE
+        environment variable (false by default). Only enable this on a server that is not
+        reachable by untrusted callers -- see SECURITY.md.
     :return: A fully-configured FastAPI application.
     """
+    if enable_workspace is None:
+        enable_workspace = workspace.is_enabled()
     ui_app = FastAPI(lifespan=lifespan)
 
     @ui_app.get("/ready")
@@ -212,7 +225,7 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
 
     @ui_app.get("/api/v0/metadata/app_spec", response_model=BackendSpec)
     def get_app_spec():
-        return _get_app_spec()
+        return _get_app_spec(supports_workspace=enable_workspace)
 
     @ui_app.get("/api/v0/projects", response_model=Sequence[schema.Project])
     async def get_projects(request: Request) -> Sequence[schema.Project]:
@@ -359,6 +372,9 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
                 burr_version = "unknown"
         return {"version": burr_version}
 
+    if enable_workspace:
+        ui_app.include_router(workspace.router, prefix="/api/v0/workspace")
+
     # Examples -- todo -- put them behind `if` statements
     ui_app.include_router(chatbot.router, prefix="/api/v0/chatbot")
     ui_app.include_router(email_assistant.router, prefix="/api/v0/email_assistant")
@@ -429,6 +445,7 @@ def mount_burr_ui(
     path: str = "/burr",
     name: str = "burr-ui",
     serve_static: bool = SERVE_STATIC,
+    enable_workspace: Optional[bool] = None,
 ) -> FastAPI:
     """Mount the Burr UI inside another FastAPI app.
 
@@ -437,9 +454,11 @@ def mount_burr_ui(
     :param name: Name for the mounted sub-application. Defaults to "burr-ui".
     :param serve_static: Whether to serve the React UI static files. Defaults to
         the BURR_SERVE_STATIC environment variable (true by default).
+    :param enable_workspace: Whether to mount the workspace routes. Defaults to the
+        BURR_ENABLE_WORKSPACE environment variable (false by default).
     :return: The mounted Burr UI FastAPI app instance.
     """
-    ui_app = create_burr_ui_app(serve_static=serve_static)
+    ui_app = create_burr_ui_app(serve_static=serve_static, enable_workspace=enable_workspace)
     parent_app.mount(path, ui_app, name=name)
     return ui_app
 
