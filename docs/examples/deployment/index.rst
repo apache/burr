@@ -41,3 +41,4 @@ have an example that would add to this guide. We have created a variety of issue
     infrastructure
     monitoring
     aws
+    burr-ui-aws
