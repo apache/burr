@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../common/table';
 import { DefaultService } from '../../api';
 import { Loading } from '../common/loading';
@@ -53,13 +53,15 @@ const RecordsHeader = (props: {
 export const AdminView = () => {
   const [displayZeroCount, setDisplayZeroCount] = useState(false);
 
-  const { data, isLoading } = useQuery(['indexingJobs', displayZeroCount], () =>
-    DefaultService.getIndexingJobsApiV0IndexingJobsGet(
-      0, // TODO -- add pagination
-      100,
-      !displayZeroCount
-    )
-  );
+  const { data, isLoading } = useQuery({
+    queryKey: ['indexingJobs', displayZeroCount],
+    queryFn: () =>
+      DefaultService.getIndexingJobsApiV0IndexingJobsGet(
+        0, // TODO -- add pagination
+        100,
+        !displayZeroCount
+      )
+  });
   if (isLoading) {
     return <Loading />;
   }
