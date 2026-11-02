@@ -40,6 +40,9 @@ LLM & AI Frameworks
    * - **OpenAI**
      - Use OpenAI models (and any OpenAI API-compatible server) inside Burr actions.
      - `Example <https://github.com/apache/burr/tree/main/examples/openai-compatible-agent>`__
+   * - **OrcaRouter**
+     - Use OrcaRouter's gateway (OpenAI-compatible endpoint, ``https://api.orcarouter.ai/v1``) inside Burr actions for a wide range of models through one API key.
+     - `Example <https://github.com/apache/burr/tree/main/examples/orcarouter-agent>`__
    * - **LangChain / LCEL**
      - Use LangChain chains and runnables as Burr actions. Includes a custom serialization plugin to persist LangChain objects in state.
      - :doc:`Reference <reference/integrations/langchain>` |
