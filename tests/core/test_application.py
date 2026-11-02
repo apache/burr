@@ -2891,6 +2891,34 @@ def test_stream_result_halt_after_run_through_non_streaming():
     assert len(stream_event_tracker.post_end_stream_calls) == 1
 
 
+async def test_astream_result_non_streaming_exception_skips_post_end_stream():
+    """A failing non-streaming action must not report the end of a stream it never started.
+
+    Regression test for https://github.com/apache/burr/issues/999 -- lifecycle adapters that
+    keep per-stream state (such as the local tracking client) raise from ``post_end_stream``
+    when ``pre_start_stream`` never ran, which masks the exception raised by the action.
+    """
+    stream_event_tracker = StreamEventCaptureTracker()
+
+    @action(reads=[], writes=[])
+    async def fail(state: State) -> State:
+        raise ValueError("original failure")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(fail)
+        .with_entrypoint("fail")
+        .with_tracker(stream_event_tracker)
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="original failure"):
+        await app.astream_result(halt_after=["fail"])
+
+    assert len(stream_event_tracker.pre_start_stream_calls) == 0
+    assert len(stream_event_tracker.post_end_stream_calls) == 0
+
+
 async def test_astream_result_halt_after_run_through_non_streaming():
     action_tracker = CallCaptureTracker()
     stream_event_tracker = StreamEventCaptureTrackerAsync()

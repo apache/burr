@@ -1809,6 +1809,12 @@ class Application(Generic[ApplicationStateType]):
         except Exception as e:
             await call_execute_method_wrapper.acall_post(self, e)
             raise
+        # A non-streaming action halted through this method never starts a stream, so
+        # ``pre_start_stream`` may not have run by the time we reach the exception
+        # handler below. Track it so we do not call ``post_end_stream`` for a stream
+        # that was never started -- adapters keeping per-stream state (e.g. tracking
+        # clients) would raise there and mask the original exception.
+        stream_started = False
         try:
 
             def process_result(
@@ -1868,6 +1874,7 @@ class Application(Generic[ApplicationStateType]):
                 app_id=self._uid,
                 partition_key=self._partition_key,
             )
+            stream_started = True
             if next_action.single_step:
                 next_action = cast(SingleStepStreamingAction, next_action)
                 if not next_action.is_async():
@@ -1924,13 +1931,14 @@ class Application(Generic[ApplicationStateType]):
                 exception=e,
             )
             await call_execute_method_wrapper.acall_post(self, e)
-            await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                "post_end_stream",
-                action=next_action.name,
-                sequence_id=self.sequence_id,
-                app_id=self._uid,
-                partition_key=self._partition_key,
-            )
+            if stream_started:
+                await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                    "post_end_stream",
+                    action=next_action.name,
+                    sequence_id=self.sequence_id,
+                    app_id=self._uid,
+                    partition_key=self._partition_key,
+                )
             raise
         return next_action, AsyncStreamingResultContainer(
             generator, self._state, process_result, callback
