@@ -229,6 +229,24 @@ def test__validate_and_extract_signature_types_untyped_state_error_message():
     assert "'state' parameter must be annotated" in str(excinfo.value)
 
 
+def test__validate_and_extract_signature_types_missing_state_error_message():
+    """The error message should include the actual signature, not a literal placeholder."""
+    with pytest.raises(ValueError) as excinfo:
+        _validate_and_extract_signature_types(_fn_without_state_arg)
+    message = str(excinfo.value)
+    assert "{sig}" not in message
+    assert "Got signature: (foo: " in message
+
+
+def test__validate_and_extract_signature_types_return_type_error_message():
+    """The error message should include the actual return annotation, not a literal placeholder."""
+    with pytest.raises(ValueError) as excinfo:
+        _validate_and_extract_signature_types(_fn_with_incorrect_return_type)
+    message = str(excinfo.value)
+    assert "{sig.return_annotation}" not in message
+    assert "Got return type: <class 'int'>." in message
+
+
 @pytest.mark.parametrize(
     "fn,expected",
     [
