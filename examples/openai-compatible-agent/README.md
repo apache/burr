@@ -56,7 +56,7 @@ Most tools save state "in the frontend" because they don't have access to the of
 ## Resources
 There are multiple implementations of OpenAI API-compatible servers. Here are some notable examples:
 
-- [cortex](https://github.com/janhq/cortex)
+- [cortex](https://github.com/janhq/cortex.cpp)
 - [llama-cpp-python](https://github.com/abetlen/llama-cpp-python/blob/main/llama_cpp/server/app.py)
 - [FastChat](https://github.com/lm-sys/FastChat/blob/main/fastchat/serve/openai_api_server.py)
 - [text-generation-webui](https://github.com/oobabooga/text-generation-webui/blob/abe5ddc8833206381c43b002e95788d4cca0893a/extensions/openai/script.py)
