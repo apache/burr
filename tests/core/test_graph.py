@@ -15,11 +15,13 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable
+import json
+from typing import Callable, Union
 
 import pytest
 
 from burr.core import Action, Condition, Result, State, default
+from burr.core.application import ApplicationGraph
 from burr.core.graph import GraphBuilder, _validate_actions, _validate_transitions
 
 
@@ -31,7 +33,7 @@ class PassedInAction(Action):
         writes: list[str],
         fn: Callable[..., dict],
         update_fn: Callable[[dict, State], State],
-        inputs: list[str],
+        inputs: Union[list[str], tuple[list[str], list[str]]],
         tags: list[str] = None,
     ):
         super(PassedInAction, self).__init__()
@@ -204,3 +206,77 @@ def test_get_actions_by_tag():
     assert len(graph.get_actions_by_tag("tag3")) == 1
     with pytest.raises(ValueError, match="not found"):
         graph.get_actions_by_tag("tag4")
+
+
+def test_graph_to_dict_returns_dependency_free_structure():
+    export_action = PassedInAction(
+        reads=["z_read", "a_read"],
+        writes=["z_write", "a_write"],
+        fn=lambda state, **inputs: inputs,
+        update_fn=lambda result, state: state,
+        inputs=(["z_required", "a_required"], ["z_optional", "a_optional"]),
+        tags=["z_tag", "a_tag"],
+    )
+    graph = (
+        GraphBuilder()
+        .with_actions(zeta=export_action, alpha=Result("a_read"))
+        .with_transitions(
+            ("zeta", "alpha", Condition.expr("a_read < z_read")),
+            ("alpha", "zeta"),
+        )
+        .build()
+    )
+
+    exported = graph.to_dict()
+
+    assert exported == {
+        "type": "graph",
+        "actions": [
+            {
+                "name": "zeta",
+                "reads": ["a_read", "z_read"],
+                "writes": ["a_write", "z_write"],
+                "inputs": ["a_required", "z_required"],
+                "optional_inputs": ["a_optional", "z_optional"],
+                "tags": ["a_tag", "z_tag"],
+            },
+            {
+                "name": "alpha",
+                "reads": ["a_read"],
+                "writes": [],
+                "inputs": [],
+                "optional_inputs": [],
+                "tags": [],
+            },
+        ],
+        "transitions": [
+            {"from": "zeta", "to": "alpha", "condition": "a_read < z_read"},
+            {"from": "alpha", "to": "zeta", "condition": "default"},
+        ],
+    }
+    assert json.loads(json.dumps(exported)) == exported
+
+
+def test_application_graph_to_dict_includes_entrypoint():
+    counter = base_counter_action.with_name("counter")
+    graph = ApplicationGraph(
+        actions=[counter],
+        transitions=[],
+        entrypoint=counter,
+    )
+
+    assert graph.to_dict() == {
+        "type": "application_graph",
+        "entrypoint": "counter",
+        "actions": [
+            {
+                "name": "counter",
+                "reads": ["count"],
+                "writes": ["count"],
+                "inputs": [],
+                "optional_inputs": [],
+                "tags": ["tag1", "tag2"],
+            }
+        ],
+        "transitions": [],
+    }
