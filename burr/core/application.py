@@ -1809,6 +1809,7 @@ class Application(Generic[ApplicationStateType]):
         except Exception as e:
             await call_execute_method_wrapper.acall_post(self, e)
             raise
+        stream_started = False
         try:
 
             def process_result(
@@ -1868,6 +1869,7 @@ class Application(Generic[ApplicationStateType]):
                 app_id=self._uid,
                 partition_key=self._partition_key,
             )
+            stream_started = True
             if next_action.single_step:
                 next_action = cast(SingleStepStreamingAction, next_action)
                 if not next_action.is_async():
@@ -1924,13 +1926,14 @@ class Application(Generic[ApplicationStateType]):
                 exception=e,
             )
             await call_execute_method_wrapper.acall_post(self, e)
-            await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                "post_end_stream",
-                action=next_action.name,
-                sequence_id=self.sequence_id,
-                app_id=self._uid,
-                partition_key=self._partition_key,
-            )
+            if stream_started:
+                await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                    "post_end_stream",
+                    action=next_action.name,
+                    sequence_id=self.sequence_id,
+                    app_id=self._uid,
+                    partition_key=self._partition_key,
+                )
             raise
         return next_action, AsyncStreamingResultContainer(
             generator, self._state, process_result, callback
