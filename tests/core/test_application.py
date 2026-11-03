@@ -2806,10 +2806,12 @@ def _closing_probe_app(events: list, *hooks) -> Application:
 @pytest.mark.parametrize("consume_first_item", [True, False])
 async def test_astream_iterate_aclose_unwinds_in_flight_action(consume_first_item: bool):
     """Closing astream_iterate mid-action runs the action's cleanup now (not at GC),
-    does not drain or advance it, and fires post_end_stream exactly once."""
+    does not drain or advance it, fires post_end_stream exactly once, and reports the
+    step as failed."""
     events = []
     stream_event_tracker = StreamEventCaptureTracker()
-    app = _closing_probe_app(events, stream_event_tracker)
+    call_tracker = CallCaptureTracker()
+    app = _closing_probe_app(events, stream_event_tracker, call_tracker)
     steps = app.astream_iterate(halt_after=["act"])
     async for _, container in steps:
         if consume_first_item:
@@ -2819,6 +2821,111 @@ async def test_astream_iterate_aclose_unwinds_in_flight_action(consume_first_ite
     await steps.aclose()
     assert events == (["producer_closed"] if consume_first_item else [])
     assert len(stream_event_tracker.post_end_stream_calls) == 1
+    assert len(call_tracker.post_called) == 1
+    assert isinstance(call_tracker.post_called[0][1]["exception"], GeneratorExit)
+
+
+async def test_astream_iterate_cancelled_mid_stream_unwinds_and_reports_failure():
+    """Cancelling a consumer that wraps astream_iterate in ``aclosing`` (e.g. on a client
+    disconnect) unwinds the action immediately and reports the step as failed."""
+    events = []
+    call_tracker = CallCaptureTracker()
+    app = _closing_probe_app(events, call_tracker)
+    first_item_seen = asyncio.Event()
+
+    async def consume():
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["act"])) as steps:
+            async for _, container in steps:
+                async for _ in container:
+                    first_item_seen.set()
+                    await asyncio.sleep(10)
+
+    task = asyncio.create_task(consume())
+    await first_item_seen.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert events == ["producer_closed"]
+    assert len(call_tracker.post_called) == 1
+    assert isinstance(call_tracker.post_called[0][1]["exception"], GeneratorExit)
+
+
+async def test_astream_iterate_aclose_mid_stream_persists_failed_and_resumes_at_same_action():
+    @streaming_action(reads=[], writes=["x"])
+    async def act(state: State):
+        yield {"item": "a"}, None
+        yield {"item": "done"}, state.update(x=1)
+
+    @action(reads=["x"], writes=["y"])
+    def after(state: State) -> State:
+        return state.update(y=state["x"] + 1)
+
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    persister.initialize()
+
+    def build(resume: bool) -> Application:
+        builder = (
+            ApplicationBuilder()
+            .with_actions(act=act, after=after)
+            .with_transitions(("act", "after"))
+        )
+        if resume:
+            builder = builder.initialize_from(
+                persister, resume_at_next_action=True, default_state={}, default_entrypoint="act"
+            )
+        else:
+            builder = builder.with_entrypoint("act").with_state(State())
+        return builder.with_identifiers(app_id="app").with_state_persister(persister).build()
+
+    steps = build(resume=False).astream_iterate(halt_after=["after"])
+    async for _, container in steps:
+        async for _ in container:
+            break
+        break
+    await steps.aclose()
+    assert persister.load("", "app")["status"] == "failed"
+    assert build(resume=True).get_next_action().name == "act"
+
+
+async def test_astream_iterate_aclose_unwinds_multi_step_streaming_action():
+    events = []
+
+    class MultiStepAct(AsyncStreamingAction):
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+        @property
+        def writes(self) -> list[str]:
+            return ["x"]
+
+        async def stream_run(self, state: State, **run_kwargs):
+            try:
+                for i in range(3):
+                    yield {"i": i}
+            finally:
+                await asyncio.sleep(0)
+                events.append("stream_run_closed")
+
+        def update(self, result: dict, state: State) -> State:
+            return state.update(x=result["i"])
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(act=MultiStepAct())
+        .with_transitions()
+        .with_entrypoint("act")
+        .with_state(State())
+        .build()
+    )
+    steps = app.astream_iterate(halt_after=["act"])
+    async for _, container in steps:
+        async for _ in container:
+            break
+        break
+    await steps.aclose()
+    assert events == ["stream_run_closed"]
+    assert "x" not in app.state
 
 
 async def test_streaming_result_container_aclose_is_idempotent_and_get_returns_initial_state():
@@ -2833,6 +2940,19 @@ async def test_streaming_result_container_aclose_is_idempotent_and_get_returns_i
     assert events == ["producer_closed"]
     assert result is None
     assert "x" not in state
+
+
+async def test_streaming_result_container_aclose_after_completion_reports_success():
+    events = []
+    call_tracker = CallCaptureTracker()
+    app = _closing_probe_app(events, call_tracker)
+    _, container = await app.astream_result(halt_after=["act"])
+    result, state = await container.get()
+    await container.aclose()
+    assert result == {"item": "done"}
+    assert state["x"] == 1
+    assert len(call_tracker.post_called) == 1
+    assert call_tracker.post_called[0][1]["exception"] is None
 
 
 async def test_streaming_result_container_aclose_propagates_cleanup_errors():
@@ -2857,7 +2977,8 @@ async def test_streaming_result_container_aclose_propagates_cleanup_errors():
         break
     with pytest.raises(CleanupError):
         await container.aclose()
-    assert len(seen) == 1 and isinstance(seen[0], CleanupError)
+    assert len(seen) == 1
+    assert isinstance(seen[0], CleanupError)
 
 
 async def test_astream_result_halt_after_run_through_streaming():

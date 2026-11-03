@@ -1700,7 +1700,8 @@ class Application(Generic[ApplicationStateType]):
 
         The :py:class:`AsyncStreamingResultContainer <burr.core.action.AsyncStreamingResultContainer>` is meant as a convenience -- specifically this allows for
         hooks, callbacks, etc... so you can take the control flow and still have state updated afterwards. Hooks/state update will be called after an exception
-        is thrown during streaming, or the stream is completed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
+        is thrown during streaming, the stream is completed, or the stream is closed early (``await container.aclose()``, or the
+        task is cancelled), in which case the step is reported as failed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.
 
 
         To see how this works, let's take the following action (simplified as a single-node workflow) as an example:

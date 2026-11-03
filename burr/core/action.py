@@ -1565,7 +1565,7 @@ class AsyncStreamingResultContainer(
             [StreamResultType, State[StateType]], tuple[StreamResultType, State[StateType]]
         ],
         callback: Callable[
-            [Optional[StreamResultType], State[StateType], Optional[Exception]],
+            [Optional[StreamResultType], State[StateType], Optional[BaseException]],
             typing.Coroutine[None, None, None],
         ],
     ):
@@ -1600,8 +1600,12 @@ class AsyncStreamingResultContainer(
         exits) runs now rather than at garbage collection, then runs the post-step callback
         exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
         no-op once the stream has completed. Exceptions raised by the action's cleanup propagate.
+
+        A stream closed before it completes is reported to the callback (and so to
+        ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
         """
-        exc: Optional[BaseException] = None
+        # Closing before completion means the step did not finish: report it as failed.
+        exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
         try:
             await self.streaming_result_generator.aclose()
         except BaseException as e:

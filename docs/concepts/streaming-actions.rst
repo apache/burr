@@ -224,6 +224,38 @@ This object is effectively a cached iterator. You can use it as follows:
 
 Thus you can run this in a web-service, a streamlit app, etc...
 
+Stopping a stream early
+~~~~~~~~~~~~~~~~~~~~~~~
+
+If you stop consuming an async stream before it finishes (e.g. the client disconnected), close it so the
+action's cleanup (``finally`` blocks, ``async with`` exits such as an open HTTP stream) runs right away,
+rather than at garbage collection. Either close the container directly, or close ``astream_iterate``
+(``contextlib.aclosing`` does this for you):
+
+.. code-block:: python
+
+    action, async_streaming_result = await application.astream_result(
+        halt_after='streaming_response', inputs={"prompt": prompt}
+    )
+    async for result in async_streaming_result:
+        if should_stop(result):
+            break
+    await async_streaming_result.aclose()
+
+.. code-block:: python
+
+    import contextlib
+
+    async with contextlib.aclosing(application.astream_iterate(halt_after=["respond"])) as steps:
+        async for action, streaming_result in steps:
+            async for item in streaming_result:
+                ...
+                break  # leaving the ``async with`` closes the in-flight action
+
+A step that is closed (or whose task is cancelled) before it completes does not update state, and is reported
+to ``post_run_step`` hooks with a ``GeneratorExit`` exception -- persisters record it as ``failed``, so
+resuming re-runs that action. Exceptions raised by the action's cleanup propagate out of ``aclose()``.
+
 --------------
 Considerations
 --------------
