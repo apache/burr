@@ -4591,7 +4591,15 @@ async def test_stream_result_validates_inputs_before_pre_run_step_hook():
     assert spy4.post_count == 0
 
 
-async def test_stream_result_shares_one_processed_inputs_dict():
+@pytest.mark.parametrize(
+    "execute,is_async_action",
+    [
+        ("stream_result", False),
+        ("astream_result", False),
+        ("astream_result", True),
+    ],
+)
+async def test_stream_result_shares_one_processed_inputs_dict(execute: str, is_async_action: bool):
     """Verify dependency factories are called exactly once on non-streaming halts (issue #1007, #1017)."""
     created_contexts = []
     hook_contexts = []
@@ -4607,21 +4615,88 @@ async def test_stream_result_shares_one_processed_inputs_dict():
         action_contexts.append(__context)
         return state.update(val=1)
 
+    @action(reads=[], writes=["val"])
+    async def async_act(state: State, __context) -> State:
+        action_contexts.append(__context)
+        return state.update(val=2)
+
     class ContextCaptureHook(PreRunStepHook):
         def pre_run_step(self, *, inputs, **kwargs):
             hook_contexts.append(inputs["__context"])
 
+    target_action = async_act if is_async_action else sync_act
+    entrypoint = "async_act" if is_async_action else "sync_act"
+
     app = (
         ApplicationBuilder()
-        .with_actions(sync_act)
-        .with_entrypoint("sync_act")
+        .with_actions(target_action)
+        .with_entrypoint(entrypoint)
         .with_hooks(ContextCaptureHook())
         .build()
     )
     app._dependency_factory["__context"] = counting_context_factory
 
-    _, container = app.stream_result(halt_after=["sync_act"], inputs={"noise": 1})
-    container.get()
+    if execute == "stream_result":
+        _, container = app.stream_result(halt_after=[entrypoint], inputs={"noise": 1})
+        container.get()
+    else:
+        _, container = await app.astream_result(halt_after=[entrypoint], inputs={"noise": 1})
+        await container.get()
+
+    assert len(created_contexts) == 1
+    assert hook_contexts == created_contexts
+    assert action_contexts == created_contexts
+    assert hook_contexts[0] is action_contexts[0]
+
+
+@pytest.mark.parametrize("execute", ["step", "astep_with_sync_action", "astep_with_async_action"])
+async def test_step_and_astep_share_one_processed_inputs_dict(execute: str):
+    """The pre_run_step hook and the action must receive the same processed inputs.
+    Verifies dependency factory runs once and hook & action share the same context instance (#979).
+    """
+    created_contexts = []
+    hook_contexts = []
+    action_contexts = []
+
+    def counting_context_factory(action, sequence_id):
+        ctx = object()
+        created_contexts.append(ctx)
+        return ctx
+
+    @action(reads=[], writes=["val"])
+    def sync_with_context(state: State, __context) -> State:
+        action_contexts.append(__context)
+        return state.update(val=1)
+
+    @action(reads=[], writes=["val"])
+    async def async_with_context(state: State, __context) -> State:
+        action_contexts.append(__context)
+        return state.update(val=2)
+
+    class ContextCaptureHook(PreRunStepHook):
+        def pre_run_step(self, *, inputs, **kwargs):
+            hook_contexts.append(inputs["__context"])
+
+    if execute == "astep_with_async_action":
+        entrypoint = "async_with_context"
+        target_action = async_with_context
+    else:
+        entrypoint = "sync_with_context"
+        target_action = sync_with_context
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(target_action)
+        .with_entrypoint(entrypoint)
+        .with_hooks(ContextCaptureHook())
+        .build()
+    )
+    app._dependency_factory["__context"] = counting_context_factory
+
+    if execute == "step":
+        assert app.step() is not None
+    else:
+        await app.astep()
 
     assert len(created_contexts) == 1
     assert hook_contexts == created_contexts
