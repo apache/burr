@@ -17,6 +17,7 @@
 
 import asyncio
 import collections
+import contextlib
 import datetime
 import logging
 import typing
@@ -31,6 +32,7 @@ from burr.core.action import (
     Action,
     AsyncGenerator,
     AsyncStreamingAction,
+    AsyncStreamingResultContainer,
     Condition,
     Reducer,
     Result,
@@ -40,6 +42,7 @@ from burr.core.action import (
     action,
     default,
     expr,
+    streaming_action,
 )
 from burr.core.application import (
     PRIOR_STEP,
@@ -2768,6 +2771,93 @@ async def test_astream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.pre_start_stream_calls) == 2
     assert len(stream_event_tracker.post_end_stream_calls) == 2
     assert len(stream_event_tracker.post_stream_item_calls) == 20
+
+
+def _closing_probe_app(events: list, *hooks) -> Application:
+    """One streaming action whose nested producer has an awaiting ``finally`` (like an HTTP close)."""
+
+    async def producer():
+        try:
+            yield "a"
+            yield "b"
+        finally:
+            await asyncio.sleep(0)
+            events.append("producer_closed")
+
+    @streaming_action(reads=[], writes=["x"])
+    async def act(state: State):
+        async with contextlib.aclosing(producer()) as items:
+            async for item in items:
+                yield {"item": item}, None
+        events.append("advanced")
+        yield {"item": "done"}, state.update(x=1)
+
+    return (
+        ApplicationBuilder()
+        .with_actions(act)
+        .with_transitions()
+        .with_entrypoint("act")
+        .with_state(State())
+        .with_hooks(*hooks)
+        .build()
+    )
+
+
+@pytest.mark.parametrize("consume_first_item", [True, False])
+async def test_astream_iterate_aclose_unwinds_in_flight_action(consume_first_item: bool):
+    """Closing astream_iterate mid-action runs the action's cleanup now (not at GC),
+    does not drain or advance it, and fires post_end_stream exactly once."""
+    events = []
+    stream_event_tracker = StreamEventCaptureTracker()
+    app = _closing_probe_app(events, stream_event_tracker)
+    steps = app.astream_iterate(halt_after=["act"])
+    async for _, container in steps:
+        if consume_first_item:
+            async for _ in container:
+                break
+        break
+    await steps.aclose()
+    assert events == (["producer_closed"] if consume_first_item else [])
+    assert len(stream_event_tracker.post_end_stream_calls) == 1
+
+
+async def test_streaming_result_container_aclose_is_idempotent_and_get_returns_initial_state():
+    events = []
+    app = _closing_probe_app(events)
+    _, container = await app.astream_result(halt_after=["act"])
+    async for _ in container:
+        break
+    await container.aclose()
+    await container.aclose()
+    result, state = await container.get()
+    assert events == ["producer_closed"]
+    assert result is None
+    assert "x" not in state
+
+
+async def test_streaming_result_container_aclose_propagates_cleanup_errors():
+    class CleanupError(Exception):
+        pass
+
+    async def failing_cleanup():
+        try:
+            yield {"item": "a"}, None
+        finally:
+            raise CleanupError("cleanup failed")
+
+    seen = []
+
+    async def callback(result, state, exc):
+        seen.append(exc)
+
+    container = AsyncStreamingResultContainer(
+        failing_cleanup(), State(), lambda r, s: (r, s), callback
+    )
+    async for _ in container:
+        break
+    with pytest.raises(CleanupError):
+        await container.aclose()
+    assert len(seen) == 1 and isinstance(seen[0], CleanupError)
 
 
 async def test_astream_result_halt_after_run_through_streaming():

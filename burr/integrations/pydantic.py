@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import inspect
 import types
@@ -357,12 +358,13 @@ def pydantic_streaming_action(
             state: State, **kwargs
         ) -> AsyncGenerator[tuple[dict, Optional[State]], None]:
             model_to_use = model_from_state(model=SubsetInputType, state=state)
-            async for partial, state_update in fn(state=model_to_use, **kwargs):
-                if state_update is None:
-                    yield partial, None
-                else:
-                    output = SubsetOutputType(**model_to_dict(state_update, include=writes))
-                    yield partial, merge_to_state(model=output, write_keys=writes, state=state)
+            async with contextlib.aclosing(fn(state=model_to_use, **kwargs)) as gen:
+                async for partial, state_update in gen:
+                    if state_update is None:
+                        yield partial, None
+                    else:
+                        output = SubsetOutputType(**model_to_dict(state_update, include=writes))
+                        yield partial, merge_to_state(model=output, write_keys=writes, state=state)
 
         is_async = inspect.isasyncgenfunction(fn)
         # This recreates the @streaming_action decorator

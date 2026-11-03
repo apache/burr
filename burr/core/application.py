@@ -456,6 +456,9 @@ async def _arun_single_step_streaming_action(
             e,
             exc_info=True,
         )
+    finally:
+        # Unwind the action now on early close instead of leaving it to GC.
+        await generator.aclose()
 
     if state_update is None:
         raise ValueError(
@@ -585,6 +588,9 @@ async def _arun_multi_step_streaming_action(
             e,
             exc_info=True,
         )
+    finally:
+        # Unwind the action now on early close instead of leaving it to GC.
+        await generator.aclose()
     state_update = _run_reducer(action, state, result, action.name)
     _validate_result(result, action.name, action.schema)
     _validate_reducer_writes(action, state_update, action.name)
@@ -2012,7 +2018,12 @@ class Application(Generic[ApplicationStateType]):
             _, streaming_result = await self.astream_result(  # Use astream_result
                 halt_after=[next_action.name], halt_before=None, inputs=inputs
             )
-            yield next_action, streaming_result
+            try:
+                yield next_action, streaming_result
+            except GeneratorExit:
+                # The caller closed us mid-action: unwind it rather than leaving it to GC.
+                await streaming_result.aclose()
+                raise
             # We need to ensure it's fully exhausted before going to the next action
             await streaming_result.get()  # await the get call
             if self._should_halt_iterate(halt_before, halt_after, next_action):

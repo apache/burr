@@ -18,6 +18,7 @@
 import abc
 import ast
 import builtins
+import contextlib
 import copy
 import inspect
 import sys
@@ -152,8 +153,9 @@ def type_eraser(func: Callable[..., Any]) -> Callable[..., Any]:
 
         @wraps(func)
         async def async_gen_wrapper(*args: Any, **kwargs: Any) -> Any:
-            async for item in func(*args, **kwargs):
-                yield item
+            async with contextlib.aclosing(func(*args, **kwargs)) as gen:
+                async for item in gen:
+                    yield item
 
         return async_gen_wrapper
 
@@ -1582,6 +1584,33 @@ class AsyncStreamingResultContainer(
         self._callback = callback
         self._result = None
         self._callback_realized = False
+        self._iterator: Optional[AsyncGenerator[StreamResultType, None]] = None
+
+    async def _realize_callback(self, exc: Optional[BaseException]) -> None:
+        if self._result is None:
+            self._result = None, self._initial_state
+        if not self._callback_realized:
+            self._callback_realized = True
+            await self._callback(*self._result, exc)
+
+    async def aclose(self) -> None:
+        """Stops the stream early without draining it.
+
+        Closes the action's generator chain so its cleanup (``finally`` blocks, ``async with``
+        exits) runs now rather than at garbage collection, then runs the post-step callback
+        exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
+        no-op once the stream has completed. Exceptions raised by the action's cleanup propagate.
+        """
+        exc: Optional[BaseException] = None
+        try:
+            await self.streaming_result_generator.aclose()
+        except BaseException as e:
+            exc = e
+            raise
+        finally:
+            await self._realize_callback(exc)
+            if self._iterator is not None:
+                await self._iterator.aclose()
 
     async def __anext__(self) -> StreamResultType:
         """Moves to the next state in the streaming result"""
@@ -1606,15 +1635,11 @@ class AsyncStreamingResultContainer(
             except StopAsyncIteration:
                 return
             finally:
-                if self._result is None:
-                    self._result = None, self._initial_state
-                if not self._callback_realized:
-                    exc = sys.exc_info()[1]
-                    self._callback_realized = True
-                    await self._callback(*self._result, exc)
+                await self._realize_callback(sys.exc_info()[1])
 
         # return it as `__aiter__` cannot be async/have awaits :/
-        return gen_fn()
+        self._iterator = gen_fn()
+        return self._iterator
 
     async def get(self) -> tuple[Optional[StreamResultType], State[StateType]]:
         # exhaust the generator
@@ -1741,8 +1766,9 @@ class FunctionBasedStreamingAction(SingleStepStreamingAction):
     async def _a_stream_run_and_update(
         self, state: State, **run_kwargs
     ) -> AsyncGeneratorReturnType:
-        async for result in self._fn(state, **self._bound_params, **run_kwargs):
-            yield result
+        async with contextlib.aclosing(self._fn(state, **self._bound_params, **run_kwargs)) as gen:
+            async for result in gen:
+                yield result
 
     def _stream_run_and_update(self, state: State, **run_kwargs) -> GeneratorReturnType:
         yield from self._fn(state, **self._bound_params, **run_kwargs)
