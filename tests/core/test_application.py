@@ -40,6 +40,7 @@ from burr.core.action import (
     SingleStepAction,
     SingleStepStreamingAction,
     StreamingAction,
+    StreamingResultContainer,
     action,
     default,
     expr,
@@ -2998,6 +2999,210 @@ async def test_streaming_result_container_aclose_propagates_cleanup_errors():
         break
     with pytest.raises(CleanupError):
         await container.aclose()
+    assert len(seen) == 1
+    assert isinstance(seen[0], CleanupError)
+
+
+class _ExceptionTypeCapture(PostRunStepHook):
+    """Records only the exception *type* -- holding the exception itself would keep its traceback,
+    and so the stream's frames, alive, defeating refcount-based cleanup checks."""
+
+    def __init__(self):
+        self.exception_types = []
+
+    def post_run_step(self, *, exception: Optional[BaseException], **future_kwargs: Any):
+        self.exception_types.append(type(exception) if exception is not None else None)
+
+
+def _sync_closing_probe_app(events: list, *hooks) -> Application:
+    """Sync twin of ``_closing_probe_app``: one streaming action wrapping a nested producer."""
+
+    def producer():
+        try:
+            yield "a"
+            yield "b"
+        finally:
+            events.append("producer_closed")
+
+    @streaming_action(reads=[], writes=["x"])
+    def act(state: State):
+        with contextlib.closing(producer()) as items:
+            for item in items:
+                yield {"item": item}, None
+        events.append("advanced")
+        yield {"item": "done"}, state.update(x=1)
+
+    return (
+        ApplicationBuilder()
+        .with_actions(act)
+        .with_transitions()
+        .with_entrypoint("act")
+        .with_state(State())
+        .with_hooks(*hooks)
+        .build()
+    )
+
+
+@pytest.mark.parametrize("consume_first_item", [True, False])
+def test_stream_iterate_close_unwinds_in_flight_action(consume_first_item: bool):
+    """Closing stream_iterate mid-action runs the action's cleanup now (not at GC), does not
+    drain or advance it, fires post_end_stream exactly once, and reports the step as failed."""
+    events = []
+    stream_event_tracker = StreamEventCaptureTracker()
+    call_tracker = CallCaptureTracker()
+    app = _sync_closing_probe_app(events, stream_event_tracker, call_tracker)
+    steps = app.stream_iterate(halt_after=["act"])
+    for _, container in steps:
+        if consume_first_item:
+            for _ in container:
+                break
+        break
+    steps.close()
+    assert events == (["producer_closed"] if consume_first_item else [])
+    assert len(stream_event_tracker.post_end_stream_calls) == 1
+    assert len(call_tracker.post_called) == 1
+    assert isinstance(call_tracker.post_called[0][1]["exception"], GeneratorExit)
+
+
+def test_stream_iterate_close_mid_stream_persists_failed_and_resumes_at_same_action():
+    @streaming_action(reads=[], writes=["x"])
+    def act(state: State):
+        yield {"item": "a"}, None
+        yield {"item": "done"}, state.update(x=1)
+
+    @action(reads=["x"], writes=["y"])
+    def after(state: State) -> State:
+        return state.update(y=state["x"] + 1)
+
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_table")
+    persister.initialize()
+
+    def build(resume: bool) -> Application:
+        builder = (
+            ApplicationBuilder()
+            .with_actions(act=act, after=after)
+            .with_transitions(("act", "after"))
+        )
+        if resume:
+            builder = builder.initialize_from(
+                persister, resume_at_next_action=True, default_state={}, default_entrypoint="act"
+            )
+        else:
+            builder = builder.with_entrypoint("act").with_state(State())
+        return builder.with_identifiers(app_id="app").with_state_persister(persister).build()
+
+    with contextlib.closing(build(resume=False).stream_iterate(halt_after=["after"])) as steps:
+        for _, container in steps:
+            for _ in container:
+                break
+            break
+    assert persister.load("", "app")["status"] == "failed"
+    assert build(resume=True).get_next_action().name == "act"
+
+
+def test_stream_iterate_close_unwinds_multi_step_streaming_action():
+    events = []
+
+    class MultiStepAct(StreamingAction):
+        @property
+        def reads(self) -> list[str]:
+            return []
+
+        @property
+        def writes(self) -> list[str]:
+            return ["x"]
+
+        def stream_run(self, state: State, **run_kwargs):
+            try:
+                for i in range(3):
+                    yield {"i": i}
+            finally:
+                events.append("stream_run_closed")
+
+        def update(self, result: dict, state: State) -> State:
+            return state.update(x=result["i"])
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(act=MultiStepAct())
+        .with_transitions()
+        .with_entrypoint("act")
+        .with_state(State())
+        .build()
+    )
+    steps = app.stream_iterate(halt_after=["act"])
+    for _, container in steps:
+        for _ in container:
+            break
+        break
+    steps.close()
+    assert events == ["stream_run_closed"]
+    assert "x" not in app.state
+
+
+def test_streaming_result_container_close_is_idempotent_and_get_returns_initial_state():
+    events = []
+    app = _sync_closing_probe_app(events)
+    _, container = app.stream_result(halt_after=["act"])
+    for _ in container:
+        break
+    container.close()
+    container.close()
+    result, state = container.get()
+    assert events == ["producer_closed"]
+    assert result is None
+    assert "x" not in state
+
+
+def test_streaming_result_container_close_after_completion_reports_success():
+    call_tracker = CallCaptureTracker()
+    app = _sync_closing_probe_app([], call_tracker)
+    _, container = app.stream_result(halt_after=["act"])
+    result, state = container.get()
+    container.close()
+    assert result == {"item": "done"}
+    assert state["x"] == 1
+    assert len(call_tracker.post_called) == 1
+    assert call_tracker.post_called[0][1]["exception"] is None
+
+
+def test_streaming_result_container_abandoned_without_close_reports_without_cyclic_gc():
+    """Breaking out and dropping the container (no close) must unwind the action and report the
+    step via refcounting alone -- the container must not form a cycle with its iterator."""
+    events = []
+    exception_capture = _ExceptionTypeCapture()
+    app = _sync_closing_probe_app(events, exception_capture)
+    gc.disable()
+    try:
+        _, container = app.stream_result(halt_after=["act"])
+        for _ in container:
+            break
+        del container
+        assert events == ["producer_closed"]
+        assert exception_capture.exception_types == [GeneratorExit]
+    finally:
+        gc.enable()
+
+
+def test_streaming_result_container_close_propagates_cleanup_errors():
+    class CleanupError(Exception):
+        pass
+
+    def failing_cleanup():
+        try:
+            yield {"item": "a"}, None
+        finally:
+            raise CleanupError("cleanup failed")
+
+    seen = []
+    container = StreamingResultContainer(
+        failing_cleanup(), State(), lambda r, s: (r, s), lambda r, s, exc: seen.append(exc)
+    )
+    # Hold the iterator: breaking out of a ``for`` would drop it and report the close immediately.
+    items = iter(container)
+    next(items)
+    with pytest.raises(CleanupError):
+        container.close()
     assert len(seen) == 1
     assert isinstance(seen[0], CleanupError)
 

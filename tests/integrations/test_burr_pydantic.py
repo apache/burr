@@ -864,3 +864,42 @@ async def test_pydantic_streaming_async_aclose_unwinds_action():
         break
     await steps.aclose()
     assert events == ["action_closed"]
+
+
+def test_pydantic_streaming_sync_close_unwinds_action():
+    events = []
+
+    @streaming_action.pydantic(
+        reads=["count"],
+        writes=["final_result"],
+        state_output_type=CounterExampleAppState,
+        state_input_type=CounterExampleAppState,
+        stream_type=IntermediateModel,
+    )
+    def final_result_streamed(
+        state: CounterExampleAppState,
+    ) -> Generator[Tuple[IntermediateModel, Optional[CounterExampleAppState]], None, None]:
+        try:
+            for i in range(3):
+                yield IntermediateModel(result=i), None
+            state.final_result = state.count
+            yield IntermediateModel(result=state.count), state
+        finally:
+            events.append("action_closed")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(final_result=final_result_streamed)
+        .with_entrypoint("final_result")
+        .with_typing(PydanticTypingSystem(CounterExampleAppState))
+        .with_state(CounterExampleAppState())
+        .with_transitions()
+        .build()
+    )
+    steps = app.stream_iterate(halt_after=["final_result"])
+    for _, container in steps:
+        for _ in container:
+            break
+        break
+    steps.close()
+    assert events == ["action_closed"]

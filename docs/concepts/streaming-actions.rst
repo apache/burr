@@ -227,10 +227,30 @@ Thus you can run this in a web-service, a streamlit app, etc...
 Stopping a stream early
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-If you stop consuming an async stream before it finishes (e.g. the client disconnected), close it so the
-action's cleanup (``finally`` blocks, ``async with`` exits such as an open HTTP stream) runs right away,
-rather than at garbage collection. Either close the container directly, or close ``astream_iterate``
-(``contextlib.aclosing`` does this for you):
+If you stop consuming a stream before it finishes (e.g. the client disconnected), close it so the
+action's cleanup (``finally`` blocks, ``with``/``async with`` exits such as an open HTTP stream) runs right away,
+rather than at garbage collection. Either close the container directly (``close()`` / ``await aclose()``), or
+close ``stream_iterate`` / ``astream_iterate`` (``contextlib.closing`` / ``contextlib.aclosing`` does this for you):
+
+.. code-block:: python
+
+    action, streaming_result = application.stream_result(
+        halt_after='streaming_response', inputs={"prompt": prompt}
+    )
+    for result in streaming_result:
+        if should_stop(result):
+            break
+    streaming_result.close()
+
+.. code-block:: python
+
+    import contextlib
+
+    with contextlib.closing(application.stream_iterate(halt_after=["respond"])) as steps:
+        for action, streaming_result in steps:
+            for item in streaming_result:
+                ...
+                break  # leaving the ``with`` closes the in-flight action
 
 .. code-block:: python
 
@@ -252,9 +272,9 @@ rather than at garbage collection. Either close the container directly, or close
                 ...
                 break  # leaving the ``async with`` closes the in-flight action
 
-A step that is closed (or whose task is cancelled) before it completes does not update state, and is reported
-to ``post_run_step`` hooks with a ``GeneratorExit`` exception -- persisters record it as ``failed``, so
-resuming re-runs that action. Exceptions raised by the action's cleanup propagate out of ``aclose()``.
+A step that is closed (or, for async, whose task is cancelled) before it completes does not update state, and is
+reported to ``post_run_step`` hooks with a ``GeneratorExit`` exception -- persisters record it as ``failed``, so
+resuming re-runs that action. Exceptions raised by the action's cleanup propagate out of ``close()`` / ``aclose()``.
 
 --------------
 Considerations

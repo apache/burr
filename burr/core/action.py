@@ -1475,7 +1475,7 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         streaming_result_generator: GeneratorReturnType,
         initial_state: State[StateType],
         process_result: Callable[[dict, State], tuple[dict, State]],
-        callback: Callable[[Optional[dict], State, Optional[Exception]], None],
+        callback: Callable[[Optional[dict], State, Optional[BaseException]], None],
     ):
         """Initializes a streaming result container. User will never call directly.
 
@@ -1493,6 +1493,40 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         self._initial_state = initial_state
         self._result = None
         self._callback_realized = False
+        # Weak, so the container <-> iterator cycle doesn't defer the iterator's finalizer (and so
+        # the post-step callback) to cyclic GC when a caller abandons the stream without closing it.
+        self._iterator_ref: Optional[weakref.ref] = None
+
+    def _realize_callback(self, exc: Optional[BaseException]) -> None:
+        if self._result is None:
+            self._result = None, self._initial_state
+        if not self._callback_realized:
+            self._callback_realized = True
+            self._callback(*self._result, exc)
+
+    def close(self) -> None:
+        """Stops the stream early without draining it.
+
+        Closes the action's generator chain so its cleanup (``finally`` blocks, ``with``
+        exits) runs now rather than at garbage collection, then runs the post-step callback
+        exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
+        no-op once the stream has completed. Exceptions raised by the action's cleanup propagate.
+
+        A stream closed before it completes is reported to the callback (and so to
+        ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
+        """
+        # Closing before completion means the step did not finish: report it as failed.
+        exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
+        try:
+            self.streaming_result_generator.close()
+        except BaseException as e:
+            exc = e
+            raise
+        finally:
+            self._realize_callback(exc)
+            iterator = self._iterator_ref() if self._iterator_ref is not None else None
+            if iterator is not None:
+                iterator.close()
 
     def __next__(self) -> StreamResultType:
         if self._result is not None:
@@ -1513,16 +1547,13 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
             except StopIteration:
                 return
             finally:
-                if self._result is None:
-                    self._result = None, self._initial_state
-                if not self._callback_realized:
-                    exc = sys.exc_info()[1]
-                    self._callback_realized = True
-                    self._callback(*self._result, exc)
+                self._realize_callback(sys.exc_info()[1])
 
         # We really don't need an internal generator function but this was done to keep it the same
         # as the async version
-        return gen_fn()
+        iterator = gen_fn()
+        self._iterator_ref = weakref.ref(iterator)
+        return iterator
 
     def get(self) -> Tuple[StreamResultType, State[StateType]]:
         # exhaust the generator

@@ -347,12 +347,13 @@ def pydantic_streaming_action(
             state: State, **kwargs
         ) -> Generator[tuple[PartialType, Optional[State]], None, None]:
             model_to_use = model_from_state(model=SubsetInputType, state=state)
-            for partial, state_update in fn(state=model_to_use, **kwargs):
-                if state_update is None:
-                    yield partial, None
-                else:
-                    output = SubsetOutputType(**model_to_dict(state_update, include=writes))
-                    yield partial, merge_to_state(model=output, write_keys=writes, state=state)
+            with contextlib.closing(fn(state=model_to_use, **kwargs)) as gen:
+                for partial, state_update in gen:
+                    if state_update is None:
+                        yield partial, None
+                    else:
+                        output = SubsetOutputType(**model_to_dict(state_update, include=writes))
+                        yield partial, merge_to_state(model=output, write_keys=writes, state=state)
 
         async def async_action_generator(
             state: State, **kwargs
