@@ -4183,6 +4183,17 @@ class ActionWithKwargs(ActionWithoutContext):
         return ["other_param", "foo", "__context"]
 
 
+class ActionWithSuffixedContextInput(ActionWithoutContext):
+    """``user__context`` is a genuine input whose name merely ends with the dunder. Only
+    ``_ActionWithSuffixedContextInput__context`` is the mangled form of the injected one."""
+
+    def run(self, user__context, foo, __context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["user__context", "foo", "__context"]
+
+
 class ActionWithContextTracer(ActionWithoutContext):
     def run(self, __context, other_param, foo, __tracer):
         pass
@@ -4203,6 +4214,22 @@ def test_remap_context_variable_with_mangled_context_kwargs():
         "__context": "context_value",
         "other_key": "other_value",
         "foo": "foo_value",
+    }
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+def test_remap_context_variable_does_not_clobber_input_ending_with_dunder():
+    _action = ActionWithSuffixedContextInput()
+
+    inputs = {
+        "__context": "context_value",
+        "user__context": "user_value",
+        "foo": "foo_value",
+    }
+    expected = {
+        "user__context": "user_value",
+        "foo": "foo_value",
+        "_ActionWithSuffixedContextInput__context": "context_value",
     }
     assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
