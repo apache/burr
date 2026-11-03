@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class PostgreSQLPersister(persistence.BaseStatePersister):
-    """Class for PostgreSQL persistence of state. This is a simple implementation.
+    r"""Class for PostgreSQL persistence of state. This is a simple implementation.
 
     To try it out locally with docker -- here's a command -- change the values as appropriate.
 
