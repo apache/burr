@@ -73,10 +73,19 @@ def _route_paths(app) -> set:
     return set(app.openapi()["paths"])
 
 
-def test_workspace_routes_are_off_by_default(monkeypatch):
+def _import_run(monkeypatch):
+    # run.py builds a module-level app on import; skip the static UI mount so the
+    # tests don't need a built frontend in burr/tracking/server/build.
     pytest.importorskip("aiofiles")
-    monkeypatch.delenv(workspace.ENABLE_WORKSPACE_ENV, raising=False)
+    monkeypatch.setenv("BURR_SERVE_STATIC", "false")
     from burr.tracking.server import run
+
+    return run
+
+
+def test_workspace_routes_are_off_by_default(monkeypatch):
+    monkeypatch.delenv(workspace.ENABLE_WORKSPACE_ENV, raising=False)
+    run = _import_run(monkeypatch)
 
     app = run.create_burr_ui_app(serve_static=False)
     assert not any(p.startswith("/api/v0/workspace") for p in _route_paths(app))
@@ -85,8 +94,7 @@ def test_workspace_routes_are_off_by_default(monkeypatch):
 
 
 def test_workspace_routes_mount_when_enabled(monkeypatch):
-    pytest.importorskip("aiofiles")
-    from burr.tracking.server import run
+    run = _import_run(monkeypatch)
 
     app = run.create_burr_ui_app(serve_static=False, enable_workspace=True)
     assert "/api/v0/workspace/run" in _route_paths(app)
