@@ -142,10 +142,15 @@ def _remap_dunder_parameters(
     # Get the signature of the method being run. This should be Function.run() or similar.
     signature = inspect.signature(run_method)
     mangled_params: Dict[str, Optional[str]] = {v: None for v in vars_to_remap}
-    # Find the name-mangled __context variable
+    # Find the name-mangled __context variable.
     for dunder_param in mangled_params.keys():
         for param in signature.parameters.values():
-            if param.name.endswith(dunder_param):
+            if not param.name.endswith(dunder_param):
+                continue
+            # A mangled name is ``_ClassName__context``, so what precedes the dunder starts with an
+            # underscore. Without this a user input that merely ends with the dunder (e.g.
+            # ``user__context``) would be treated as the mangled name and its value overwritten.
+            if param.name[: -len(dunder_param)].startswith("_"):
                 mangled_params[dunder_param] = param.name
                 break
 
