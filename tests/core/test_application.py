@@ -4355,6 +4355,137 @@ async def test_astream_result_class_based_async_streaming_action_receives_contex
     assert state["app_id"] == "context-app-id"
 
 
+class SyncActionWithContext(Action):
+    """Class-based sync action whose run() takes the injected ``__context``."""
+
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def run(self, state: State, __context: ApplicationContext) -> dict:
+        return {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class SingleStepActionWithContext(SingleStepAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id)
+
+
+class AsyncSingleStepActionWithContext(SingleStepAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id)
+
+
+class SingleStepStreamingActionWithContext(SingleStepStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def stream_run_and_update(
+        self, state: State, __context: ApplicationContext
+    ) -> Generator[Tuple[dict, Optional[State]], None, None]:
+        yield {"app_id": __context.app_id}, state.update(app_id=__context.app_id)
+
+
+class AsyncSingleStepStreamingActionWithContext(SingleStepStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def stream_run_and_update(
+        self, state: State, __context: ApplicationContext
+    ) -> AsyncGenerator[Tuple[dict, Optional[State]], None]:
+        yield {"app_id": __context.app_id}, state.update(app_id=__context.app_id)
+
+
+def test_step_class_based_multi_step_action_receives_context():
+    app = _build_context_app(SyncActionWithContext())
+    _, result, state = app.step()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_step_class_based_single_step_action_receives_context():
+    app = _build_context_app(SingleStepActionWithContext())
+    _, result, state = app.step()
+    assert result == {}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astep_class_based_single_step_action_receives_context():
+    app = _build_context_app(AsyncSingleStepActionWithContext())
+    _, result, state = await app.astep()
+    assert result == {}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_stream_result_class_based_single_step_streaming_action_receives_context():
+    app = _build_context_app(SingleStepStreamingActionWithContext())
+    _, container = app.stream_result(halt_after=["ctx_action"])
+    result, state = container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astream_result_class_based_single_step_async_streaming_action_receives_context():
+    app = _build_context_app(AsyncSingleStepStreamingActionWithContext())
+    _, container = await app.astream_result(halt_after=["ctx_action"])
+    result, state = await container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
 async def test_async_application_builder_initialize_raises_on_broken_persistor():
     """Persisters should return None when there is no state to be loaded and the default used."""
     await asyncio.sleep(0.00001)
