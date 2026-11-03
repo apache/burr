@@ -4457,18 +4457,23 @@ def test_initialize_from_applies_override_state_values():
     assert app.state["x"] == 100
 
 
+@pytest.mark.parametrize("last_step_failed", [False, True])
 @pytest.mark.parametrize(
     "resume_at_next_action,expected_next_action",
     [(True, "result"), (False, "counter")],
 )
-def test_initialize_from_resume_at_next_action(resume_at_next_action, expected_next_action):
-    """resume_at_next_action=False should start at the default entrypoint, keeping the loaded state"""
+def test_initialize_from_resume_at_next_action(
+    resume_at_next_action, expected_next_action, last_step_failed
+):
+    """resume_at_next_action=False should start at the default entrypoint, keeping the loaded state,
+    whether the last saved step completed or failed"""
     persister = InMemoryPersister()
+    result = base_broken_action if last_step_failed else Result("count")
 
     def build(**initialize_kwargs):
         return (
             ApplicationBuilder()
-            .with_actions(counter=base_counter_action, result=Result("count"))
+            .with_actions(counter=base_counter_action, result=result)
             .with_transitions(("counter", "result", default))
             .initialize_from(
                 persister, default_state={}, default_entrypoint="counter", **initialize_kwargs
@@ -4479,25 +4484,32 @@ def test_initialize_from_resume_at_next_action(resume_at_next_action, expected_n
         )
 
     build(resume_at_next_action=True).step()
+    if last_step_failed:
+        with pytest.raises(BrokenStepException):
+            build(resume_at_next_action=True).step()
     app = build(resume_at_next_action=resume_at_next_action)
     assert app.get_next_action().name == expected_next_action
     assert app.state["count"] == 1
+    if not resume_at_next_action:
+        assert PRIOR_STEP not in app.state.get_all()
 
 
+@pytest.mark.parametrize("last_step_failed", [False, True])
 @pytest.mark.parametrize(
     "resume_at_next_action,expected_next_action",
     [(True, "result"), (False, "counter")],
 )
 async def test_initialize_from_resume_at_next_action_async(
-    resume_at_next_action, expected_next_action
+    resume_at_next_action, expected_next_action, last_step_failed
 ):
     """Same as above, for the async builder"""
     persister = AsyncInMemoryPersister()
+    result = base_broken_action_async if last_step_failed else Result("count")
 
     async def abuild(**initialize_kwargs):
         return await (
             ApplicationBuilder()
-            .with_actions(counter=base_counter_action_async, result=Result("count"))
+            .with_actions(counter=base_counter_action_async, result=result)
             .with_transitions(("counter", "result", default))
             .initialize_from(
                 persister, default_state={}, default_entrypoint="counter", **initialize_kwargs
@@ -4508,6 +4520,11 @@ async def test_initialize_from_resume_at_next_action_async(
         )
 
     await (await abuild(resume_at_next_action=True)).astep()
+    if last_step_failed:
+        with pytest.raises(BrokenStepException):
+            await (await abuild(resume_at_next_action=True)).astep()
     app = await abuild(resume_at_next_action=resume_at_next_action)
     assert app.get_next_action().name == expected_next_action
     assert app.state["count"] == 1
+    if not resume_at_next_action:
+        assert PRIOR_STEP not in app.state.get_all()
