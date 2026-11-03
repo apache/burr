@@ -245,6 +245,36 @@ def test_persister_tracks_parent(tmpdir):
     assert metadata_parsed.parent_pointer.partition_key == "user123"
 
 
+def test_persister_resume_without_fork_has_no_parent(tmpdir):
+    """Resuming an app from a persister (no fork) into a tracking directory that has not
+    seen it yet must build, and must not record a fork parent."""
+    app_id = "123"
+    log_dir = os.path.join(tmpdir, "tracking")
+    project_name = "test_persister_resume_without_fork_has_no_parent"
+    app: Application = (
+        ApplicationBuilder()
+        .with_actions(counter, Result("count").with_name("result"))
+        .with_transitions(("counter", "result", default))
+        .initialize_from(
+            DummyPersister(),
+            resume_at_next_action=True,
+            default_state={},
+            default_entrypoint="counter",
+        )
+        .with_identifiers(app_id=app_id, partition_key="user123")
+        .with_tracker(project=project_name, tracker="local", params={"storage_dir": log_dir})
+        .build()
+    )
+    assert app.state["count"] == 5
+    assert app.parent_pointer is None
+    metadata_path = os.path.join(
+        log_dir, project_name, app_id, LocalTrackingClient.METADATA_FILENAME
+    )
+    with open(metadata_path) as f:
+        metadata_parsed = ApplicationMetadataModel.model_validate(json.load(f))
+    assert metadata_parsed.parent_pointer is None
+
+
 def test_fork_children_have_correct_partition_key(tmpdir):
     """Tests that children.jsonl in the parent app directory has the correct
     partition_key for the forked child app. Regression test for #518."""

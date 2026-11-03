@@ -2678,7 +2678,9 @@ class ApplicationBuilder(Generic[StateType]):
             self.state = self.state.update(**self.default_state)
             self.sequence_id = None  # has to start at None
         else:
-            self.loaded_from_fork = True
+            # Only a fork has a parent application. Resuming the same app_id is not a fork, and
+            # a parent pointer without an app_id breaks the trackers that record it.
+            self.loaded_from_fork = self.fork_from_app_id is not None
             if load_result["state"] is None:
                 raise ValueError(
                     BASE_ERROR_MESSAGE
