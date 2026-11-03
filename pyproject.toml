@@ -330,6 +330,7 @@ exclude = [
   "examples/recursive/**",
   "examples/simple-chatbot-intro/**",
   "examples/simulation/**",
+  "examples/streaming-early-stop/**",
   "examples/streaming-overview/**",
   "examples/talks/**",
   "examples/templates/**",

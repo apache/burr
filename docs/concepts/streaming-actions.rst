@@ -272,9 +272,13 @@ close ``stream_iterate`` / ``astream_iterate`` (``contextlib.closing`` / ``conte
                 ...
                 break  # leaving the ``async with`` closes the in-flight action
 
-A step that is closed (or, for async, whose task is cancelled) before it completes does not update state, and is
-reported to ``post_run_step`` hooks with a ``GeneratorExit`` exception -- persisters record it as ``failed``, so
-resuming re-runs that action. Exceptions raised by the action's cleanup propagate out of ``close()`` / ``aclose()``.
+A step that is stopped before it completes does not update state, and is reported to ``post_run_step`` hooks
+with the exception that stopped it -- ``GeneratorExit`` when it is closed, ``CancelledError`` when the consuming
+task is cancelled (e.g. a web client disconnected). Persisters record it as ``failed``, so resuming re-runs that
+action. Exceptions raised by the action's cleanup propagate out of ``close()`` / ``aclose()``.
+
+See the `streaming-early-stop example <https://github.com/apache/burr/tree/main/examples/streaming-early-stop>`_
+for runnable versions of these patterns, including a FastAPI endpoint that handles client disconnects.
 
 --------------
 Considerations
