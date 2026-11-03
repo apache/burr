@@ -25,6 +25,7 @@ import sys
 import textwrap
 import types
 import typing
+import weakref
 
 UnionType = types.UnionType
 
@@ -1584,7 +1585,9 @@ class AsyncStreamingResultContainer(
         self._callback = callback
         self._result = None
         self._callback_realized = False
-        self._iterator: Optional[AsyncGenerator[StreamResultType, None]] = None
+        # Weak, so the container <-> iterator cycle doesn't defer the iterator's finalizer (and so
+        # the post-step callback) to cyclic GC when a caller abandons the stream without closing it.
+        self._iterator_ref: Optional[weakref.ref] = None
 
     async def _realize_callback(self, exc: Optional[BaseException]) -> None:
         if self._result is None:
@@ -1613,8 +1616,9 @@ class AsyncStreamingResultContainer(
             raise
         finally:
             await self._realize_callback(exc)
-            if self._iterator is not None:
-                await self._iterator.aclose()
+            iterator = self._iterator_ref() if self._iterator_ref is not None else None
+            if iterator is not None:
+                await iterator.aclose()
 
     async def __anext__(self) -> StreamResultType:
         """Moves to the next state in the streaming result"""
@@ -1642,8 +1646,9 @@ class AsyncStreamingResultContainer(
                 await self._realize_callback(sys.exc_info()[1])
 
         # return it as `__aiter__` cannot be async/have awaits :/
-        self._iterator = gen_fn()
-        return self._iterator
+        iterator = gen_fn()
+        self._iterator_ref = weakref.ref(iterator)
+        return iterator
 
     async def get(self) -> tuple[Optional[StreamResultType], State[StateType]]:
         # exhaust the generator

@@ -19,6 +19,7 @@ import asyncio
 import collections
 import contextlib
 import datetime
+import gc
 import logging
 import typing
 import uuid
@@ -2953,6 +2954,26 @@ async def test_streaming_result_container_aclose_after_completion_reports_succes
     assert state["x"] == 1
     assert len(call_tracker.post_called) == 1
     assert call_tracker.post_called[0][1]["exception"] is None
+
+
+async def test_streaming_result_container_abandoned_without_aclose_reports_without_cyclic_gc():
+    """Breaking out and dropping the container (no aclose) must still report the step via
+    refcounting alone -- the container must not form a reference cycle with its iterator,
+    which would defer the post-step hooks until cyclic GC runs."""
+    call_tracker = CallCaptureTracker()
+    app = _closing_probe_app([], call_tracker)
+    gc.disable()
+    try:
+        _, container = await app.astream_result(halt_after=["act"])
+        async for _ in container:
+            break
+        del container
+        for _ in range(5):  # let the event loop run the scheduled asyncgen finalizer
+            await asyncio.sleep(0)
+        assert len(call_tracker.post_called) == 1
+        assert isinstance(call_tracker.post_called[0][1]["exception"], GeneratorExit)
+    finally:
+        gc.enable()
 
 
 async def test_streaming_result_container_aclose_propagates_cleanup_errors():
