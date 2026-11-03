@@ -76,9 +76,27 @@ async def test_async_break_without_aclose_defers_cleanup(demo, capsys):
     )
 
 
+async def test_cancel_task(demo, capsys):
+    await demo.cancel_task_demo()
+    assert _timeline(capsys)[-3:] == [
+        "caller: task.cancel()",
+        CLOSED,
+        "post_run_step: respond failed with CancelledError()",
+    ]
+
+
 async def test_client_disconnect(demo, capsys):
+    """A cancel scope (Starlette's disconnect) also cancels the await on async hooks/persisters:
+    the action is cleaned up, the step isn't recorded, and resuming still re-runs it."""
     await demo.client_disconnect_demo()
-    assert _timeline(capsys)[-2:] == [CLOSED, "post_run_step: respond failed with CancelledError()"]
+    events = _timeline(capsys)
+    assert not any(event.startswith("post_run_step") for event in events)
+    assert events[-4:] == [
+        "server: client disconnected -> cancel the response",
+        CLOSED,
+        "persister: saved for this run: None",
+        "resume: next action is 'respond' (it runs again)",
+    ]
 
 
 def test_resume_after_stop(demo, capsys):

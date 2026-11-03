@@ -26,7 +26,8 @@ the client disconnects), Burr:
 
 1. **runs the action's cleanup right away**, not whenever the garbage collector gets to it;
 2. **then reports the step as failed** to hooks, trackers and persisters, so resuming the application
-   re-runs it;
+   re-runs it (on a web-server [client disconnect](#web-servers-client-disconnects), async hooks and
+   persisters don't get to run, but resuming still re-runs the step);
 3. **doesn't update the state**, so a half-finished response is never committed.
 
 All you have to do is stop iterating the way you would with any Python generator:
@@ -36,6 +37,8 @@ All you have to do is stop iterating the way you would with any Python generator
 | sync | `break` |
 | async | `break` inside `async with contextlib.aclosing(...)` |
 | web server | the async pattern; the server cancels your task when the client disconnects |
+
+Don't mix sync and async: async applications should use async hooks and persisters, as the async demos do.
 
 Every demo in [application.py](application.py) prints a timeline of what happened, so you can see
 when the resource is released and what Burr reports. Run it with:
@@ -101,9 +104,26 @@ post_run_step: respond failed with GeneratorExit()
 
 `await container.aclose()` after the loop does the same as `aclosing`, if you prefer it.
 
+## Cancelling the consuming task
+
+**To stop a stream from somewhere else** (another task, a "stop" endpoint), cancel the task that is
+consuming it (`cancel_task_demo`). The action is cleaned up and hooks receive `CancelledError`:
+
+```
+respond: open LLM connection
+caller: got 'Burr '
+caller: got 'streams '
+caller: task.cancel()
+respond: close LLM connection
+post_run_step: respond failed with CancelledError()
+```
+
+Calling `close()` / `aclose()` while the stream is producing an item (from another task, or from inside
+a hook) raises a `RuntimeError` that tells you to cancel the task instead.
+
 ## Web servers: client disconnects
 
-When a client disconnects, ASGI servers such as Starlette/FastAPI *cancel* the task that is
+When a client disconnects, ASGI servers such as Starlette/FastAPI *cancel* the code that is
 producing the response. If your response generator uses the async pattern, that cancellation unwinds
 the Burr action immediately. See [server.py](server.py):
 
@@ -124,12 +144,29 @@ curl -N --max-time 1 localhost:8000/chat     # hang up after a second
 # server log:
 #   respond: open LLM connection
 #   respond: close LLM connection
-#   post_run_step: respond exception=CancelledError(...)
 ```
 
-**To stop a stream from somewhere else** (another task, a "stop" endpoint), cancel the task that is
-consuming it. Calling `close()` / `aclose()` while the stream is producing an item (from another task,
-or from inside a hook) raises a `RuntimeError` that tells you to do this.
+There is no `post_run_step` line. Starlette cancels through an anyio *cancel scope*. Unlike
+`task.cancel()`, a cancel scope keeps cancelling every `await` inside it, including Burr's await on async
+`post_run_step` hooks and async persisters. So for a disconnected step:
+
+- the action's cleanup **does** run (but as with any code under a cancelled scope, an `await` inside its
+  `finally` is cancelled too; wrap such cleanup in `anyio.CancelScope(shield=True)` if it must complete);
+- async hooks, trackers and persisters **don't** run, so the stopped step isn't recorded;
+- **resuming is unaffected**: the last saved step is the one before, so the interrupted action runs again,
+  as it would if it had been saved as `failed`.
+
+`client_disconnect_demo` reproduces this without a server:
+
+```
+respond: open LLM connection
+server: sent 'Burr '
+server: sent 'streams '
+server: client disconnected -> cancel the response
+respond: close LLM connection
+persister: saved for this run: None
+resume: next action is 'respond' (it runs again)
+```
 
 ## What gets reported
 
@@ -137,7 +174,8 @@ or from inside a hook) raises a `RuntimeError` that tells you to do this.
 |---|---|---|---|---|
 | read to the end | `None` | `completed` | yes | next action |
 | `break` / `close()` / `aclose()` before the end | `GeneratorExit()` | `failed` | no | **same action runs again** |
-| task cancelled (e.g. client disconnect) | `CancelledError()` | `failed` | no | **same action runs again** |
+| consuming task cancelled (`task.cancel()`) | `CancelledError()` | `failed` | no | **same action runs again** |
+| client disconnect (Starlette/FastAPI cancel scope) | async hooks not called | nothing saved | no | **same action runs again** |
 | the action raised | that exception | `failed` | no | same action runs again |
 | stopped early, and the action's cleanup raised | the cleanup error | `failed` | no | same action runs again |
 
@@ -162,10 +200,9 @@ Note that `GeneratorExit` and `CancelledError` derive from `BaseException`, not 
   and Burr logs a warning. A `break` itself doesn't raise it. If you want the error in your own code, call
   `close()` / `aclose()` afterwards and they raise it (`cleanup_error_demo`). A cleanup error never
   replaces an error that was already stopping the stream (such as a bug in a hook); it is logged instead.
-- **Use sync hooks/persisters to record client disconnects.** On a disconnect, Starlette/FastAPI cancels
-  the whole response task. Sync `post_run_step` hooks (and sync persisters) still run and see the
-  `CancelledError`. *Async* `post_run_step` hooks (and async persisters) are cancelled before they start,
-  so they never record the stopped step.
+- **Client disconnects aren't recorded by async hooks or persisters** (see [above](#web-servers-client-disconnects)).
+  Don't work around it by adding sync hooks to an async app: they block the event loop. Resume is
+  correct either way.
 
 See also the [streaming actions docs](https://burr.apache.org/concepts/streaming-actions/) and the
 [streaming-fastapi](../streaming-fastapi) example for a full chatbot.

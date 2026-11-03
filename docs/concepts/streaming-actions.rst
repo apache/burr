@@ -272,7 +272,13 @@ or from another task) raises a ``RuntimeError``.
 
 A step that is stopped before it completes does not update state, and is reported to ``post_run_step`` hooks
 with the exception that stopped it -- ``GeneratorExit`` when it is closed, ``CancelledError`` when the consuming
-task is cancelled. Persisters record it as ``failed``, so resuming re-runs that action. If the action's cleanup
+task is cancelled. Persisters record it as ``failed``, so resuming re-runs that action.
+
+One exception: on a client disconnect, Starlette/FastAPI cancel the response through an anyio cancel scope, which
+also cancels Burr's await on *async* ``post_run_step`` hooks and persisters. The action is still cleaned up, but
+the stopped step isn't recorded. Resuming is unaffected: the last saved step is the one before, so the
+interrupted action runs again. Don't add sync hooks to an async application to work around this; they block the
+event loop. If the action's cleanup
 itself raises, hooks receive that error, and ``close()`` / ``aclose()`` raise it. A cleanup error never replaces
 an error that was already stopping the stream; it is logged instead.
 

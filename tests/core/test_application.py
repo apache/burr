@@ -25,6 +25,7 @@ import typing
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional, Tuple, Union
 
+import anyio
 import pytest
 
 from burr.core import State
@@ -3064,6 +3065,63 @@ async def test_astream_iterate_cancelled_consumer_unwinds_and_reports_cancelled_
         await task
     assert log.events == ["cleanup", ("reported", asyncio.CancelledError)]
     assert persister.load("", "early-stop")["status"] == "failed"
+
+
+async def test_astream_iterate_cancel_scope_cleans_up_and_resume_reruns_the_step():
+    """Starlette cancels a disconnected response through an anyio cancel scope, which also cancels
+    Burr's await on async hooks/persisters, so they don't record the step (a known limitation). The
+    action must still be cleaned up, and resuming must still land on the interrupted action."""
+
+    @action(reads=[], writes=["x"])
+    def before(state: State) -> State:
+        return state.update(x=0)
+
+    log = _EarlyStopLog()
+    persister = AsyncInMemoryPersister()
+
+    @streaming_action(reads=[], writes=["x"])
+    async def act(state: State):
+        try:
+            for item in ["a", "b", "c"]:
+                await asyncio.sleep(0.05)
+                yield {"item": item}, None
+            yield {"item": "done"}, state.update(x=1)
+        finally:
+            # Recorded before awaiting: under a cancelled scope, awaits in `finally` are cancelled too.
+            log.events.append("cleanup")
+
+    async def build(resume: bool) -> Application:
+        builder = (
+            ApplicationBuilder()
+            .with_actions(before=before, act=act)
+            .with_transitions(("before", "act"))
+            .with_hooks(*log.hooks(is_async=True))
+            .with_identifiers(app_id="early-stop")
+            .with_state_persister(persister)
+        )
+        if resume:
+            builder = builder.initialize_from(
+                persister, resume_at_next_action=True, default_state={}, default_entrypoint="before"
+            )
+        else:
+            builder = builder.with_entrypoint("before").with_state(State())
+        return await builder.abuild()
+
+    app = await build(resume=False)
+
+    async def respond_to_client(scope: anyio.CancelScope):
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["act"])) as steps:
+            async for step, container in steps:
+                async for _ in container:
+                    if step.name == "act":
+                        scope.cancel()
+
+    async with anyio.create_task_group() as response:
+        response.start_soon(respond_to_client, response.cancel_scope)
+
+    assert log.events == [("reported", None), "cleanup"]
+    assert (await persister.load(None, "early-stop"))["position"] == "before"
+    assert (await build(resume=True)).get_next_action().name == "act"
 
 
 @pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])

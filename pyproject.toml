@@ -89,6 +89,7 @@ release = [
 ]
 
 tests = [
+  "anyio",
   "pytest",
   "pytest-asyncio",
   "apache-burr[graphviz]",

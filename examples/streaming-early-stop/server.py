@@ -19,7 +19,11 @@
 
 Run with ``uvicorn server:app``, then ``curl -N --max-time 1 localhost:8000/chat`` (curl hangs up
 after a second, like a user closing the tab). The server log shows the LLM connection being closed
-right away and the step reported to hooks as failed with ``CancelledError``.
+right away.
+
+The ``post_run_step`` line does *not* appear: on a disconnect, Starlette cancels the response through an
+anyio cancel scope, which also cancels Burr's await on async hooks and persisters, so they don't run for
+the stopped step. Nothing is saved for it, so resuming re-runs it. See the README.
 """
 
 import asyncio
@@ -32,7 +36,7 @@ from starlette.responses import StreamingResponse
 
 from burr.core import ApplicationBuilder, State
 from burr.core.action import streaming_action
-from burr.lifecycle import PostRunStepHook
+from burr.lifecycle import PostRunStepHookAsync
 
 logger = logging.getLogger("uvicorn.error")
 app = FastAPI()
@@ -53,27 +57,26 @@ async def respond(state: State) -> AsyncGenerator[Tuple[dict, Optional[State]], 
         logger.info("respond: close LLM connection")
 
 
-class LogStep(PostRunStepHook):
-    # A *sync* hook: on a client disconnect, async post_run_step hooks are cancelled before they run.
-    def post_run_step(self, *, action, exception: Optional[BaseException], **future_kwargs):
+class LogStep(PostRunStepHookAsync):
+    async def post_run_step(self, *, action, exception: Optional[BaseException], **future_kwargs):
         logger.info("post_run_step: %s exception=%r", action.name, exception)
 
 
-def chat_application():
-    return (
+async def chat_application():
+    return await (
         ApplicationBuilder()
         .with_actions(respond=respond)
         .with_transitions()
         .with_entrypoint("respond")
         .with_state(State())
         .with_hooks(LogStep())
-        .build()
+        .abuild()
     )
 
 
 @app.get("/chat")
 async def chat() -> StreamingResponse:
-    burr_app = chat_application()
+    burr_app = await chat_application()
 
     async def sse():
         # `aclosing` makes leaving this block -- normally, on error, or because the server

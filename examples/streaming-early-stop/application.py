@@ -34,10 +34,12 @@ import contextlib
 import logging
 from typing import AsyncGenerator, Generator, List, Optional, Tuple
 
+import anyio
+
 from burr.core import Application, ApplicationBuilder, State
 from burr.core.action import streaming_action
-from burr.core.persistence import SQLLitePersister
-from burr.lifecycle import PostRunStepHook
+from burr.core.persistence import AsyncInMemoryPersister, SQLLitePersister
+from burr.lifecycle import PostRunStepHook, PostRunStepHookAsync
 
 TOKENS = ["Burr ", "streams ", "tokens ", "one ", "at ", "a ", "time."]
 
@@ -57,6 +59,11 @@ class Timeline:
             print(f"   {event}")
 
 
+def _report(log: Timeline, action, exception: Optional[BaseException]):
+    outcome = "completed" if exception is None else f"failed with {exception!r}"
+    log(f"post_run_step: {action.name} {outcome}")
+
+
 class ReportStep(PostRunStepHook):
     """Stands in for any hook/tracker/persister: shows how each step was reported."""
 
@@ -64,8 +71,17 @@ class ReportStep(PostRunStepHook):
         self.log = log
 
     def post_run_step(self, *, action, exception: Optional[BaseException], **future_kwargs):
-        outcome = "completed" if exception is None else f"failed with {exception!r}"
-        self.log(f"post_run_step: {action.name} {outcome}")
+        _report(self.log, action, exception)
+
+
+class ReportStepAsync(PostRunStepHookAsync):
+    """The same, for async applications: don't mix sync hooks into an async app."""
+
+    def __init__(self, log: Timeline):
+        self.log = log
+
+    async def post_run_step(self, *, action, exception: Optional[BaseException], **future_kwargs):
+        _report(self.log, action, exception)
 
 
 def _respond_sync(log: Timeline, cleanup_error: bool = False):
@@ -103,21 +119,33 @@ def _respond_async(log: Timeline, delay: float = 0.0):
     return respond
 
 
-def application(
-    respond, log: Timeline, persister: Optional[SQLLitePersister] = None
-) -> Application:
-    builder = (
+def _builder(respond, hook) -> ApplicationBuilder:
+    return (
         ApplicationBuilder()
         .with_actions(respond=respond)
         .with_transitions()
-        .with_entrypoint("respond")
-        .with_state(State())
-        .with_hooks(ReportStep(log))
+        .with_hooks(hook)
         .with_identifiers(app_id="early-stop-demo")
     )
+
+
+def application(
+    respond, log: Timeline, persister: Optional[SQLLitePersister] = None
+) -> Application:
+    builder = _builder(respond, ReportStep(log)).with_entrypoint("respond").with_state(State())
     if persister is not None:
         builder = builder.with_state_persister(persister)
     return builder.build()
+
+
+async def async_application(
+    respond, log: Timeline, persister: Optional[AsyncInMemoryPersister] = None
+) -> Application:
+    """Async app: async hooks, async persister, built with ``abuild()``."""
+    builder = _builder(respond, ReportStepAsync(log)).with_entrypoint("respond").with_state(State())
+    if persister is not None:
+        builder = builder.with_state_persister(persister)
+    return await builder.abuild()
 
 
 def wants_to_stop(token: str) -> bool:
@@ -164,7 +192,7 @@ def sync_iterate_break_demo():
 
 async def async_aclosing_demo():
     log = Timeline()
-    app = application(_respond_async(log), log)
+    app = await async_application(_respond_async(log), log)
     _, container = await app.astream_result(halt_after=["respond"])
     async with contextlib.aclosing(container):
         async for item in container:
@@ -177,7 +205,7 @@ async def async_aclosing_demo():
 
 async def async_iterate_aclosing_demo():
     log = Timeline()
-    app = application(_respond_async(log), log)
+    app = await async_application(_respond_async(log), log)
     async with contextlib.aclosing(app.astream_iterate(halt_after=["respond"])) as steps:
         async for _, container in steps:
             async for item in container:
@@ -191,7 +219,7 @@ async def async_iterate_aclosing_demo():
 
 async def async_break_without_aclose_demo():
     log = Timeline()
-    app = application(_respond_async(log), log)
+    app = await async_application(_respond_async(log), log)
     _, container = await app.astream_result(halt_after=["respond"])
     async for item in container:
         if wants_to_stop(item["token"]):
@@ -203,13 +231,40 @@ async def async_break_without_aclose_demo():
 
 
 # --------------------------------------------------------------------------------------------
-# Web servers: the client disconnects -> the server cancels the task consuming the stream.
+# Cancelling the consuming task: from your own code, and from a web server on client disconnect.
 # --------------------------------------------------------------------------------------------
 
 
-async def client_disconnect_demo():
+async def cancel_task_demo():
+    """E.g. a "stop" endpoint cancelling the task that streams to the user."""
     log = Timeline()
-    app = application(_respond_async(log, delay=0.05), log)
+    app = await async_application(_respond_async(log, delay=0.05), log)
+
+    async def stream_to_user():
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["respond"])) as steps:
+            async for _, container in steps:
+                async for item in container:
+                    log(f"caller: got {item['token']!r}")
+
+    task = asyncio.create_task(stream_to_user())
+    await asyncio.sleep(0.12)
+    log("caller: task.cancel()")
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    log.print("Cancelling the consuming task: hooks see CancelledError")
+
+
+async def client_disconnect_demo():
+    """What Starlette/FastAPI do on a client disconnect: cancel an anyio cancel scope.
+
+    Unlike ``task.cancel()``, a cancel scope keeps cancelling every ``await`` inside it, so Burr's
+    await on the async ``post_run_step`` hooks is cancelled too. The action is still cleaned up, and
+    since nothing is saved for the stopped step, resuming re-runs it.
+    """
+    log = Timeline()
+    persister = AsyncInMemoryPersister()
+    app = await async_application(_respond_async(log, delay=0.05), log, persister=persister)
 
     async def stream_to_client():
         async with contextlib.aclosing(app.astream_iterate(halt_after=["respond"])) as steps:
@@ -217,13 +272,23 @@ async def client_disconnect_demo():
                 async for item in container:
                     log(f"server: sent {item['token']!r}")
 
-    task = asyncio.create_task(stream_to_client())
-    await asyncio.sleep(0.12)
-    log("server: client disconnected -> task.cancel()")
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
-    log.print("Web server: client disconnect cancels the consuming task")
+    async with anyio.create_task_group() as response:
+        response.start_soon(stream_to_client)
+        await asyncio.sleep(0.12)
+        log("server: client disconnected -> cancel the response")
+        response.cancel_scope.cancel()
+
+    log(f"persister: saved for this run: {await persister.load(None, 'early-stop-demo')!r}")
+    resumed = await (
+        _builder(_respond_async(log), ReportStepAsync(log))
+        .initialize_from(
+            persister, resume_at_next_action=True, default_state={}, default_entrypoint="respond"
+        )
+        .with_state_persister(persister)
+        .abuild()
+    )
+    log(f"resume: next action is {resumed.get_next_action().name!r} (it runs again)")
+    log.print("Web server: client disconnect (async hooks don't run, resume is unaffected)")
 
 
 # --------------------------------------------------------------------------------------------
@@ -289,6 +354,7 @@ if __name__ == "__main__":
     asyncio.run(async_aclosing_demo())
     asyncio.run(async_iterate_aclosing_demo())
     asyncio.run(async_break_without_aclose_demo())
+    asyncio.run(cancel_task_demo())
     asyncio.run(client_disconnect_demo())
     resume_after_stop_demo()
     cleanup_error_demo()
