@@ -17,15 +17,16 @@
 
 import abc
 import ast
+import asyncio
 import builtins
 import contextlib
 import copy
 import inspect
+import logging
 import sys
 import textwrap
 import types
 import typing
-import weakref
 
 UnionType = types.UnionType
 
@@ -55,6 +56,8 @@ else:
     from typing import Self
 
 from burr.core.state import State
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_declared_reads(fn: Callable, declared_reads: list[str]) -> None:
@@ -1426,6 +1429,30 @@ class AsyncStreamingAction(Action, abc.ABC):
 StreamResultType = TypeVar("StreamResultType")
 
 
+def _resolve_close_future(future: "asyncio.Future", exc: Optional[BaseException]) -> None:
+    # A close interrupted by cancellation is not an error to hand to later callers.
+    if exc is not None and not isinstance(exc, asyncio.CancelledError):
+        future.set_exception(exc)
+        future.exception()  # mark retrieved: the first closer already raised it
+    else:
+        future.set_result(None)
+
+
+def _log_abandoned_cleanup_error() -> None:
+    # Nobody is left to raise this to: the iterator is being closed by ``break`` or garbage
+    # collection. Hooks have already seen it, and ``close()``/``aclose()`` will raise it.
+    logger.warning(
+        "Cleanup of a streaming action raised after the stream was stopped early", exc_info=True
+    )
+
+
+_CLOSE_WHILE_RUNNING = (
+    "Cannot close a streaming result while it is producing an item (closing from a hook, or from "
+    "another task). Stop it from the code that consumes it (break out of the loop), or cancel the "
+    "task that consumes it."
+)
+
+
 class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[StreamResultType]):
     """Container for a streaming result. This allows you to:
 
@@ -1493,9 +1520,9 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         self._initial_state = initial_state
         self._result = None
         self._callback_realized = False
-        # Weak, so the container <-> iterator cycle doesn't defer the iterator's finalizer (and so
-        # the post-step callback) to cyclic GC when a caller abandons the stream without closing it.
-        self._iterator_ref: Optional[weakref.ref] = None
+        self._closed = False
+        # Cleanup error from the first close; later ``close()`` calls raise it again.
+        self._close_error: Optional[BaseException] = None
 
     def _realize_callback(self, exc: Optional[BaseException]) -> None:
         if self._result is None:
@@ -1510,23 +1537,33 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         Closes the action's generator chain so its cleanup (``finally`` blocks, ``with``
         exits) runs now rather than at garbage collection, then runs the post-step callback
         exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
-        no-op once the stream has completed. Exceptions raised by the action's cleanup propagate.
+        no-op once the stream has completed. An exception raised by the action's cleanup
+        propagates, and is raised again by later calls -- including after ``for ... break``
+        already closed the stream.
 
         A stream closed before it completes is reported to the callback (and so to
         ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
+
+        Raises ``RuntimeError`` if the stream is producing an item at that moment (e.g. ``close``
+        is called from a hook, or from another task). To stop a stream from another task, cancel
+        the task that is consuming it.
         """
+        if self._closed:
+            if self._close_error is not None:
+                raise self._close_error
+            return
+        if self.streaming_result_generator.gi_running:
+            raise RuntimeError(_CLOSE_WHILE_RUNNING)
+        self._closed = True
         # Closing before completion means the step did not finish: report it as failed.
         exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
         try:
             self.streaming_result_generator.close()
         except BaseException as e:
-            exc = e
+            exc = self._close_error = e
             raise
         finally:
             self._realize_callback(exc)
-            iterator = self._iterator_ref() if self._iterator_ref is not None else None
-            if iterator is not None:
-                iterator.close()
 
     def __next__(self) -> StreamResultType:
         if self._result is not None:
@@ -1546,14 +1583,21 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
                     yield out
             except StopIteration:
                 return
+            except GeneratorExit:
+                # The caller stopped iterating (``break``, or dropped the iterator): unwind the
+                # action *before* reporting the step.
+                if not self._closed:
+                    try:
+                        self.close()
+                    except Exception:
+                        _log_abandoned_cleanup_error()
+                raise
             finally:
                 self._realize_callback(sys.exc_info()[1])
 
         # We really don't need an internal generator function but this was done to keep it the same
         # as the async version
-        iterator = gen_fn()
-        self._iterator_ref = weakref.ref(iterator)
-        return iterator
+        return gen_fn()
 
     def get(self) -> Tuple[StreamResultType, State[StateType]]:
         # exhaust the generator
@@ -1616,9 +1660,11 @@ class AsyncStreamingResultContainer(
         self._callback = callback
         self._result = None
         self._callback_realized = False
-        # Weak, so the container <-> iterator cycle doesn't defer the iterator's finalizer (and so
-        # the post-step callback) to cyclic GC when a caller abandons the stream without closing it.
-        self._iterator_ref: Optional[weakref.ref] = None
+        # True while ``__anext__`` is waiting on the action for the next item.
+        self._producing = False
+        # Set by the first ``aclose()`` (explicit, or the iterator's finalizer); later calls wait on
+        # it, so the action is closed once and every caller sees the same outcome.
+        self._close_future: Optional[asyncio.Future] = None
 
     async def _realize_callback(self, exc: Optional[BaseException]) -> None:
         if self._result is None:
@@ -1633,30 +1679,49 @@ class AsyncStreamingResultContainer(
         Closes the action's generator chain so its cleanup (``finally`` blocks, ``async with``
         exits) runs now rather than at garbage collection, then runs the post-step callback
         exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
-        no-op once the stream has completed. Exceptions raised by the action's cleanup propagate.
+        no-op once the stream has completed. An exception raised by the action's cleanup
+        propagates, and is raised again by later calls.
 
         A stream closed before it completes is reported to the callback (and so to
         ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
+
+        Safe to call while the iterator's own finalizer is closing the stream (e.g. after
+        ``async for ... break``): it waits for that close and returns, or raises, the same outcome.
+
+        Raises ``RuntimeError`` if the stream is producing an item at that moment (e.g. ``aclose``
+        is called from a hook, or from another task). To stop a stream from another task, cancel
+        the task that is consuming it.
         """
+        if self._close_future is not None:
+            await asyncio.shield(self._close_future)
+            return
+        if self._producing:
+            raise RuntimeError(_CLOSE_WHILE_RUNNING)
+        self._close_future = asyncio.get_running_loop().create_future()
         # Closing before completion means the step did not finish: report it as failed.
         exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
+        raised = False
         try:
             await self.streaming_result_generator.aclose()
         except BaseException as e:
-            exc = e
+            exc, raised = e, True
             raise
         finally:
-            await self._realize_callback(exc)
-            iterator = self._iterator_ref() if self._iterator_ref is not None else None
-            if iterator is not None:
-                await iterator.aclose()
+            try:
+                await self._realize_callback(exc)
+            finally:
+                _resolve_close_future(self._close_future, exc if raised else None)
 
     async def __anext__(self) -> StreamResultType:
         """Moves to the next state in the streaming result"""
         if self._result is not None:
             # we're done, and we've run through it
             raise StopAsyncIteration
-        result, state = await self.streaming_result_generator.__anext__()
+        self._producing = True
+        try:
+            result, state = await self.streaming_result_generator.__anext__()
+        finally:
+            self._producing = False
         if state is not None:  # we're done -- we've hit the last one
             self._result = self._process_result(result, state)
             raise StopAsyncIteration
@@ -1673,13 +1738,23 @@ class AsyncStreamingResultContainer(
                     yield await self.__anext__()
             except StopAsyncIteration:
                 return
+            except GeneratorExit:
+                # The caller stopped iterating (``break``, or dropped the iterator): unwind the
+                # action *before* reporting the step. If an explicit ``aclose()`` got there
+                # first, wait for it so the step isn't reported while cleanup is still running.
+                if self._close_future is None:
+                    try:
+                        await self.aclose()
+                    except Exception:
+                        _log_abandoned_cleanup_error()
+                else:
+                    await asyncio.wait([self._close_future])
+                raise
             finally:
                 await self._realize_callback(sys.exc_info()[1])
 
         # return it as `__aiter__` cannot be async/have awaits :/
-        iterator = gen_fn()
-        self._iterator_ref = weakref.ref(iterator)
-        return iterator
+        return gen_fn()
 
     async def get(self) -> tuple[Optional[StreamResultType], State[StateType]]:
         # exhaust the generator
@@ -1699,7 +1774,7 @@ class AsyncStreamingResultContainer(
             yield results, final_state
 
         async def empty_callback(
-            result: Optional[StreamResultType], state: State, exc: Optional[Exception]
+            result: Optional[StreamResultType], state: State, exc: Optional[BaseException]
         ):
             pass
 

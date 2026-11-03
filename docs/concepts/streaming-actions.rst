@@ -227,10 +227,11 @@ Thus you can run this in a web-service, a streamlit app, etc...
 Stopping a stream early
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-If you stop consuming a stream before it finishes (e.g. the client disconnected), close it so the
-action's cleanup (``finally`` blocks, ``with``/``async with`` exits such as an open HTTP stream) runs right away,
-rather than at garbage collection. Either close the container directly (``close()`` / ``await aclose()``), or
-close ``stream_iterate`` / ``astream_iterate`` (``contextlib.closing`` / ``contextlib.aclosing`` does this for you):
+When you stop reading a stream before it finishes (the user hit stop, a check tripped, the client
+disconnected), Burr stops the action right away: its cleanup (``finally`` blocks, ``with``/``async with``
+exits such as an open HTTP stream) runs, then the step is reported. You don't need to drain the stream.
+
+**Sync: just** ``break``. This works the same for ``stream_result`` and ``stream_iterate``:
 
 .. code-block:: python
 
@@ -239,43 +240,41 @@ close ``stream_iterate`` / ``astream_iterate`` (``contextlib.closing`` / ``conte
     )
     for result in streaming_result:
         if should_stop(result):
-            break
-    streaming_result.close()
+            break  # the action's cleanup runs here
+
+**Async:** ``break`` **inside** ``contextlib.aclosing``. Python never closes an async generator synchronously
+when you ``break``; it leaves that to the event loop, at some later point. ``aclosing`` makes it happen as you
+leave the block:
 
 .. code-block:: python
 
     import contextlib
-
-    with contextlib.closing(application.stream_iterate(halt_after=["respond"])) as steps:
-        for action, streaming_result in steps:
-            for item in streaming_result:
-                ...
-                break  # leaving the ``with`` closes the in-flight action
-
-.. code-block:: python
 
     action, async_streaming_result = await application.astream_result(
         halt_after='streaming_response', inputs={"prompt": prompt}
     )
-    async for result in async_streaming_result:
-        if should_stop(result):
-            break
-    await async_streaming_result.aclose()
-
-.. code-block:: python
-
-    import contextlib
+    async with contextlib.aclosing(async_streaming_result):
+        async for result in async_streaming_result:
+            if should_stop(result):
+                break
 
     async with contextlib.aclosing(application.astream_iterate(halt_after=["respond"])) as steps:
         async for action, streaming_result in steps:
             async for item in streaming_result:
                 ...
-                break  # leaving the ``async with`` closes the in-flight action
+
+``await async_streaming_result.aclose()`` (or ``streaming_result.close()``) does the same explicitly.
+
+**Web servers:** use the async pattern in your response generator. When a client disconnects, the server
+cancels the task that is producing the response, and the cancellation unwinds the action. To stop a stream from
+*another* task, cancel the task that consumes it: closing a stream while it is producing an item (from a hook,
+or from another task) raises a ``RuntimeError``.
 
 A step that is stopped before it completes does not update state, and is reported to ``post_run_step`` hooks
 with the exception that stopped it -- ``GeneratorExit`` when it is closed, ``CancelledError`` when the consuming
-task is cancelled (e.g. a web client disconnected). Persisters record it as ``failed``, so resuming re-runs that
-action. Exceptions raised by the action's cleanup propagate out of ``close()`` / ``aclose()``.
+task is cancelled. Persisters record it as ``failed``, so resuming re-runs that action. If the action's cleanup
+itself raises, hooks receive that error, and ``close()`` / ``aclose()`` raise it. A cleanup error never replaces
+an error that was already stopping the stream; it is logged instead.
 
 See the `streaming-early-stop example <https://github.com/apache/burr/tree/main/examples/streaming-early-stop>`_
 for runnable versions of these patterns, including a FastAPI endpoint that handles client disconnects.

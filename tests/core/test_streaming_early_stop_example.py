@@ -24,6 +24,9 @@ import pytest
 
 EXAMPLE = pathlib.Path(__file__).parents[2] / "examples" / "streaming-early-stop" / "application.py"
 
+CLOSED = "respond: close LLM connection"
+STOPPED = "post_run_step: respond failed with GeneratorExit()"
+
 
 @pytest.fixture(scope="module")
 def demo():
@@ -37,42 +40,45 @@ def _timeline(capsys) -> list[str]:
     return [line.strip() for line in capsys.readouterr().out.splitlines() if line.startswith("   ")]
 
 
-def test_stop_with_close(demo, capsys):
-    demo.stop_with_close_demo()
+def _cleanup_then_report_then(events: list[str], caller_line: str):
+    """The action is cleaned up, then the step is reported, all before the caller moves on."""
+    i = events.index(CLOSED)
+    assert events[i : i + 3] == [CLOSED, STOPPED, caller_line]
+
+
+def test_sync_break(demo, capsys):
+    demo.sync_break_demo()
     events = _timeline(capsys)
-    assert "respond: close LLM connection" in events
-    assert "post_run_step: respond failed with GeneratorExit()" in events
-    assert events.index("respond: close LLM connection") < events.index(
-        "caller: closed the container"
-    )
+    _cleanup_then_report_then(events, "caller: after the loop")
     assert events[-1] == "caller: get() -> result=None, 'response' in state=False"
 
 
-async def test_stop_with_aclose(demo, capsys):
-    await demo.stop_with_aclose_demo()
-    events = _timeline(capsys)
-    assert events.index("respond: close LLM connection") < events.index(
-        "caller: closed the container"
-    )
-    assert "post_run_step: respond failed with GeneratorExit()" in events
+def test_sync_iterate_break(demo, capsys):
+    demo.sync_iterate_break_demo()
+    _cleanup_then_report_then(_timeline(capsys), "caller: after the loop")
 
 
-def test_stop_iterate_with_closing(demo, capsys):
-    demo.stop_iterate_with_closing_demo()
+async def test_async_aclosing(demo, capsys):
+    await demo.async_aclosing_demo()
+    _cleanup_then_report_then(_timeline(capsys), "caller: left the `async with` block")
+
+
+async def test_async_iterate_aclosing(demo, capsys):
+    await demo.async_iterate_aclosing_demo()
+    _cleanup_then_report_then(_timeline(capsys), "caller: left the `async with` block")
+
+
+async def test_async_break_without_aclose_defers_cleanup(demo, capsys):
+    await demo.async_break_without_aclose_demo()
     events = _timeline(capsys)
-    assert events.index("respond: close LLM connection") < events.index(
-        "caller: left the `with` block"
+    assert events.index("caller: after the loop -- nothing has been cleaned up yet") < (
+        events.index(CLOSED)
     )
-    assert "post_run_step: respond failed with GeneratorExit()" in events
 
 
 async def test_client_disconnect(demo, capsys):
     await demo.client_disconnect_demo()
-    events = _timeline(capsys)
-    assert events[-2:] == [
-        "respond: close LLM connection",
-        "post_run_step: respond failed with CancelledError()",
-    ]
+    assert _timeline(capsys)[-2:] == [CLOSED, "post_run_step: respond failed with CancelledError()"]
 
 
 def test_resume_after_stop(demo, capsys):
@@ -84,7 +90,8 @@ def test_resume_after_stop(demo, capsys):
 
 def test_cleanup_error(demo, capsys):
     demo.cleanup_error_demo()
-    events = _timeline(capsys)
-    assert events[-1] == (
-        "caller: close() raised ConnectionError('LLM connection did not close cleanly')"
-    )
+    assert _timeline(capsys)[-3:] == [
+        CLOSED,
+        "post_run_step: respond failed with ConnectionError('LLM connection did not close cleanly')",
+        "caller: close() raised ConnectionError('LLM connection did not close cleanly')",
+    ]

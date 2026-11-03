@@ -23,6 +23,7 @@ import functools
 import inspect
 import logging
 import pprint
+import sys
 import uuid
 from concurrent.futures import Executor, ThreadPoolExecutor
 from contextlib import AbstractContextManager
@@ -328,6 +329,44 @@ def _run_single_step_action(
     return out
 
 
+def _close_action_generator(
+    generator: Generator, action_name: str, in_flight: Optional[BaseException]
+) -> None:
+    """Closes an action's generator so its cleanup runs now (early close, or an error), rather than
+    at garbage collection. A cleanup error must not replace an error that is already propagating:
+    that cleanup error is logged instead."""
+    if in_flight is None or isinstance(in_flight, GeneratorExit):
+        generator.close()
+        return
+    try:
+        generator.close()
+    except Exception:
+        logger.warning(
+            "Cleanup of streaming action '%s' raised while handling %r",
+            action_name,
+            in_flight,
+            exc_info=True,
+        )
+
+
+async def _aclose_action_generator(
+    generator: AsyncGenerator, action_name: str, in_flight: Optional[BaseException]
+) -> None:
+    """Async version of :py:func:`_close_action_generator`."""
+    if in_flight is None or isinstance(in_flight, GeneratorExit):
+        await generator.aclose()
+        return
+    try:
+        await generator.aclose()
+    except Exception:
+        logger.warning(
+            "Cleanup of streaming action '%s' raised while handling %r",
+            action_name,
+            in_flight,
+            exc_info=True,
+        )
+
+
 def _run_single_step_streaming_action(
     action: SingleStepStreamingAction,
     state: State,
@@ -388,8 +427,7 @@ def _run_single_step_streaming_action(
             exc_info=True,
         )
     finally:
-        # Unwind the action now on early close instead of leaving it to GC.
-        generator.close()
+        _close_action_generator(generator, action.name, sys.exc_info()[1])
 
     if state_update is None:
         raise ValueError(
@@ -460,8 +498,7 @@ async def _arun_single_step_streaming_action(
             exc_info=True,
         )
     finally:
-        # Unwind the action now on early close instead of leaving it to GC.
-        await generator.aclose()
+        await _aclose_action_generator(generator, action.name, sys.exc_info()[1])
 
     if state_update is None:
         raise ValueError(
@@ -534,8 +571,7 @@ def _run_multi_step_streaming_action(
             exc_info=True,
         )
     finally:
-        # Unwind the action now on early close instead of leaving it to GC.
-        generator.close()
+        _close_action_generator(generator, action.name, sys.exc_info()[1])
     state_update = _run_reducer(action, state, result, action.name)
     _validate_result(result, action.name, action.schema)
     _validate_reducer_writes(action, state_update, action.name)
@@ -595,8 +631,7 @@ async def _arun_multi_step_streaming_action(
             exc_info=True,
         )
     finally:
-        # Unwind the action now on early close instead of leaving it to GC.
-        await generator.aclose()
+        await _aclose_action_generator(generator, action.name, sys.exc_info()[1])
     state_update = _run_reducer(action, state, result, action.name)
     _validate_result(result, action.name, action.schema)
     _validate_reducer_writes(action, state_update, action.name)
@@ -1579,7 +1614,7 @@ class Application(Generic[ApplicationStateType]):
             def callback(
                 result: Optional[dict],
                 state: State[ApplicationStateType],
-                exc: Optional[Exception] = None,
+                exc: Optional[BaseException] = None,
             ):
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "post_run_step",
@@ -1835,7 +1870,7 @@ class Application(Generic[ApplicationStateType]):
             async def callback(
                 result: Optional[dict],
                 state: State[ApplicationStateType],
-                exc: Optional[Exception] = None,
+                exc: Optional[BaseException] = None,
             ):
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",

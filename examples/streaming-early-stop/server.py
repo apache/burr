@@ -54,7 +54,7 @@ async def respond(state: State) -> AsyncGenerator[Tuple[dict, Optional[State]], 
 
 
 class LogStep(PostRunStepHook):
-    # A *sync* hook: see the README for why async post-step hooks need care on disconnect.
+    # A *sync* hook: on a client disconnect, async post_run_step hooks are cancelled before they run.
     def post_run_step(self, *, action, exception: Optional[BaseException], **future_kwargs):
         logger.info("post_run_step: %s exception=%r", action.name, exception)
 

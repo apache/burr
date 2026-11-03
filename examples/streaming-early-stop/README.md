@@ -22,16 +22,23 @@
 Streaming actions often hold something open while they stream, such as an HTTP connection to an LLM, a
 database cursor, or a tracing span. They release it in a `finally` block or a `with` exit. When you stop
 reading a stream before it ends (the user hits "stop", a moderation check trips, a token budget runs out,
-the client disconnects), you want three things:
+the client disconnects), Burr:
 
-1. **The action's cleanup runs now**, not whenever the garbage collector gets to it.
-2. **The step is reported honestly.** Hooks, trackers and persisters see it as *failed*, not completed, so
-   resuming the application re-runs it.
-3. **The state is not updated.** A half-finished response is never committed.
+1. **runs the action's cleanup right away**, not whenever the garbage collector gets to it;
+2. **then reports the step as failed** to hooks, trackers and persisters, so resuming the application
+   re-runs it;
+3. **doesn't update the state**, so a half-finished response is never committed.
 
-This example shows the patterns that give you all three. Every demo in [application.py](application.py)
-prints a timeline of what happened, so you can see when the resource is released and what Burr
-reports. Run it with:
+All you have to do is stop iterating the way you would with any Python generator:
+
+| | do this |
+|---|---|
+| sync | `break` |
+| async | `break` inside `async with contextlib.aclosing(...)` |
+| web server | the async pattern; the server cancels your task when the client disconnects |
+
+Every demo in [application.py](application.py) prints a timeline of what happened, so you can see
+when the resource is released and what Burr reports. Run it with:
 
 ```bash
 python application.py
@@ -39,54 +46,65 @@ python application.py
 
 ![statemachine](statemachine.png)
 
-## The patterns
-
-### 1. Stop reading, then `close()` the container
+## Sync: just `break`
 
 ```python
 action, container = app.stream_result(halt_after=["respond"])
 for item in container:
     send_to_user(item["token"])
     if wants_to_stop(item):
-        break
-container.close()  # async: await container.aclose()
+        break  # the action's cleanup runs here, then the step is reported
 
 result, state = container.get()  # (None, state without the update)
 ```
 
-`close()` / `aclose()` stops the action and runs its cleanup. Calling it more than once is safe. Once
-the stream has finished normally, it does nothing (the step is still reported as completed).
+```
+respond: open LLM connection
+caller: got 'Burr '
+caller: got 'streams '
+caller: got 'tokens '
+respond: close LLM connection                       <- at the break
+post_run_step: respond failed with GeneratorExit()
+caller: after the loop
+```
 
-**Always call it after a `break`.** A `break` on its own stops *you* from reading, but the action's
-cleanup only runs when the container is closed or garbage-collected.
+Breaking out of `app.stream_iterate(...)` works the same way.
 
-### 2. Use `contextlib.closing` / `contextlib.aclosing` around `stream_iterate`
+## Async: `break` inside `contextlib.aclosing`
 
 ```python
 import contextlib
 
-with contextlib.closing(app.stream_iterate(halt_after=["respond"])) as steps:
-    for action, container in steps:
-        for item in container:
-            ...
-            if wants_to_stop(item):
-                break
-        break
-# leaving the block closed the in-flight action
+action, container = await app.astream_result(halt_after=["respond"])
+async with contextlib.aclosing(container):
+    async for item in container:
+        if wants_to_stop(item):
+            break
+# cleanup has run and the step has been reported
 
 async with contextlib.aclosing(app.astream_iterate(halt_after=["respond"])) as steps:
     async for action, container in steps:
-        ...
+        async for item in container:
+            ...
 ```
 
-This is the most robust option: however you leave the block (`break`, `return`, an exception, or
-the task being cancelled), the in-flight action is closed. **Prefer this whenever you use
-`stream_iterate` / `astream_iterate`.**
+Why the extra `async with`? Python can't run an async generator's cleanup at the `break`, because the
+cleanup may need to `await`. Without `aclosing`, Python hands it to the event loop, which runs it at some
+later point, after your code has moved on (`async_break_without_aclose_demo`):
 
-### 3. Client disconnects (web servers): cancellation does the work
+```
+respond: open LLM connection
+caller: after the loop -- nothing has been cleaned up yet
+respond: close LLM connection                       <- whenever the event loop gets to it
+post_run_step: respond failed with GeneratorExit()
+```
+
+`await container.aclose()` after the loop does the same as `aclosing`, if you prefer it.
+
+## Web servers: client disconnects
 
 When a client disconnects, ASGI servers such as Starlette/FastAPI *cancel* the task that is
-producing the response. If your response generator uses pattern 2, that cancellation unwinds
+producing the response. If your response generator uses the async pattern, that cancellation unwinds
 the Burr action immediately. See [server.py](server.py):
 
 ```python
@@ -109,21 +127,22 @@ curl -N --max-time 1 localhost:8000/chat     # hang up after a second
 #   post_run_step: respond exception=CancelledError(...)
 ```
 
-To stop a stream *from another task*, cancel the consuming task (as the server does). Don't call
-`aclose()` on a container that another task is iterating: you can't close an async generator while
-it's running.
+**To stop a stream from somewhere else** (another task, a "stop" endpoint), cancel the task that is
+consuming it. Calling `close()` / `aclose()` while the stream is producing an item (from another task,
+or from inside a hook) raises a `RuntimeError` that tells you to do this.
 
 ## What gets reported
 
 | How the stream ended | `post_run_step(exception=...)` | persister status | state updated? | on resume |
 |---|---|---|---|---|
 | read to the end | `None` | `completed` | yes | next action |
-| `close()` / `aclose()` / `closing` before the end | `GeneratorExit()` | `failed` | no | **same action runs again** |
+| `break` / `close()` / `aclose()` before the end | `GeneratorExit()` | `failed` | no | **same action runs again** |
 | task cancelled (e.g. client disconnect) | `CancelledError()` | `failed` | no | **same action runs again** |
 | the action raised | that exception | `failed` | no | same action runs again |
+| stopped early, and the action's cleanup raised | the cleanup error | `failed` | no | same action runs again |
 
-So in a `post_run_step` hook, `exception is not None` means "this step did not complete". If you
-want to tell a deliberate stop apart from a real failure:
+So in a `post_run_step` hook, `exception is not None` means "this step did not complete". To tell a
+deliberate stop apart from a real failure:
 
 ```python
 def post_run_step(self, *, exception, **kwargs):
@@ -139,16 +158,14 @@ Note that `GeneratorExit` and `CancelledError` derive from `BaseException`, not 
 
 ## Things to know
 
-- **Cleanup errors.** If the action's `finally` raises while it is being closed, `close()` / `aclose()`
-  raises that error to you. See `cleanup_error_demo` in [application.py](application.py).
-- **Use sync hooks/persisters to record client disconnects.** On a disconnect, Starlette/FastAPI
-  cancels the whole response task. Sync `post_run_step` hooks (and sync persisters) still run and
-  see the `CancelledError`. *Async* `post_run_step` hooks (and async persisters) are cancelled
-  before they start, so they never record the stopped step. Shielding inside the hook does not
-  help, because the hook body never runs.
-- **Sync vs async.** Everything above works the same way for `stream_result`/`stream_iterate`
-  (with `close()` / `contextlib.closing`) and `astream_result`/`astream_iterate` (with `aclose()` /
-  `contextlib.aclosing`).
+- **Cleanup errors.** If the action's `finally` raises while it is being stopped, hooks receive that error,
+  and Burr logs a warning. A `break` itself doesn't raise it. If you want the error in your own code, call
+  `close()` / `aclose()` afterwards and they raise it (`cleanup_error_demo`). A cleanup error never
+  replaces an error that was already stopping the stream (such as a bug in a hook); it is logged instead.
+- **Use sync hooks/persisters to record client disconnects.** On a disconnect, Starlette/FastAPI cancels
+  the whole response task. Sync `post_run_step` hooks (and sync persisters) still run and see the
+  `CancelledError`. *Async* `post_run_step` hooks (and async persisters) are cancelled before they start,
+  so they never record the stopped step.
 
 See also the [streaming actions docs](https://burr.apache.org/concepts/streaming-actions/) and the
 [streaming-fastapi](../streaming-fastapi) example for a full chatbot.

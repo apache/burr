@@ -19,15 +19,19 @@
 
 The application is a single streaming action, ``respond``, that pretends to stream tokens from an
 LLM. It holds a resource while it streams (think: an open HTTP connection) and releases it in a
-``finally`` block. Each ``*_demo`` function below shows one way to stop the stream early, and
+``finally`` block. Each ``*_demo`` function below stops the stream early in a different way, and
 prints what happened, in order, so you can see when the resource is released and what Burr
 reports to hooks/persisters.
+
+In short: sync code just ``break``s; async code ``break``s inside
+``async with contextlib.aclosing(...)``.
 
 Run it with ``python application.py``. See README.md for the explanation.
 """
 
 import asyncio
 import contextlib
+import logging
 from typing import AsyncGenerator, Generator, List, Optional, Tuple
 
 from burr.core import Application, ApplicationBuilder, State
@@ -122,59 +126,84 @@ def wants_to_stop(token: str) -> bool:
 
 
 # --------------------------------------------------------------------------------------------
-# Pattern 1: stop reading, then close() the container.
+# Sync: just break.
 # --------------------------------------------------------------------------------------------
 
 
-def stop_with_close_demo():
+def sync_break_demo():
     log = Timeline()
     app = application(_respond_sync(log), log)
     _, container = app.stream_result(halt_after=["respond"])
     for item in container:
         log(f"caller: got {item['token']!r}")
         if wants_to_stop(item["token"]):
-            break
-    container.close()  # releases the action's resources *now*
-    log("caller: closed the container")
+            break  # the action's cleanup runs here, then the step is reported
+    log("caller: after the loop")
     result, state = container.get()  # the step did not finish: no result, state not updated
     log(f"caller: get() -> result={result!r}, 'response' in state={'response' in state}")
-    log.print("Pattern 1: break, then container.close()")
+    log.print("Sync: break")
 
 
-async def stop_with_aclose_demo():
+def sync_iterate_break_demo():
+    log = Timeline()
+    app = application(_respond_sync(log), log)
+    for _, container in app.stream_iterate(halt_after=["respond"]):
+        for item in container:
+            log(f"caller: got {item['token']!r}")
+            if wants_to_stop(item["token"]):
+                break
+        break
+    log("caller: after the loop")
+    log.print("Sync: break out of stream_iterate")
+
+
+# --------------------------------------------------------------------------------------------
+# Async: break inside `async with contextlib.aclosing(...)`.
+# --------------------------------------------------------------------------------------------
+
+
+async def async_aclosing_demo():
     log = Timeline()
     app = application(_respond_async(log), log)
     _, container = await app.astream_result(halt_after=["respond"])
-    async for item in container:
-        log(f"caller: got {item['token']!r}")
-        if wants_to_stop(item["token"]):
-            break
-    await container.aclose()
-    log("caller: closed the container")
-    log.print("Pattern 1 (async): break, then await container.aclose()")
+    async with contextlib.aclosing(container):
+        async for item in container:
+            log(f"caller: got {item['token']!r}")
+            if wants_to_stop(item["token"]):
+                break
+    log("caller: left the `async with` block")
+    log.print("Async: break inside contextlib.aclosing(container)")
 
 
-# --------------------------------------------------------------------------------------------
-# Pattern 2: wrap stream_iterate/astream_iterate in contextlib.closing/aclosing.
-# --------------------------------------------------------------------------------------------
-
-
-def stop_iterate_with_closing_demo():
+async def async_iterate_aclosing_demo():
     log = Timeline()
-    app = application(_respond_sync(log), log)
-    with contextlib.closing(app.stream_iterate(halt_after=["respond"])) as steps:
-        for _, container in steps:
-            for item in container:
+    app = application(_respond_async(log), log)
+    async with contextlib.aclosing(app.astream_iterate(halt_after=["respond"])) as steps:
+        async for _, container in steps:
+            async for item in container:
                 log(f"caller: got {item['token']!r}")
                 if wants_to_stop(item["token"]):
                     break
             break
-    log("caller: left the `with` block")
-    log.print("Pattern 2: contextlib.closing(app.stream_iterate(...))")
+    log("caller: left the `async with` block")
+    log.print("Async: break inside contextlib.aclosing(app.astream_iterate(...))")
+
+
+async def async_break_without_aclose_demo():
+    log = Timeline()
+    app = application(_respond_async(log), log)
+    _, container = await app.astream_result(halt_after=["respond"])
+    async for item in container:
+        if wants_to_stop(item["token"]):
+            break
+    log("caller: after the loop -- nothing has been cleaned up yet")
+    await asyncio.sleep(0.01)  # ...the event loop gets to it later, in the background
+    log("caller: some time later")
+    log.print("Async without aclosing: cleanup is left to the event loop (avoid)")
 
 
 # --------------------------------------------------------------------------------------------
-# Pattern 3: the client disconnects -> cancel the task that is consuming the stream.
+# Web servers: the client disconnects -> the server cancels the task consuming the stream.
 # --------------------------------------------------------------------------------------------
 
 
@@ -194,7 +223,7 @@ async def client_disconnect_demo():
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
-    log.print("Pattern 3: client disconnect, cancel the consuming task")
+    log.print("Web server: client disconnect cancels the consuming task")
 
 
 # --------------------------------------------------------------------------------------------
@@ -211,7 +240,6 @@ def resume_after_stop_demo():
     for item in container:
         if wants_to_stop(item["token"]):
             break
-    container.close()
     log(f"persister: last step saved as {persister.load('', 'early-stop-demo')['status']!r}")
 
     resumed = (
@@ -229,7 +257,7 @@ def resume_after_stop_demo():
 
 
 # --------------------------------------------------------------------------------------------
-# Cleanup errors: close() raises them to the caller.
+# Cleanup errors: hooks always see them; close() raises them if you want them.
 # --------------------------------------------------------------------------------------------
 
 
@@ -238,14 +266,13 @@ def cleanup_error_demo():
     app = application(_respond_sync(log, cleanup_error=True), log)
     _, container = app.stream_result(halt_after=["respond"])
     for item in container:
-        log(f"caller: got {item['token']!r}")
         if wants_to_stop(item["token"]):
-            break
+            break  # the error is reported to hooks and logged; the break itself doesn't raise
     try:
         container.close()
     except ConnectionError as e:
         log(f"caller: close() raised {e!r}")
-    log.print("Cleanup errors: close() raises them to the caller")
+    log.print("Cleanup errors: reported to hooks, and raised by close()")
 
 
 def visualize():
@@ -256,9 +283,12 @@ def visualize():
 
 
 if __name__ == "__main__":
-    stop_with_close_demo()
-    asyncio.run(stop_with_aclose_demo())
-    stop_iterate_with_closing_demo()
+    logging.basicConfig(level=logging.ERROR)  # hide the cleanup-error warning in this demo
+    sync_break_demo()
+    sync_iterate_break_demo()
+    asyncio.run(async_aclosing_demo())
+    asyncio.run(async_iterate_aclosing_demo())
+    asyncio.run(async_break_without_aclose_demo())
     asyncio.run(client_disconnect_demo())
     resume_after_stop_demo()
     cleanup_error_demo()
