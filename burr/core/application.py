@@ -127,6 +127,36 @@ def _adjust_single_step_output(
     _raise_fn_return_validation_error(output, action_name)
 
 
+def _mangled_parameter_for_class(
+    run_method: Callable, dunder_param: str, params: List[str]
+) -> Optional[str]:
+    """Return the parameter name CPython produced for ``dunder_param`` in ``run_method``.
+
+    CPython rewrites an identifier that starts with two underscores and does not end with two
+    underscores into ``_ClassName__identifier``, where ``ClassName`` is the name of the class whose
+    *body defines the method* with any leading underscores stripped -- not the runtime class, so an
+    inherited ``run`` keeps the base class' name. ``__qualname__`` records exactly that defining
+    class, which is why it is used here instead of ``type(self).__name__``.
+
+    Deriving the one candidate name, rather than scanning the signature for anything ending with the
+    dunder, is what keeps a regular user input (``user__context``, ``_user__context``, or a name that
+    merely looks like another class' mangled form) from being mistaken for the injected parameter and
+    overwritten.
+
+    :param run_method: the bound or unbound method about to be called
+    :param dunder_param: the injected name, e.g. ``"__context"``
+    :param params: the parameter names of ``run_method``
+    :return: the mangled parameter name, or None when the method takes no such parameter
+    """
+    if not dunder_param.startswith("__") or dunder_param.endswith("__"):
+        return None
+    parts = (getattr(run_method, "__qualname__", "") or "").split(".")
+    if len(parts) < 2:
+        return None  # module-level function or lambda: nothing was ever mangled
+    candidate = "_{}{}".format(parts[-2].lstrip("_"), dunder_param)
+    return candidate if candidate in params else None
+
+
 def _remap_dunder_parameters(
     run_method: Callable, inputs: Dict[str, Any], vars_to_remap: List[str]
 ) -> dict:
@@ -141,18 +171,16 @@ def _remap_dunder_parameters(
     """
     # Get the signature of the method being run. This should be Function.run() or similar.
     signature = inspect.signature(run_method)
+    params = [param.name for param in signature.parameters.values()]
     mangled_params: Dict[str, Optional[str]] = {v: None for v in vars_to_remap}
-    # Find the name-mangled __context variable.
     for dunder_param in mangled_params.keys():
-        for param in signature.parameters.values():
-            if not param.name.endswith(dunder_param):
-                continue
-            # A mangled name is ``_ClassName__context``, so what precedes the dunder starts with an
-            # underscore. Without this a user input that merely ends with the dunder (e.g.
-            # ``user__context``) would be treated as the mangled name and its value overwritten.
-            if param.name[: -len(dunder_param)].startswith("_"):
-                mangled_params[dunder_param] = param.name
-                break
+        if dunder_param in params:
+            # The parameter kept its literal name, so the method was not defined in a class body
+            # (a function-based action's run, or a module-level function). Nothing to rename.
+            continue
+        mangled_params[dunder_param] = _mangled_parameter_for_class(
+            run_method, dunder_param, params
+        )
 
     # If any mangled __parameter is found, remap the value in inputs
     if any(mangled_params.values()):
