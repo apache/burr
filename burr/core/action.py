@@ -1438,11 +1438,21 @@ def _resolve_close_future(future: "asyncio.Future", exc: Optional[BaseException]
         future.set_result(None)
 
 
-def _log_abandoned_cleanup_error() -> None:
+def _log_abandoned_stop_error() -> None:
     # Nobody is left to raise this to: the iterator is being closed by ``break`` or garbage
-    # collection. Hooks have already seen it, and ``close()``/``aclose()`` will raise it.
+    # collection. ``close()``/``aclose()`` will raise it.
     logger.warning(
-        "Cleanup of a streaming action raised after the stream was stopped early", exc_info=True
+        "Stopping a streaming action early raised (in its cleanup or a post_run_step hook); "
+        "close() / aclose() raise it again",
+        exc_info=True,
+    )
+
+
+def _log_superseded_callback_error(error: BaseException, callback_error: Exception) -> None:
+    logger.warning(
+        "A post_run_step hook raised while reporting a streaming action stopped by %r",
+        error,
+        exc_info=(type(callback_error), callback_error, callback_error.__traceback__),
     )
 
 
@@ -1521,7 +1531,7 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         self._result = None
         self._callback_realized = False
         self._closed = False
-        # Cleanup error from the first close; later ``close()`` calls raise it again.
+        # Error from the first close (cleanup, else the callback); later calls raise it again.
         self._close_error: Optional[BaseException] = None
 
     def _realize_callback(self, exc: Optional[BaseException]) -> None:
@@ -1537,9 +1547,13 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         Closes the action's generator chain so its cleanup (``finally`` blocks, ``with``
         exits) runs now rather than at garbage collection, then runs the post-step callback
         exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
-        no-op once the stream has completed. An exception raised by the action's cleanup
-        propagates, and is raised again by later calls -- including after ``for ... break``
-        already closed the stream.
+        no-op once the stream has completed.
+
+        If stopping raises, the first error wins: an error from the action's cleanup (which is
+        also what the callback receives), else an error from the callback (e.g. a
+        ``post_run_step`` hook). A callback error superseded by a cleanup error is logged. Every
+        call raises that same error -- including after ``for ... break`` already closed the
+        stream.
 
         A stream closed before it completes is reported to the callback (and so to
         ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
@@ -1557,13 +1571,21 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
         self._closed = True
         # Closing before completion means the step did not finish: report it as failed.
         exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
+        error: Optional[BaseException] = None
         try:
             self.streaming_result_generator.close()
         except BaseException as e:
-            exc = self._close_error = e
-            raise
-        finally:
+            exc = error = e
+        try:
             self._realize_callback(exc)
+        except Exception as e:
+            if error is None:
+                error = e
+            else:
+                _log_superseded_callback_error(error, e)
+        if error is not None:
+            self._close_error = error
+            raise error
 
     def __next__(self) -> StreamResultType:
         if self._result is not None:
@@ -1590,7 +1612,7 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
                     try:
                         self.close()
                     except Exception:
-                        _log_abandoned_cleanup_error()
+                        _log_abandoned_stop_error()
                 raise
             finally:
                 self._realize_callback(sys.exc_info()[1])
@@ -1679,8 +1701,12 @@ class AsyncStreamingResultContainer(
         Closes the action's generator chain so its cleanup (``finally`` blocks, ``async with``
         exits) runs now rather than at garbage collection, then runs the post-step callback
         exactly once. ``get()`` afterwards returns ``(None, initial_state)``. Idempotent, and a
-        no-op once the stream has completed. An exception raised by the action's cleanup
-        propagates, and is raised again by later calls.
+        no-op once the stream has completed.
+
+        If stopping raises, the first error wins: an error from the action's cleanup (which is
+        also what the callback receives), else an error from the callback (e.g. a
+        ``post_run_step`` hook). A callback error superseded by a cleanup error is logged. Every
+        call raises that same error.
 
         A stream closed before it completes is reported to the callback (and so to
         ``post_run_step`` hooks and persisters) with a ``GeneratorExit``, i.e. as a failed step.
@@ -1700,17 +1726,26 @@ class AsyncStreamingResultContainer(
         self._close_future = asyncio.get_running_loop().create_future()
         # Closing before completion means the step did not finish: report it as failed.
         exc: Optional[BaseException] = GeneratorExit() if self._result is None else None
-        raised = False
+        error: Optional[BaseException] = None
         try:
-            await self.streaming_result_generator.aclose()
-        except BaseException as e:
-            exc, raised = e, True
-            raise
-        finally:
+            try:
+                await self.streaming_result_generator.aclose()
+            except BaseException as e:
+                exc = error = e
             try:
                 await self._realize_callback(exc)
-            finally:
-                _resolve_close_future(self._close_future, exc if raised else None)
+            except Exception as e:
+                if error is None:
+                    error = e
+                else:
+                    _log_superseded_callback_error(error, e)
+        except BaseException as e:  # e.g. cancelled while reporting
+            error = e
+            raise
+        finally:
+            _resolve_close_future(self._close_future, error)
+        if error is not None:
+            raise error
 
     async def __anext__(self) -> StreamResultType:
         """Moves to the next state in the streaming result"""
@@ -1746,7 +1781,7 @@ class AsyncStreamingResultContainer(
                     try:
                         await self.aclose()
                     except Exception:
-                        _log_abandoned_cleanup_error()
+                        _log_abandoned_stop_error()
                 else:
                     await asyncio.wait([self._close_future])
                 raise

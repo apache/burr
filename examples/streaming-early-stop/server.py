@@ -23,7 +23,9 @@ right away.
 
 The ``post_run_step`` line does *not* appear: on a disconnect, Starlette cancels the response through an
 anyio cancel scope, which also cancels Burr's await on async hooks and persisters, so they don't run for
-the stopped step. Nothing is saved for it, so resuming re-runs it. See the README.
+the stopped step. Nothing is saved for it, so resuming re-runs it. An ``await`` in the action's own
+cleanup would be cancelled too; shield it with ``anyio.CancelScope(shield=True)`` if it must finish.
+See the README.
 """
 
 import asyncio

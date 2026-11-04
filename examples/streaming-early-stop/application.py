@@ -259,8 +259,9 @@ async def client_disconnect_demo():
     """What Starlette/FastAPI do on a client disconnect: cancel an anyio cancel scope.
 
     Unlike ``task.cancel()``, a cancel scope keeps cancelling every ``await`` inside it, so Burr's
-    await on the async ``post_run_step`` hooks is cancelled too. The action is still cleaned up, and
-    since nothing is saved for the stopped step, resuming re-runs it.
+    await on the async ``post_run_step`` hooks is cancelled too. The action's cleanup starts (an
+    ``await`` in it would be cancelled too, unless shielded), and since nothing is saved for the
+    stopped step, resuming re-runs it.
     """
     log = Timeline()
     persister = AsyncInMemoryPersister()
@@ -322,7 +323,7 @@ def resume_after_stop_demo():
 
 
 # --------------------------------------------------------------------------------------------
-# Cleanup errors: hooks always see them; close() raises them if you want them.
+# Cleanup errors: hooks always see them; close() raises them (every time) if you want them.
 # --------------------------------------------------------------------------------------------
 
 

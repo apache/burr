@@ -150,8 +150,16 @@ There is no `post_run_step` line. Starlette cancels through an anyio *cancel sco
 `task.cancel()`, a cancel scope keeps cancelling every `await` inside it, including Burr's await on async
 `post_run_step` hooks and async persisters. So for a disconnected step:
 
-- the action's cleanup **does** run (but as with any code under a cancelled scope, an `await` inside its
-  `finally` is cancelled too; wrap such cleanup in `anyio.CancelScope(shield=True)` if it must complete);
+- the action's cleanup **starts**, but an `await` inside it is cancelled too, as for any code under a
+  cancelled scope. Wrap cleanup that must finish (e.g. releasing a connection) in
+  `anyio.CancelScope(shield=True)`:
+
+  ```python
+  finally:
+      with anyio.CancelScope(shield=True):
+          await connection.release()
+  ```
+
 - async hooks, trackers and persisters **don't** run, so the stopped step isn't recorded;
 - **resuming is unaffected**: the last saved step is the one before, so the interrupted action runs again,
   as it would if it had been saved as `failed`.
@@ -196,10 +204,12 @@ Note that `GeneratorExit` and `CancelledError` derive from `BaseException`, not 
 
 ## Things to know
 
-- **Cleanup errors.** If the action's `finally` raises while it is being stopped, hooks receive that error,
-  and Burr logs a warning. A `break` itself doesn't raise it. If you want the error in your own code, call
-  `close()` / `aclose()` afterwards and they raise it (`cleanup_error_demo`). A cleanup error never
-  replaces an error that was already stopping the stream (such as a bug in a hook); it is logged instead.
+- **Errors while stopping: the first one wins.** If the action's `finally` raises while it is being stopped,
+  hooks receive that error, and `close()` / `aclose()` raise it (`cleanup_error_demo`). Otherwise, an error
+  from a `post_run_step` hook is raised. Every later `close()` / `aclose()` raises the same error. A `break`
+  itself doesn't raise; Burr logs a warning and `close()` / `aclose()` raise it afterwards. An error raised
+  while stopping never replaces an error that was already stopping the stream (such as a bug in a hook); it is
+  logged instead.
 - **Client disconnects aren't recorded by async hooks or persisters** (see [above](#web-servers-client-disconnects)).
   Don't work around it by adding sync hooks to an async app: they block the event loop. Resume is
   correct either way.

@@ -274,13 +274,22 @@ A step that is stopped before it completes does not update state, and is reporte
 with the exception that stopped it -- ``GeneratorExit`` when it is closed, ``CancelledError`` when the consuming
 task is cancelled. Persisters record it as ``failed``, so resuming re-runs that action.
 
-One exception: on a client disconnect, Starlette/FastAPI cancel the response through an anyio cancel scope, which
-also cancels Burr's await on *async* ``post_run_step`` hooks and persisters. The action is still cleaned up, but
-the stopped step isn't recorded. Resuming is unaffected: the last saved step is the one before, so the
-interrupted action runs again. Don't add sync hooks to an async application to work around this; they block the
-event loop. If the action's cleanup
-itself raises, hooks receive that error, and ``close()`` / ``aclose()`` raise it. A cleanup error never replaces
-an error that was already stopping the stream; it is logged instead.
+If stopping raises, the first error wins. An error from the action's cleanup is what hooks receive, and what
+``close()`` / ``aclose()`` raise; failing that, an error from a ``post_run_step`` hook is raised. Every later
+``close()`` / ``aclose()`` raises the same error. After a bare ``break`` there is nobody to raise it to, so it is
+logged. An error raised while stopping never replaces an error that was already stopping the stream (such as a
+bug in a hook); it is logged instead.
+
+**Client disconnects** are an exception to the reporting above. Starlette/FastAPI cancel a disconnected response through an anyio
+cancel scope, which keeps cancelling every ``await`` inside it:
+
+* the action's cleanup starts, but an ``await`` inside it is cancelled too; wrap cleanup that must finish in
+  ``anyio.CancelScope(shield=True)``;
+* Burr's await on *async* ``post_run_step`` hooks and persisters is cancelled, so the stopped step isn't
+  recorded;
+* resuming is unaffected: the last saved step is the one before, so the interrupted action runs again.
+
+Don't add sync hooks to an async application to work around this; they block the event loop.
 
 See the `streaming-early-stop example <https://github.com/apache/burr/tree/main/examples/streaming-early-stop>`_
 for runnable versions of these patterns, including a FastAPI endpoint that handles client disconnects.

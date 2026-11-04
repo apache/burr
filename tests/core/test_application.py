@@ -3067,10 +3067,15 @@ async def test_astream_iterate_cancelled_consumer_unwinds_and_reports_cancelled_
     assert persister.load("", "early-stop")["status"] == "failed"
 
 
-async def test_astream_iterate_cancel_scope_cleans_up_and_resume_reruns_the_step():
-    """Starlette cancels a disconnected response through an anyio cancel scope, which also cancels
-    Burr's await on async hooks/persisters, so they don't record the step (a known limitation). The
-    action must still be cleaned up, and resuming must still land on the interrupted action."""
+@pytest.mark.parametrize("shield", [False, True], ids=["unshielded", "shielded"])
+async def test_astream_iterate_cancel_scope_runs_cleanup_and_resume_reruns_the_step(shield: bool):
+    """Starlette cancels a disconnected response through an anyio cancel scope. That scope keeps
+    cancelling every ``await`` inside it, so (as for any code under it, not specific to Burr):
+
+    - the action's cleanup starts, but an ``await`` in it is cancelled unless shielded;
+    - Burr's await on async ``post_run_step`` hooks/persisters is cancelled: the step isn't recorded;
+    - resuming still lands on the interrupted action (the last saved step is the one before).
+    """
 
     @action(reads=[], writes=["x"])
     def before(state: State) -> State:
@@ -3079,16 +3084,26 @@ async def test_astream_iterate_cancel_scope_cleans_up_and_resume_reruns_the_step
     log = _EarlyStopLog()
     persister = AsyncInMemoryPersister()
 
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            log.events.append("release started")
+            if shield:
+                with anyio.CancelScope(shield=True):
+                    await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(0)
+            log.events.append("release finished")
+
     @streaming_action(reads=[], writes=["x"])
     async def act(state: State):
-        try:
+        async with Connection():
             for item in ["a", "b", "c"]:
                 await asyncio.sleep(0.05)
                 yield {"item": item}, None
             yield {"item": "done"}, state.update(x=1)
-        finally:
-            # Recorded before awaiting: under a cancelled scope, awaits in `finally` are cancelled too.
-            log.events.append("cleanup")
 
     async def build(resume: bool) -> Application:
         builder = (
@@ -3119,7 +3134,8 @@ async def test_astream_iterate_cancel_scope_cleans_up_and_resume_reruns_the_step
     async with anyio.create_task_group() as response:
         response.start_soon(respond_to_client, response.cancel_scope)
 
-    assert log.events == [("reported", None), "cleanup"]
+    released = ["release started", "release finished"] if shield else ["release started"]
+    assert log.events == [("reported", None), *released]
     assert (await persister.load(None, "early-stop"))["position"] == "before"
     assert (await build(resume=True)).get_next_action().name == "act"
 
@@ -3195,7 +3211,7 @@ def test_stream_result_cleanup_error_is_reported_and_raised_by_close(no_cyclic_g
     for _ in container:
         break
     assert log.events == ["cleanup", ("reported", _EarlyStopCleanupError)]
-    assert "Cleanup of a streaming action raised" in caplog.text
+    assert "Stopping a streaming action early raised" in caplog.text
     with pytest.raises(_EarlyStopCleanupError):
         container.close()
     with pytest.raises(_EarlyStopCleanupError):
@@ -3218,6 +3234,84 @@ async def test_astream_result_cleanup_error_is_reported_and_raised_by_aclose(
     with pytest.raises(_EarlyStopCleanupError):
         await container.aclose()
     assert log.events == ["cleanup", ("reported", _EarlyStopCleanupError)]
+
+
+class _EarlyStopHookError(Exception):
+    pass
+
+
+def _raising_post_run_step_hook(is_async: bool):
+    class RaisingHook(PostRunStepHook):
+        def post_run_step(self, **future_kwargs):
+            raise _EarlyStopHookError("bug in post_run_step")
+
+    class RaisingHookAsync(PostRunStepHookAsync):
+        async def post_run_step(self, **future_kwargs):
+            raise _EarlyStopHookError("bug in post_run_step")
+
+    return RaisingHookAsync() if is_async else RaisingHook()
+
+
+@pytest.mark.parametrize("how", ["close", "break_then_close"])
+@pytest.mark.parametrize(
+    "cleanup_raises", [True, False], ids=["cleanup_and_hook_raise", "only_hook_raises"]
+)
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+async def test_close_raises_the_first_error_and_the_same_one_every_time(
+    is_async: bool, cleanup_raises: bool, how: str, no_cyclic_gc, caplog
+):
+    """Contract for errors while stopping a stream, identical for sync and async:
+
+    - the first error wins: a cleanup error, else the ``post_run_step`` hook's error;
+    - every ``close()`` / ``aclose()`` call raises that same error (the step is not re-reported);
+    - hooks see the cleanup error; a hook error superseded by it is logged, not lost.
+    """
+    log = _EarlyStopLog()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async, cleanup_raises=cleanup_raises),
+        log,
+        is_async,
+        hooks=(_raising_post_run_step_hook(is_async),),
+    )
+    expected = _EarlyStopCleanupError if cleanup_raises else _EarlyStopHookError
+    if is_async:
+        _, container = await app.astream_result(halt_after=["act"])
+        if how == "close":
+            iterator = container.__aiter__()
+            await iterator.__anext__()
+        else:
+            async for _ in container:
+                break  # the stop's error has nobody to go to here; aclose() raises it
+            await asyncio.sleep(0)
+        raised = []
+        for _ in range(3):
+            with pytest.raises(expected) as e:
+                await container.aclose()
+            raised.append(e.value)
+        if how == "close":
+            await iterator.aclose()  # leaving the loop afterwards doesn't raise again
+    else:
+        _, container = app.stream_result(halt_after=["act"])
+        if how == "close":
+            iterator = iter(container)
+            next(iterator)
+        else:
+            for _ in container:
+                break
+        raised = []
+        for _ in range(3):
+            with pytest.raises(expected) as e:
+                container.close()
+            raised.append(e.value)
+        if how == "close":
+            iterator.close()
+    assert raised[0] is raised[1] is raised[2]
+    assert log.events == [
+        "cleanup",
+        ("reported", _EarlyStopCleanupError if cleanup_raises else GeneratorExit),
+    ]
+    if cleanup_raises:
+        assert "bug in post_run_step" in caplog.text
 
 
 class _BrokenStreamItemHook(PostStreamItemHook):
