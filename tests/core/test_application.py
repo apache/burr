@@ -67,6 +67,7 @@ from burr.core.persistence import (
     BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
+    InMemoryPersister,
     PersistedStateData,
     PersisterHookAsync,
     SQLLitePersister,
@@ -829,6 +830,12 @@ class SingleStepStreamingCounter(SingleStepStreamingAction):
         return ["count", "tracker"]
 
 
+class SingleStepStreamingCounterWithInputs(SingleStepStreamingCounter):
+    @property
+    def inputs(self) -> list[str]:
+        return ["granularity"]
+
+
 class SingleStepStreamingCounterYieldsDict(SingleStepStreamingAction):
     def stream_run_and_update(
         self, state: State, **run_kwargs
@@ -867,6 +874,12 @@ class SingleStepStreamingCounterAsync(SingleStepStreamingAction):
     @property
     def writes(self) -> list[str]:
         return ["count", "tracker"]
+
+
+class SingleStepStreamingCounterWithInputsAsync(SingleStepStreamingCounterAsync):
+    @property
+    def inputs(self) -> list[str]:
+        return ["granularity"]
 
 
 class SingleStepStreamingCounterYieldsDictAsync(SingleStepStreamingAction):
@@ -963,9 +976,11 @@ base_single_step_counter_with_inputs_async = SingleStepCounterWithInputsAsync()
 
 base_streaming_counter = StreamingCounter()
 base_streaming_single_step_counter = SingleStepStreamingCounter()
+base_streaming_single_step_counter_with_inputs = SingleStepStreamingCounterWithInputs()
 
 base_streaming_counter_async = AsyncStreamingCounter()
 base_streaming_single_step_counter_async = SingleStepStreamingCounterAsync()
+base_streaming_single_step_counter_with_inputs_async = SingleStepStreamingCounterWithInputsAsync()
 
 base_single_step_action_incorrect_result_type = SingleStepActionIncorrectResultType()
 base_single_step_action_incorrect_result_type_async = SingleStepActionIncorrectResultTypeAsync()
@@ -2178,7 +2193,6 @@ def test_iterate_with_inputs():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(counter_action, counter_action, Condition.expr("count < 2")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2186,13 +2200,125 @@ def test_iterate_with_inputs():
     gen = app.iterate(
         halt_after=["result"], inputs={"additional_increment": 10}
     )  # make it go quickly to the end
-    while True:
-        try:
-            action, result, state = next(gen)
-        except StopIteration as e:
-            a, r, s = e.value
-            assert r["count"] == 11  # 1 + 10, for the first one
-            break
+    action, result, state = next(gen)
+    assert action.name == "counter"
+    assert result["count"] == state["count"] == 11
+    action, result, state = next(gen)
+    assert action.name == "result"
+    assert result["count"] == state["count"] == 11
+    with pytest.raises(StopIteration) as exc_info:
+        next(gen)
+    a, r, s = exc_info.value.value
+    assert a.name == "result"
+    assert r["count"] == s["count"] == 11
+
+
+def test_iterate_inputs_are_only_passed_to_first_action():
+    first_action = base_counter_action_with_inputs.with_name("first")
+    second_action = base_counter_action_with_inputs.with_name("second")
+    app = Application(
+        state=State({}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    gen = app.iterate(inputs={"additional_increment": 10})
+    action, result, state = next(gen)
+    assert action.name == "first"
+    assert result["count"] == state["count"] == 11
+    with pytest.raises(ValueError, match="missing required inputs"):
+        next(gen)
+
+
+def test_iterate_passes_inputs_before_first_halt_before():
+    first_action = base_counter_action_with_inputs.with_name("first")
+    second_action = Result("count").with_name("second")
+    app = Application(
+        state=State({}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    gen = app.iterate(halt_before=["second"], inputs={"additional_increment": 10})
+    action, result, state = next(gen)
+    assert action.name == "first"
+    assert result["count"] == state["count"] == 11
+    with pytest.raises(StopIteration) as exc_info:
+        next(gen)
+    action, result, state = exc_info.value.value
+    assert action.name == "second"
+    assert result is None
+    assert state["count"] == 11
+
+
+def test_iterate_retries_a_failed_first_action_with_inputs():
+    attempts = 0
+
+    def fail_once(state: State, additional_increment: int) -> dict:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise BrokenStepException()
+        return {"count": state.get("count", 0) + additional_increment}
+
+    action = PassedInAction(
+        reads=["count"],
+        writes=["count"],
+        fn=fail_once,
+        update_fn=lambda result, state: state.update(**result),
+        inputs=["additional_increment"],
+    ).with_name("retry")
+    app = Application(
+        state=State({}),
+        entrypoint="retry",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(actions=[action], transitions=[]),
+    )
+    with pytest.raises(BrokenStepException):
+        next(app.iterate(inputs={"additional_increment": 10}))
+
+    gen = app.iterate(inputs={"additional_increment": 10})
+    action, result, state = next(gen)
+    assert action.name == "retry"
+    assert result["count"] == state["count"] == 10
+
+
+def test_iterate_resume_position_is_first_action_for_inputs():
+    persister = InMemoryPersister()
+    persister.save(
+        "test",
+        "app",
+        sequence_id=1,
+        position="resume",
+        state=State({"count": 0}),
+        status="failed",
+    )
+    action = base_counter_action_with_inputs.with_name("resume")
+    app = (
+        ApplicationBuilder()
+        .with_actions(action)
+        .with_transitions()
+        .initialize_from(
+            persister,
+            resume_at_next_action=True,
+            default_state={},
+            default_entrypoint="resume",
+        )
+        .with_identifiers(app_id="app", partition_key="test")
+        .build()
+    )
+    action, result, state = next(app.iterate(inputs={"additional_increment": 10}))
+    assert action.name == "resume"
+    assert result["count"] == state["count"] == 11
 
 
 async def test_aiterate():
@@ -2269,7 +2395,6 @@ async def test_app_aiterate_with_inputs():
         graph=Graph(
             actions=[counter_action, result_action],
             transitions=[
-                Transition(counter_action, counter_action, Condition.expr("count < 10")),
                 Transition(counter_action, result_action, default),
             ],
         ),
@@ -2280,6 +2405,50 @@ async def test_app_aiterate_with_inputs():
             assert result["count"] == state["count"] == 11
         else:
             assert state["count"] == result["count"] == 11
+
+
+@pytest.mark.asyncio
+async def test_aiterate_inputs_are_only_passed_to_first_action():
+    first_action = base_counter_action_with_inputs_async.with_name("first")
+    second_action = base_counter_action_with_inputs_async.with_name("second")
+    app = Application(
+        state=State({}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    gen = app.aiterate(inputs={"additional_increment": 10})
+    action, result, state = await gen.__anext__()
+    assert action.name == "first"
+    assert result["count"] == state["count"] == 11
+    with pytest.raises(ValueError, match="missing required inputs"):
+        await gen.__anext__()
+
+
+@pytest.mark.asyncio
+async def test_aiterate_passes_inputs_before_first_halt_before():
+    first_action = base_counter_action_with_inputs_async.with_name("first")
+    second_action = Result("count").with_name("second")
+    app = Application(
+        state=State({}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    gen = app.aiterate(halt_before=["second"], inputs={"additional_increment": 10})
+    action, result, state = await gen.__anext__()
+    assert action.name == "first"
+    assert result["count"] == state["count"] == 11
+    with pytest.raises(StopAsyncIteration):
+        await gen.__anext__()
 
 
 def test_run():
@@ -2350,7 +2519,7 @@ def test_run_with_inputs():
 
 
 def test_run_with_inputs_multiple_actions():
-    """Tests that inputs aren't popped off and are passed through to multiple actions."""
+    """Inputs supplied to run are consumed by its first action only."""
     result_action = Result("count").with_name("result")
     counter_action1 = base_counter_action_with_inputs.with_name("counter1")
     counter_action2 = base_counter_action_with_inputs.with_name("counter2")
@@ -2370,10 +2539,8 @@ def test_run_with_inputs_multiple_actions():
             ],
         ),
     )
-    action_, result, state = app.run(halt_after=["result"], inputs={"additional_increment": 8})
-    assert action_.name == "result"
-    assert state["count"] == result["count"] == 27
-    assert state["__SEQUENCE_ID"] == 4
+    with pytest.raises(ValueError, match="missing required inputs"):
+        app.run(halt_after=["result"], inputs={"additional_increment": 8})
 
 
 async def test_arun():
@@ -2446,6 +2613,7 @@ async def test_arun_with_inputs():
 
 
 async def test_arun_with_inputs_multiple_actions():
+    """Inputs supplied to arun are consumed by its first action only."""
     result_action = Result("count").with_name("result")
     counter_action1 = base_counter_action_with_inputs_async.with_name("counter1")
     counter_action2 = base_counter_action_with_inputs_async.with_name("counter2")
@@ -2465,12 +2633,8 @@ async def test_arun_with_inputs_multiple_actions():
             ],
         ),
     )
-    action_, result, state = await app.arun(
-        halt_after=["result"], inputs={"additional_increment": 8}
-    )
-    assert state["count"] == result["count"] == 27
-    assert action_.name == "result"
-    assert state["__SEQUENCE_ID"] == 4
+    with pytest.raises(ValueError, match="missing required inputs"):
+        await app.arun(halt_after=["result"], inputs={"additional_increment": 8})
 
 
 async def test_app_a_run_async_and_sync():
@@ -2712,6 +2876,26 @@ def test_stream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.post_stream_item_calls) == 20
 
 
+def test_stream_iterate_inputs_are_only_passed_to_first_action():
+    first_action = base_streaming_single_step_counter_with_inputs.with_name("first")
+    second_action = base_streaming_single_step_counter_with_inputs.with_name("second")
+    app = Application(
+        state=State({"count": 0}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    iterator = app.stream_iterate(inputs={"granularity": 1})
+    _, first_stream = next(iterator)
+    first_stream.get()
+    with pytest.raises(ValueError, match="missing required inputs"):
+        next(iterator)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exhaust_intermediate_generators", [True, False])
 async def test_astream_iterate(exhaust_intermediate_generators: bool):
@@ -2768,6 +2952,27 @@ async def test_astream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.pre_start_stream_calls) == 2
     assert len(stream_event_tracker.post_end_stream_calls) == 2
     assert len(stream_event_tracker.post_stream_item_calls) == 20
+
+
+@pytest.mark.asyncio
+async def test_astream_iterate_inputs_are_only_passed_to_first_action():
+    first_action = base_streaming_single_step_counter_with_inputs_async.with_name("first")
+    second_action = base_streaming_single_step_counter_with_inputs_async.with_name("second")
+    app = Application(
+        state=State({"count": 0}),
+        entrypoint="first",
+        partition_key="test",
+        uid="test-123",
+        graph=Graph(
+            actions=[first_action, second_action],
+            transitions=[Transition(first_action, second_action, default)],
+        ),
+    )
+    iterator = app.astream_iterate(inputs={"granularity": 1})
+    _, first_stream = await iterator.__anext__()
+    await first_stream.get()
+    with pytest.raises(ValueError, match="missing required inputs"):
+        await iterator.__anext__()
 
 
 async def test_astream_result_halt_after_run_through_streaming():
