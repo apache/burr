@@ -3401,6 +3401,155 @@ async def test_application_run_step_runs_hooks():
     assert len(hooks[0].pre_run_execute_calls) == 1
 
 
+async def test_astep_processes_inputs_before_pre_run_step_hook():
+    class InputCaptureHook(PreRunStepHook):
+        def __init__(self):
+            self.captured_inputs = []
+
+        def pre_run_step(self, *, inputs, **kwargs):
+            self.captured_inputs.append(inputs)
+
+    @action(reads=[], writes=['val'])
+    def sync_noop(state: State) -> State:
+        return state.update(val=1)
+
+    @action(reads=[], writes=['val'])
+    async def async_noop(state: State) -> State:
+        return state.update(val=2)
+
+    # 1. Test sync action executed via astep()
+    sync_hook = InputCaptureHook()
+    app_sync = (
+        ApplicationBuilder()
+        .with_actions(sync_noop)
+        .with_entrypoint('sync_noop')
+        .with_hooks(sync_hook)
+        .build()
+    )
+    await app_sync.astep(inputs={'unused': 123})
+    assert sync_hook.captured_inputs == [{}]
+
+    # 2. Test async action executed via astep()
+    async_hook = InputCaptureHook()
+    app_async = (
+        ApplicationBuilder()
+        .with_actions(async_noop)
+        .with_entrypoint('async_noop')
+        .with_hooks(async_hook)
+        .build()
+    )
+    await app_async.astep(inputs={'unused': 123})
+    assert async_hook.captured_inputs == [{}]
+
+
+async def test_astep_validates_inputs_before_pre_run_step_hook():
+    class InputCaptureHook(PreRunStepHook):
+        def __init__(self):
+            self.call_count = 0
+
+        def pre_run_step(self, *, inputs, **kwargs):
+            self.call_count += 1
+
+    @action(reads=[], writes=['val'])
+    def sync_requires_param(state: State, required_param: int) -> State:
+        return state.update(val=required_param)
+
+    @action(reads=[], writes=['val'])
+    async def async_requires_param(state: State, required_param: int) -> State:
+        return state.update(val=required_param)
+
+    # 1. Sync action under astep: missing required input should raise ValueError before pre_run_step
+    hook_sync = InputCaptureHook()
+    app_sync = (
+        ApplicationBuilder()
+        .with_actions(sync_requires_param)
+        .with_entrypoint('sync_requires_param')
+        .with_hooks(hook_sync)
+        .build()
+    )
+    with pytest.raises(ValueError):
+        await app_sync.astep(inputs={})
+    assert hook_sync.call_count == 0
+
+    # 2. Async action under astep: missing required input should raise ValueError before pre_run_step
+    hook_async = InputCaptureHook()
+    app_async = (
+        ApplicationBuilder()
+        .with_actions(async_requires_param)
+        .with_entrypoint('async_requires_param')
+        .with_hooks(hook_async)
+        .build()
+    )
+    with pytest.raises(ValueError):
+        await app_async.astep(inputs={})
+    assert hook_async.call_count == 0
+
+
+@pytest.mark.parametrize(
+    'execute', ['step', 'astep_with_sync_action', 'astep_with_async_action']
+)
+async def test_step_and_astep_share_one_processed_inputs_dict(execute: str):
+    """The pre_run_step hook and the action must receive the same processed inputs.
+
+    Regression for the sync branch of ``astep``: it used to delegate with
+    ``_step(inputs=inputs)``, which ran ``_process_inputs`` a second time. An action
+    that declares ``__context`` therefore got a second object from the dependency
+    factory, so the hook and the action did not share the same instance (#979).
+    """
+    created_contexts = []
+    hook_contexts = []
+    action_contexts = []
+
+    def counting_context_factory(action, sequence_id):
+        context = object()
+        created_contexts.append(context)
+        return context
+
+    @action(reads=[], writes=['val'])
+    def sync_with_context(state: State, __context) -> State:
+        action_contexts.append(__context)
+        return state.update(val=1)
+
+    @action(reads=[], writes=['val'])
+    async def async_with_context(state: State, __context) -> State:
+        action_contexts.append(__context)
+        return state.update(val=2)
+
+    class ContextCaptureHook(PreRunStepHook):
+        def pre_run_step(self, *, inputs, **kwargs):
+            hook_contexts.append(inputs['__context'])
+
+    if execute == 'astep_with_async_action':
+        entrypoint = 'async_with_context'
+        target_action = async_with_context
+    else:
+        entrypoint = 'sync_with_context'
+        target_action = sync_with_context
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(target_action)
+        .with_entrypoint(entrypoint)
+        .with_hooks(ContextCaptureHook())
+        .build()
+    )
+    # Swap in a factory that returns a fresh object on every call, so a second run of
+    # _process_inputs is visible both as a call count and as a distinct instance.
+    app._dependency_factory['__context'] = counting_context_factory
+
+    if execute == 'step':
+        assert app.step() is not None
+    else:
+        await app.astep()
+
+    assert len(created_contexts) == 1, (
+        f'__context factory ran {len(created_contexts)} times, expected once'
+    )
+    assert hook_contexts == created_contexts
+    assert action_contexts == created_contexts
+    assert hook_contexts[0] is action_contexts[0]
+
+
 def test_application_post_application_create_hook():
     class PostApplicationCreateTracker(PostApplicationCreateHook):
         def __init__(self):
