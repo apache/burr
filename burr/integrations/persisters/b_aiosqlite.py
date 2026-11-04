@@ -254,7 +254,7 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
         row = await cursor.fetchone()
         if row is None:
             return None
-        _state = State.deserialize(json.loads(row[1]), **self.serde_kwargs)
+        _state = await State.adeserialize(json.loads(row[1]), **self.serde_kwargs)
         return {
             "partition_key": partition_key,
             "app_id": row[3],
@@ -307,7 +307,7 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
             else AsyncSQLitePersister.PARTITION_KEY_DEFAULT
         )
         cursor = await self.connection.cursor()
-        json_state = json.dumps(state.serialize(**self.serde_kwargs))
+        json_state = json.dumps(await state.aserialize(**self.serde_kwargs))
         await cursor.execute(
             f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
             f"VALUES (?, ?, ?, ?, ?, ?)",

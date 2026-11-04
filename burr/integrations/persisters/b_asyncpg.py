@@ -356,7 +356,7 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
 
             # converts from asyncpg str to dict
             json_row = json.loads(row[1])
-            _state = state.State.deserialize(json_row, **self.serde_kwargs)
+            _state = await state.State.adeserialize(json_row, **self.serde_kwargs)
             return {
                 "partition_key": partition_key,
                 "app_id": row[3],
@@ -410,7 +410,7 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
 
         conn, acquired = await self._get_connection()
         try:
-            json_state = json.dumps(state.serialize(**self.serde_kwargs))
+            json_state = json.dumps(await state.aserialize(**self.serde_kwargs))
             query = (
                 f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
                 "VALUES ($1, $2, $3, $4, $5, $6)"

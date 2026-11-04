@@ -50,6 +50,11 @@ def register_field_serde(field_name: str, serializer: Callable, deserializer: Ca
 
         register_field_serde("my_field", my_field_serializer, my_field_deserializer)
 
+    Both functions also receive ``serialization_context`` (see
+    :py:class:`~burr.core.serde.SerializationContext`) when the application has an object store.
+    Either may be ``async def``, in which case use :py:meth:`State.aserialize` /
+    :py:meth:`State.adeserialize` (as async persisters do).
+
     :param field_name: The name of the field to register the serializer for.
     :param serializer: A function that takes the field value and returns a JSON serializable object.
     :param deserializer: A function that takes the JSON serializable object and returns the field value.
@@ -323,42 +328,102 @@ class State(Mapping, Generic[StateType]):
         return dict(self)
 
     def serialize(self, **kwargs) -> dict:
-        """Converts the state to a JSON serializable object"""
-        _dict = self.get_all()
+        """Converts the state to a JSON serializable object. The current
+        :py:class:`~burr.core.serde.SerializationContext`, if any, is passed to every serializer.
 
-        def _serialize(k, v, **extrakwargs) -> Union[dict, str]:
-            """chooses the correct serde function for the given key and calls it"""
+        :param kwargs: Keyword arguments passed through to every serializer.
+        """
+        kwargs = serde.with_serialization_context(kwargs)
+        return {k: self._serialize_field(k, v, **kwargs) for k, v in self.get_all().items()}
+
+    async def aserialize(self, **kwargs) -> dict:
+        """Asynchronous counterpart to :py:meth:`serialize` -- awaits ``async def`` serializers.
+        Used by async persisters.
+
+        :param kwargs: Keyword arguments passed through to every serializer.
+        """
+        kwargs = serde.with_serialization_context(kwargs)
+        out = {}
+        for k, v in self.get_all().items():
             try:
                 if k in FIELD_SERIALIZATION:
-                    result = FIELD_SERIALIZATION[k][0](v, **extrakwargs)
-                    if not isinstance(result, dict):
-                        raise ValueError(
-                            f"Field serde for {k} must return a dict,"
-                            f" but {FIELD_SERIALIZATION[k][0].__name__} returned {type(result)} ({str(result)[0:10]})."
-                        )
-                    return result
-                return serde.serialize(v, **extrakwargs)
+                    result = FIELD_SERIALIZATION[k][0](v, **kwargs)
+                    if inspect.isawaitable(result):
+                        result = await result
+                    out[k] = self._validate_field_serde_result(k, result)
+                else:
+                    out[k] = await serde.aserialize(v, **kwargs)
             except Exception as e:
                 raise ValueError(
                     f"Failed to serialize state field '{k}' (value of type {type(v).__name__}): {e}"
                 ) from e
+        return out
 
-        return {k: _serialize(k, v, **kwargs) for k, v in _dict.items()}
+    @staticmethod
+    def _validate_field_serde_result(k: str, result: Any) -> dict:
+        if not isinstance(result, dict):
+            raise ValueError(
+                f"Field serde for {k} must return a dict,"
+                f" but {FIELD_SERIALIZATION[k][0].__name__} returned {type(result)} ({str(result)[0:10]})."
+            )
+        return result
+
+    @classmethod
+    def _serialize_field(cls, k: str, v: Any, **kwargs) -> Union[dict, str]:
+        """chooses the correct serde function for the given key and calls it"""
+        try:
+            if k in FIELD_SERIALIZATION:
+                result = serde.ensure_not_awaitable(
+                    FIELD_SERIALIZATION[k][0](v, **kwargs), f"field serializer for '{k}'"
+                )
+                return cls._validate_field_serde_result(k, result)
+            return serde.ensure_not_awaitable(
+                serde.serialize(v, **kwargs), f"serializer registered for {type(v).__name__}"
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Failed to serialize state field '{k}' (value of type {type(v).__name__}): {e}"
+            ) from e
 
     @classmethod
     def deserialize(cls, json_dict: dict, **kwargs) -> "State[StateType]":
-        """Converts a dictionary representing a JSON object back into a state"""
+        """Converts a dictionary representing a JSON object back into a state. The current
+        :py:class:`~burr.core.serde.SerializationContext`, if any, is passed to every deserializer.
+        """
+        kwargs = serde.with_serialization_context(kwargs)
 
         def _deserialize(k, v: Union[str, dict], **extrakwargs) -> Callable:
             """chooses the correct serde function for the given key and calls it"""
             try:
                 if k in FIELD_SERIALIZATION:
-                    return FIELD_SERIALIZATION[k][1](v, **extrakwargs)
+                    return serde.ensure_not_awaitable(
+                        FIELD_SERIALIZATION[k][1](v, **extrakwargs), f"field deserializer for '{k}'"
+                    )
                 return serde.deserialize(v, **extrakwargs)
             except Exception as e:
                 raise ValueError(f"Failed to deserialize state field '{k}': {e}") from e
 
         return State({k: _deserialize(k, v, **kwargs) for k, v in json_dict.items()})
+
+    @classmethod
+    async def adeserialize(cls, json_dict: dict, **kwargs) -> "State[StateType]":
+        """Asynchronous counterpart to :py:meth:`deserialize` -- awaits ``async def``
+        deserializers. Used by async persisters.
+        """
+        kwargs = serde.with_serialization_context(kwargs)
+        out = {}
+        for k, v in json_dict.items():
+            try:
+                if k in FIELD_SERIALIZATION:
+                    result = FIELD_SERIALIZATION[k][1](v, **kwargs)
+                    if inspect.isawaitable(result):
+                        result = await result
+                    out[k] = result
+                else:
+                    out[k] = await serde.adeserialize(v, **kwargs)
+            except Exception as e:
+                raise ValueError(f"Failed to deserialize state field '{k}': {e}") from e
+        return State(out)
 
     def update(self, **updates: Any) -> "State[StateType]":
         """Updates the state with a set of key-value pairs

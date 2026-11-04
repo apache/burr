@@ -19,8 +19,9 @@
 hamilton implementation, but significantly simplified."""
 import asyncio
 import collections
+import contextlib
 import inspect
-from typing import TYPE_CHECKING, Callable, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Callable, ContextManager, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     # type-checking-only for a circular import
@@ -113,12 +114,19 @@ class LifecycleAdapterSet:
     does increase the stack trace in an error, it should be pretty easy to figure out what's going on.
     """
 
-    def __init__(self, *adapters: "LifecycleAdapter"):
+    def __init__(
+        self,
+        *adapters: "LifecycleAdapter",
+        hook_context: Optional[Callable[[], ContextManager]] = None,
+    ):
         """Initializes the adapter set.
 
         :param adapters: Adapters to group together
+        :param hook_context: Optional factory for a context manager entered around every hook
+            dispatch (e.g. to set the serialization context).
         """
         self._adapters = list(adapters)
+        self._hook_context = hook_context
         self.sync_hooks, self.async_hooks = self._get_lifecycle_hooks()
 
     def with_new_adapters(self, *adapters: "LifecycleAdapter") -> "LifecycleAdapterSet":
@@ -127,7 +135,20 @@ class LifecycleAdapterSet:
         :param adapters: Adapters to add
         :return: A new adapter set with the new adapters
         """
-        return LifecycleAdapterSet(*self.adapters, *adapters)
+        return LifecycleAdapterSet(*self.adapters, *adapters, hook_context=self._hook_context)
+
+    def with_hook_context(
+        self, hook_context: Optional[Callable[[], ContextManager]]
+    ) -> "LifecycleAdapterSet":
+        """Returns a new adapter set that enters ``hook_context()`` around every hook dispatch.
+
+        :param hook_context: Factory for the context manager to enter.
+        :return: A new adapter set with the same adapters
+        """
+        return LifecycleAdapterSet(*self.adapters, hook_context=hook_context)
+
+    def _enter_hook_context(self) -> ContextManager:
+        return self._hook_context() if self._hook_context is not None else contextlib.nullcontext()
 
     def _get_lifecycle_hooks(
         self,
@@ -179,8 +200,9 @@ class LifecycleAdapterSet:
         """
         if not self._does_hook(hook_name, False):
             return
-        for adapter in self.sync_hooks[hook_name]:
-            getattr(adapter, hook_name)(**kwargs)
+        with self._enter_hook_context():
+            for adapter in self.sync_hooks[hook_name]:
+                getattr(adapter, hook_name)(**kwargs)
 
     async def call_all_lifecycle_hooks_async(self, hook_name: str, **kwargs):
         """Calls all the lifecycle hooks in this group, by hook name (stage).
@@ -190,12 +212,13 @@ class LifecycleAdapterSet:
         """
         if not self._does_hook(hook_name, True):
             return
-        futures = []
-        for adapter in self.async_hooks[hook_name]:
-            futures.append(getattr(adapter, hook_name)(**kwargs))
-        if len(futures) == 0:
-            return  # No async hooks to call
-        await asyncio.gather(*futures)
+        with self._enter_hook_context():
+            futures = []
+            for adapter in self.async_hooks[hook_name]:
+                futures.append(getattr(adapter, hook_name)(**kwargs))
+            if len(futures) == 0:
+                return  # No async hooks to call
+            await asyncio.gather(*futures)
 
     async def call_all_lifecycle_hooks_sync_and_async(self, hook_name: str, **kwargs):
         """Calls all the lifecycle hooks in this group, by hook name (stage).
