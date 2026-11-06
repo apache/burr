@@ -591,6 +591,65 @@ object.</p>
 </pre></div>
 </div>
 <p>Thus you can run this in a web-service, a streamlit app, etc…</p>
+<section id="stopping-a-stream-early">
+<h3>Stopping a stream early<a class="headerlink" href="#stopping-a-stream-early" title="Link to this heading">¶</a></h3>
+<p>When you stop reading a stream before it finishes (the user hit stop, a check tripped, the client
+disconnected), Burr stops the action right away: its cleanup (<code class="docutils literal notranslate"><span class="pre">finally</span></code> blocks, <code class="docutils literal notranslate"><span class="pre">with</span></code>/<code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">with</span></code>
+exits such as an open HTTP stream) runs, then the step is reported. You don’t need to drain the stream.</p>
+<p><strong>Sync: just</strong> <code class="docutils literal notranslate"><span class="pre">break</span></code>. This works the same for <code class="docutils literal notranslate"><span class="pre">stream_result</span></code> and <code class="docutils literal notranslate"><span class="pre">stream_iterate</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">action</span><span class="p">,</span> <span class="n">streaming_result</span> <span class="o">=</span> <span class="n">application</span><span class="o">.</span><span class="n">stream_result</span><span class="p">(</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="s1">'streaming_response'</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">streaming_result</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">should_stop</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+        <span class="k">break</span>  <span class="c1"># the action's cleanup runs here</span>
+</pre></div>
+</div>
+<p><strong>Async:</strong> <code class="docutils literal notranslate"><span class="pre">break</span></code> <strong>inside</strong> <code class="docutils literal notranslate"><span class="pre">contextlib.aclosing</span></code>. Python never closes an async generator synchronously
+when you <code class="docutils literal notranslate"><span class="pre">break</span></code>; it leaves that to the event loop, at some later point. <code class="docutils literal notranslate"><span class="pre">aclosing</span></code> makes it happen as you
+leave the block:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+
+<span class="n">action</span><span class="p">,</span> <span class="n">async_streaming_result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">application</span><span class="o">.</span><span class="n">astream_result</span><span class="p">(</span>
+    <span class="n">halt_after</span><span class="o">=</span><span class="s1">'streaming_response'</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"prompt"</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">aclosing</span><span class="p">(</span><span class="n">async_streaming_result</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">async_streaming_result</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">should_stop</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+            <span class="k">break</span>
+
+<span class="k">async</span> <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">aclosing</span><span class="p">(</span><span class="n">application</span><span class="o">.</span><span class="n">astream_iterate</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"respond"</span><span class="p">]))</span> <span class="k">as</span> <span class="n">steps</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">streaming_result</span> <span class="ow">in</span> <span class="n">steps</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">streaming_result</span><span class="p">:</span>
+            <span class="o">...</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">async_streaming_result.aclose()</span></code> (or <code class="docutils literal notranslate"><span class="pre">streaming_result.close()</span></code>) does the same explicitly.</p>
+<p><strong>Web servers:</strong> use the async pattern in your response generator. When a client disconnects, the server
+cancels the task that is producing the response, and the cancellation unwinds the action. To stop a stream from
+<em>another</em> task, cancel the task that consumes it: closing a stream while it is producing an item (from a hook,
+or from another task) raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
+<p>A step that is stopped before it completes does not update state, and is reported to <code class="docutils literal notranslate"><span class="pre">post_run_step</span></code> hooks
+with the exception that stopped it – <code class="docutils literal notranslate"><span class="pre">GeneratorExit</span></code> when it is closed, <code class="docutils literal notranslate"><span class="pre">CancelledError</span></code> when the consuming
+task is cancelled. Persisters record it as <code class="docutils literal notranslate"><span class="pre">failed</span></code>, so resuming re-runs that action.</p>
+<p>If stopping raises, the first error wins. An error from the action’s cleanup is what hooks receive, and what
+<code class="docutils literal notranslate"><span class="pre">close()</span></code> / <code class="docutils literal notranslate"><span class="pre">aclose()</span></code> raise; failing that, an error from a <code class="docutils literal notranslate"><span class="pre">post_run_step</span></code> hook is raised. Every later
+<code class="docutils literal notranslate"><span class="pre">close()</span></code> / <code class="docutils literal notranslate"><span class="pre">aclose()</span></code> raises the same error. After a bare <code class="docutils literal notranslate"><span class="pre">break</span></code> there is nobody to raise it to, so it is
+logged. An error raised while stopping never replaces an error that was already stopping the stream (such as a
+bug in a hook); it is logged instead.</p>
+<p><strong>Client disconnects</strong> are an exception to the reporting above. Starlette/FastAPI cancel a disconnected response through an anyio
+cancel scope, which keeps cancelling every <code class="docutils literal notranslate"><span class="pre">await</span></code> inside it:</p>
+<ul class="simple">
+<li><p>the action’s cleanup starts, but an <code class="docutils literal notranslate"><span class="pre">await</span></code> inside it is cancelled too; wrap cleanup that must finish in
+<code class="docutils literal notranslate"><span class="pre">anyio.CancelScope(shield=True)</span></code>;</p></li>
+<li><p>Burr’s await on <em>async</em> <code class="docutils literal notranslate"><span class="pre">post_run_step</span></code> hooks and persisters is cancelled, so the stopped step isn’t
+recorded;</p></li>
+<li><p>resuming is unaffected: the last saved step is the one before, so the interrupted action runs again.</p></li>
+</ul>
+<p>Don’t add sync hooks to an async application to work around this; they block the event loop.</p>
+<p>See the <a class="reference external" href="https://github.com/apache/burr/tree/main/examples/streaming-early-stop">streaming-early-stop example</a>
+for runnable versions of these patterns, including a FastAPI endpoint that handles client disconnects.</p>
+</section>
 </section>
 <section id="considerations">
 <h2>Considerations<a class="headerlink" href="#considerations" title="Link to this heading">¶</a></h2>
@@ -681,7 +740,10 @@ be consistent with the asynchronous method. If you’re using the old version, t
             <ul>
 <li><a class="reference internal" href="#">Streaming Actions</a><ul>
 <li><a class="reference internal" href="#definition">Definition</a></li>
-<li><a class="reference internal" href="#usage">Usage</a></li>
+<li><a class="reference internal" href="#usage">Usage</a><ul>
+<li><a class="reference internal" href="#stopping-a-stream-early">Stopping a stream early</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#considerations">Considerations</a></li>
 </ul>
 </li>

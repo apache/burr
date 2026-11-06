@@ -505,7 +505,7 @@ and add instances to the application builder to customize your state machines’
 <dd><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../state/#burr.core.state.State" title="burr.core.state.State"><span class="pre">State</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../actions/#burr.core.action.Action" title="burr.core.action.Action"><span class="pre">Action</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">exception</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Exception</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exception</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">BaseException</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">future_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
 </dl>
 
@@ -518,7 +518,9 @@ and add instances to the application builder to customize your state machines’
 <li><p><strong>action</strong> – Action that was executed</p></li>
 <li><p><strong>result</strong> – Result of the action</p></li>
 <li><p><strong>sequence_id</strong> – Sequence ID of the action</p></li>
-<li><p><strong>exception</strong> – Exception that was raised</p></li>
+<li><p><strong>exception</strong> – Exception that was raised, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the step completed. A streaming
+step stopped early is reported with <code class="docutils literal notranslate"><span class="pre">GeneratorExit</span></code> (closed) or <code class="docutils literal notranslate"><span class="pre">CancelledError</span></code>
+(its task was cancelled).</p></li>
 <li><p><strong>future_kwargs</strong> – Future keyword arguments</p></li>
 </ul>
 </dd>
@@ -543,7 +545,7 @@ and add instances to the application builder to customize your state machines’
 <dd><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../state/#burr.core.state.State" title="burr.core.state.State"><span class="pre">State</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../actions/#burr.core.action.Action" title="burr.core.action.Action"><span class="pre">Action</span></a></span></em>,</dd>
 <dd><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
-<dd><em class="sig-param"><span class="n"><span class="pre">exception</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Exception</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">exception</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">BaseException</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
 <dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">future_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>,</dd>
 </dl>
 
@@ -556,7 +558,9 @@ and add instances to the application builder to customize your state machines’
 <li><p><strong>action</strong> – Action that was executed</p></li>
 <li><p><strong>result</strong> – Result of the action</p></li>
 <li><p><strong>sequence_id</strong> – Sequence ID of the action</p></li>
-<li><p><strong>exception</strong> – Exception that was raised</p></li>
+<li><p><strong>exception</strong> – Exception that was raised, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the step completed. A streaming
+step stopped early is reported with <code class="docutils literal notranslate"><span class="pre">GeneratorExit</span></code> (closed) or <code class="docutils literal notranslate"><span class="pre">CancelledError</span></code>
+(its task was cancelled).</p></li>
 <li><p><strong>future_kwargs</strong> – Future keyword arguments</p></li>
 </ul>
 </dd>

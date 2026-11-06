@@ -616,7 +616,9 @@ as the last step.</p>
 <li><p><strong>action</strong> – Action that was executed</p></li>
 <li><p><strong>result</strong> – Result of the action</p></li>
 <li><p><strong>sequence_id</strong> – Sequence ID of the action</p></li>
-<li><p><strong>exception</strong> – Exception that was raised</p></li>
+<li><p><strong>exception</strong> – Exception that was raised, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the step completed. A streaming
+step stopped early is reported with <code class="docutils literal notranslate"><span class="pre">GeneratorExit</span></code> (closed) or <code class="docutils literal notranslate"><span class="pre">CancelledError</span></code>
+(its task was cancelled).</p></li>
 <li><p><strong>future_kwargs</strong> – Future keyword arguments</p></li>
 </ul>
 </dd>

@@ -1101,7 +1101,8 @@ which will be empty. Thus <code class="docutils literal notranslate"><span class
 halt_after condition.</p>
 <p>The <a class="reference internal" href="../actions/#burr.core.action.AsyncStreamingResultContainer" title="burr.core.action.AsyncStreamingResultContainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsyncStreamingResultContainer</span></code></a> is meant as a convenience – specifically this allows for
 hooks, callbacks, etc… so you can take the control flow and still have state updated afterwards. Hooks/state update will be called after an exception
-is thrown during streaming, or the stream is completed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.</p>
+is thrown during streaming, the stream is completed, or the stream is closed early (<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">container.aclose()</span></code>, or the
+task is cancelled), in which case the step is reported as failed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.</p>
 <p>To see how this works, let’s take the following action (simplified as a single-node workflow) as an example:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">()</span>
 
@@ -1466,7 +1467,8 @@ which will be empty. Thus <code class="docutils literal notranslate"><span class
 halt_after condition.</p>
 <p>The <a class="reference internal" href="../actions/#burr.core.action.StreamingResultContainer" title="burr.core.action.StreamingResultContainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">StreamingResultContainer</span></code></a> is meant as a convenience – specifically this allows for
 hooks, callbacks, etc… so you can take the control flow and still have state updated afterwards. Hooks/state update will be called after an exception
-is thrown during streaming, or the stream is completed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.</p>
+is thrown during streaming, the stream is completed, or the stream is closed early (<code class="docutils literal notranslate"><span class="pre">container.close()</span></code>), in which case the
+step is reported as failed. Note that it is undefined behavior to attempt to execute another action while a stream is in progress.</p>
 <p>To see how this works, let’s take the following action (simplified as a single-node workflow) as an example:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@streaming_action</span><span class="p">(</span><span class="n">reads</span><span class="o">=</span><span class="p">[],</span> <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s1">'response'</span><span class="p">])</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">streaming_response</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]]:</span>
