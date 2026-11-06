@@ -615,18 +615,27 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
 
 
 class InMemoryPersister(BaseStatePersister):
-    """In-memory persister for testing purposes. This is not recommended for production use."""
+    """In-memory persister for testing purposes. This is not recommended for production use.
+
+    None and the empty string identify the same default partition, as in SQLitePersister.
+    Non-empty partition keys are preserved.
+    """
 
     def __init__(self):
         self._storage = defaultdict(lambda: defaultdict(list))
 
     def load(
-        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
+        self,
+        partition_key: Optional[str],
+        app_id: Optional[str],
+        sequence_id: Optional[int] = None,
+        **kwargs,
     ) -> Optional[PersistedStateData]:
         # If no app_id provided, return None
         if app_id is None:
             return None
 
+        partition_key = "" if partition_key is None else partition_key
         if not (states := self._storage.get(partition_key, {}).get(app_id)):
             return None
 
@@ -639,7 +648,8 @@ class InMemoryPersister(BaseStatePersister):
         # Return the latest state for this sequence_id, if exists
         return matching_states[-1] if matching_states else None
 
-    def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+    def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
+        partition_key = "" if partition_key is None else partition_key
         return list(self._storage[partition_key].keys())
 
     def save(
@@ -652,9 +662,10 @@ class InMemoryPersister(BaseStatePersister):
         status: Literal["completed", "failed"],
         **kwargs,
     ):
+        partition_key = "" if partition_key is None else partition_key
         # Create a PersistedStateData entry
         persisted_state: PersistedStateData = {
-            "partition_key": partition_key or "",
+            "partition_key": partition_key,
             "app_id": app_id,
             "sequence_id": sequence_id,
             "position": position,
@@ -668,18 +679,27 @@ class InMemoryPersister(BaseStatePersister):
 
 
 class AsyncInMemoryPersister(AsyncBaseStatePersister):
-    """Sync in-memory persister for testing purposes. This is not recommended for production use."""
+    """Async in-memory persister for testing purposes. This is not recommended for production use.
+
+    None and the empty string identify the same default partition, as in SQLitePersister.
+    Non-empty partition keys are preserved.
+    """
 
     def __init__(self):
         self._storage = defaultdict(lambda: defaultdict(list))
 
     async def load(
-        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
+        self,
+        partition_key: Optional[str],
+        app_id: Optional[str],
+        sequence_id: Optional[int] = None,
+        **kwargs,
     ) -> Optional[PersistedStateData]:
         # If no app_id provided, return None
         if app_id is None:
             return None
 
+        partition_key = "" if partition_key is None else partition_key
         if not (states := self._storage.get(partition_key, {}).get(app_id)):
             return None
 
@@ -692,7 +712,8 @@ class AsyncInMemoryPersister(AsyncBaseStatePersister):
         # Return the latest state for this sequence_id, if exists
         return matching_states[-1] if matching_states else None
 
-    async def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+    async def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
+        partition_key = "" if partition_key is None else partition_key
         return list(self._storage[partition_key].keys())
 
     async def save(
@@ -705,9 +726,10 @@ class AsyncInMemoryPersister(AsyncBaseStatePersister):
         status: Literal["completed", "failed"],
         **kwargs,
     ):
+        partition_key = "" if partition_key is None else partition_key
         # Create a PersistedStateData entry
         persisted_state: PersistedStateData = {
-            "partition_key": partition_key or "",
+            "partition_key": partition_key,
             "app_id": app_id,
             "sequence_id": sequence_id,
             "position": position,

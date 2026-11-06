@@ -128,6 +128,51 @@ def test_memory_persistence_missing_load_preserves_app_ids(partition_key, has_sa
     assert persistence.load(partition_key, "missing")["state"] == State({"step": 3})
 
 
+@pytest.mark.parametrize("save_key", [None, ""])
+@pytest.mark.parametrize("load_key", [None, ""])
+def test_persistence_default_partition_aliases(persistence, save_key, load_key):
+    """Default partition aliases can list and reload the same checkpoint."""
+    if hasattr(persistence, "initialize"):
+        persistence.initialize()
+    state = State({"step": 1})
+    persistence.save(save_key, "app", 1, "position", state, "completed")
+
+    loaded = persistence.load(load_key, "app", 1)
+    assert loaded is not None
+    assert loaded["partition_key"] == ""
+    assert loaded["state"] == state
+    reloaded = persistence.load(loaded["partition_key"], "app")
+    assert reloaded is not None
+    assert reloaded["state"] == state
+    assert persistence.list_app_ids(load_key) == ["app"]
+    assert persistence.load(load_key, "missing") is None
+    assert persistence.load(load_key, "app", 99) is None
+    assert persistence.list_app_ids(load_key) == ["app"]
+
+
+@pytest.mark.parametrize("first_key,second_key", [(None, ""), ("", None)])
+def test_memory_default_partition_aliases_share_history(first_key, second_key):
+    """Mixed aliases retain history and last-save semantics, not separate apps."""
+    persistence = InMemoryPersister()
+    persistence.save(first_key, "app", 1, "first", State({"step": 1}), "completed")
+    persistence.save(second_key, "app", 2, "second", State({"step": 2}), "completed")
+    persistence.save(first_key, "app", 1, "retry", State({"step": 3}), "completed")
+    persistence.save(second_key, "other", 1, "other", State({"step": 4}), "completed")
+
+    for key in ("tenant", " ", "None"):
+        persistence.save(key, "app", 1, "named", State({"partition": key}), "completed")
+        loaded = persistence.load(key, "app")
+        assert loaded["partition_key"] == key
+        assert loaded["state"] == State({"partition": key})
+
+    for key in (None, ""):
+        assert set(persistence.list_app_ids(key)) == {"app", "other"}
+        assert persistence.load(key, "app")["state"] == State({"step": 3})
+        assert persistence.load(key, "app", 1)["state"] == State({"step": 3})
+        assert persistence.load(key, "app", 2)["state"] == State({"step": 2})
+        assert persistence.load(key, "other")["state"] == State({"step": 4})
+
+
 def test_persistence_is_initialized_false(initializing_persistence):
     assert not initializing_persistence.is_initialized()
 
@@ -399,6 +444,50 @@ async def test_async_persister_methods_none_partition_key(
     # this doesn't guarantee that the results of `partition_key=None` and
     # `partition_key=persistence.PARTITION_KEY_DEFAULT`. This is hard to test because
     # these operations are stateful (i.e., read/write to a db)
+
+
+@pytest.mark.parametrize("save_key", [None, ""])
+@pytest.mark.parametrize("load_key", [None, ""])
+async def test_async_persistence_default_partition_aliases(async_persistence, save_key, load_key):
+    """Default partition aliases can list and reload the same checkpoint."""
+    state = State({"step": 1})
+    await async_persistence.save(save_key, "app", 1, "position", state, "completed")
+
+    loaded = await async_persistence.load(load_key, "app", 1)
+    assert loaded is not None
+    assert loaded["partition_key"] == ""
+    assert loaded["state"] == state
+    reloaded = await async_persistence.load(loaded["partition_key"], "app")
+    assert reloaded is not None
+    assert reloaded["state"] == state
+    assert await async_persistence.list_app_ids(load_key) == ["app"]
+    assert await async_persistence.load(load_key, "missing") is None
+    assert await async_persistence.load(load_key, "app", 99) is None
+    assert await async_persistence.list_app_ids(load_key) == ["app"]
+
+
+@pytest.mark.parametrize("first_key,second_key", [(None, ""), ("", None)])
+async def test_async_memory_default_partition_aliases_share_history(
+    async_persistence, first_key, second_key
+):
+    """Mixed aliases retain history and last-save semantics, not separate apps."""
+    await async_persistence.save(first_key, "app", 1, "first", State({"step": 1}), "completed")
+    await async_persistence.save(second_key, "app", 2, "second", State({"step": 2}), "completed")
+    await async_persistence.save(first_key, "app", 1, "retry", State({"step": 3}), "completed")
+    await async_persistence.save(second_key, "other", 1, "other", State({"step": 4}), "completed")
+
+    for key in ("tenant", " ", "None"):
+        await async_persistence.save(key, "app", 1, "named", State({"partition": key}), "completed")
+        loaded = await async_persistence.load(key, "app")
+        assert loaded["partition_key"] == key
+        assert loaded["state"] == State({"partition": key})
+
+    for key in (None, ""):
+        assert set(await async_persistence.list_app_ids(key)) == {"app", "other"}
+        assert (await async_persistence.load(key, "app"))["state"] == State({"step": 3})
+        assert (await async_persistence.load(key, "app", 1))["state"] == State({"step": 3})
+        assert (await async_persistence.load(key, "app", 2))["state"] == State({"step": 2})
+        assert (await async_persistence.load(key, "other"))["state"] == State({"step": 4})
 
 
 async def test_AsyncSQLitePersister_from_values():
