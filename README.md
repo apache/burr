@@ -214,18 +214,14 @@ but realized that it has a wide array of applications and decided to release it 
 
 ## Roadmap
 
-While Apache Burr is stable and well-tested, we have quite a few tools/features on our roadmap!
-1. FastAPI integration + hosted deployment -- make it really easy to get Apache Burr in an app in production without thinking about REST APIs
-2. Various efficiency/usability improvements for the core library (see [planned capabilities](https://burr.apache.org/concepts/planned-capabilities/) for more details). This includes:
-   1. First-class support for retries + exception management
-   2. More integration with popular frameworks (LCEL, LLamaIndex, Apache Hamilton, etc...)
-   3. Capturing & surfacing extra metadata, e.g. annotations for particular point in time, that you can then pull out for fine-tuning, etc.
-   4. Improvements to the pydantic-based typing system
-3. Tooling for hosted execution of state machines, integrating with your infrastructure (Ray, modal, FastAPI + EC2, etc...)
-4. Additional storage integrations. More integrations with technologies like MySQL, S3, etc. so you can run Apache Burr on top of what you have available.
+Apache Burr is stable and actively developed. The full status roadmap, with links to docs, pull requests, and design threads, lives at [Roadmap and Status](https://burr.apache.org/concepts/planned-capabilities/). In brief:
 
-If you want to avoid self-hosting the above solutions we're building Burr Cloud. To let us know you're interested
-sign up [here](https://forms.gle/w9u2QKcPrztApRedA) for the waitlist to get access.
+- **Shipped**: state persistence (`initialize_from` + SQLite/PostgreSQL/MongoDB/Redis persisters), annotations in the tracking UI, `Condition.safe_expr`, integrations (Hamilton, Haystack, LangChain, Langfuse, OpenTelemetry, Pydantic, Ray, Bedrock, Streamlit), UI dark mode, and a published [security policy](https://github.com/apache/burr/blob/main/SECURITY.md).
+- **In review**: exception transitions, durable execution (suspend/resume), a visual builder in the UI, an artifact store for large state values, parallel streaming, Mermaid graph export, Aerospike and Google Sheets persisters, a TypeScript port, and a LiteLLM integration.
+- **Under discussion**: durable execution design and the direction of the visual builder, on `dev@burr.apache.org`.
+- **Planned**: build-time graph validation, evaluation and LLM-as-judge over annotations, a FastAPI serving integration, and more storage backends.
+
+Need something sooner? Open an issue or start a thread on the mailing list.
 
 ## Contributing
 
