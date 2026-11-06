@@ -167,6 +167,7 @@ def _run_server(
     initial_page="",
     host: str = "127.0.0.1",
     backend: str = "local",
+    demos: bool = False,
 ):
     # TODO: Implement server running logic here
     # Example: Start a web server, configure ports, etc.
@@ -204,6 +205,9 @@ def _run_server(
     env = {
         "BURR_BACKEND_IMPL": BACKEND_MODULES[backend],
     }
+    if demos:
+        # The demo routers are off unless this is set; see burr.tracking.server.run.
+        env["BURR_SERVER_DEMOS"] = "true"
     _command(cmd, capture_output=False, addl_env=env)
 
 
@@ -215,8 +219,9 @@ def _run_server(
 @click.option(
     "--host",
     default="127.0.0.1",
-    help="Host to run the server on -- use 0.0.0.0 if you want "
-    "to expose it to the network (E.G. in a docker image)",
+    help="Host to run the server on -- defaults to 127.0.0.1 (local only). Use 0.0.0.0 if you "
+    "want to expose it to the network (E.G. in a docker image); the server has no built-in "
+    "authentication, so put it behind an authenticating proxy when doing so.",
 )
 @click.option(
     "--backend",
@@ -227,13 +232,20 @@ def _run_server(
 def run_server(
     port: int, dev_mode: bool, no_open: bool, no_copy_demo_data: bool, host: str, backend: str
 ):
+    """Run the Burr UI server.
+
+    The demo apps (counter, chatbot, email assistant, ...) are not mounted unless the
+    BURR_SERVER_DEMOS environment variable is set to 1, true or yes; `burr-demo` runs the
+    server with them on.
+    """
     _run_server(port, dev_mode, no_open, no_copy_demo_data, host=host, backend=backend)
 
 
 @cli.command()
 @click.option("--port", default=7241, help="Port to run the server on")
 def demo_server(port: int):
-    _run_server(port, True, False, False, "demos/chatbot")
+    """Run the Burr UI server with the demo apps mounted (sets BURR_SERVER_DEMOS=true)."""
+    _run_server(port, True, False, False, "demos/chatbot", demos=True)
 
 
 @cli.command(help="Publishes the package to a repository")

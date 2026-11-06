@@ -19,6 +19,7 @@ import abc
 import collections
 import importlib
 import json
+import logging
 import os.path
 import sys
 from datetime import datetime
@@ -31,6 +32,7 @@ from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from burr.tracking.common import models
+from burr.tracking.common.identifiers import join_within, validate_identifier
 from burr.tracking.common.models import ChildApplicationModel
 from burr.tracking.server import schema
 from burr.tracking.server.schema import (
@@ -43,6 +45,8 @@ from burr.tracking.server.schema import (
 )
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 # The following is a backend for the server.
 # Note this is not a fixed API yet, and thus not documented (in Burr's documentation)
@@ -293,6 +297,42 @@ def get_uri(project_id: str) -> str:
 DEFAULT_PATH = os.path.expanduser("~/.burr")
 
 
+def _validate_identifier(value: str, name: str = "identifier") -> str:
+    """Validate a project/app identifier that is used as a path component under the storage
+    directory. The rule itself lives in :mod:`burr.tracking.common.identifiers` and is shared
+    with the tracking client; this wrapper reports failures as HTTP 400.
+
+    :param value: the identifier to validate
+    :param name: label for the error message, e.g. ``"project_id"``
+    :return: the identifier if valid
+    :raises fastapi.HTTPException: 400 if the identifier does not meet the rule
+    """
+    try:
+        return validate_identifier(value, name)
+    except ValueError as e:
+        raise fastapi.HTTPException(status_code=400, detail=str(e)) from e
+
+
+def _safe_join(base: str, *parts: str) -> str:
+    """Join path components and ensure the result stays inside ``base``.
+
+    Delegates to :func:`burr.tracking.common.identifiers.join_within`, which resolves symlinks
+    on both sides before comparing, so a link under the storage directory that points elsewhere
+    is rejected too. Failures are reported as HTTP 400 without echoing the storage location.
+
+    :param base: the allowed base directory
+    :param parts: path components to join
+    :return: the joined path
+    :raises fastapi.HTTPException: 400 if the resolved path is not inside the base directory
+    """
+    try:
+        return join_within(base, *parts)
+    except ValueError as e:
+        raise fastapi.HTTPException(
+            status_code=400, detail="Invalid path: must be inside the storage directory."
+        ) from e
+
+
 class LocalBackend(BackendBase, AnnotationsBackendMixin):
     """Quick implementation of a local backend for testing purposes. This is not a production backend.
 
@@ -303,7 +343,8 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         self.path = path
 
     def _get_annotation_path(self, project_id: str) -> str:
-        return os.path.join(self.path, project_id, "annotations.jsonl")
+        _validate_identifier(project_id, "project_id")
+        return _safe_join(self.path, project_id, "annotations.jsonl")
 
     async def _load_project_annotations(self, project_id: str):
         annotations_path = self._get_annotation_path(project_id)
@@ -464,7 +505,8 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[Sequence[ApplicationSummary], int]:
-        project_filepath = os.path.join(self.path, project_id)
+        _validate_identifier(project_id, "project_id")
+        project_filepath = _safe_join(self.path, project_id)
         if not os.path.exists(project_filepath):
             return [], 0
             # raise fastapi.HTTPException(status_code=404, detail=f"Project: {project_id} not found")
@@ -473,9 +515,19 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
             if entry.startswith("."):
                 # skip hidden files/directories
                 continue
-            full_path = os.path.join(project_filepath, entry)
-            metadata_path = os.path.join(full_path, "metadata.json")
-            log_path = os.path.join(full_path, "log.jsonl")
+            try:
+                full_path = _safe_join(project_filepath, entry)
+                metadata_path = _safe_join(full_path, "metadata.json")
+                log_path = _safe_join(full_path, "log.jsonl")
+            except fastapi.HTTPException:
+                # An entry (or one of its files) that resolves outside the storage directory
+                # is left out of the listing rather than failing the whole page.
+                logger.warning(
+                    "Skipping %r in project %r: it does not resolve inside the storage directory",
+                    entry,
+                    project_id,
+                )
+                continue
             if os.path.isdir(full_path):
                 metadata = await self._load_metadata(metadata_path)
                 app_partition_key = metadata.partition_key
@@ -506,15 +558,19 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
     ) -> ApplicationLogs:
         # TODO -- handle partition key here
         # This currently assumes uniqueness
-        app_filepath = os.path.join(self.path, project_id, app_id)
+        _validate_identifier(project_id, "project_id")
+        _validate_identifier(app_id, "app_id")
+        app_filepath = _safe_join(self.path, project_id, app_id)
         if not os.path.exists(app_filepath):
             raise fastapi.HTTPException(
                 status_code=404, detail=f"App: {app_id} from project: {project_id} not found"
             )
-        log_file = os.path.join(app_filepath, "log.jsonl")
-        graph_file = os.path.join(app_filepath, "graph.json")
-        metadata_file = os.path.join(app_filepath, "metadata.json")
-        children_file = os.path.join(app_filepath, "children.jsonl")
+        # The fixed filenames go through the same containment check as the identifiers, so a
+        # link under the app directory that points elsewhere is refused before it is opened.
+        log_file = _safe_join(app_filepath, "log.jsonl")
+        graph_file = _safe_join(app_filepath, "graph.json")
+        metadata_file = _safe_join(app_filepath, "metadata.json")
+        children_file = _safe_join(app_filepath, "children.jsonl")
         metadata = await self._load_metadata(metadata_file)
         if not os.path.exists(graph_file):
             raise fastapi.HTTPException(
