@@ -91,6 +91,75 @@ async def test_async_persistence_list_app_ids_is_unique_and_newest_first(async_p
     assert await async_persistence.list_app_ids("pk") == ["a-app", "z-app"]
 
 
+@pytest.mark.parametrize("partition_key", [None, "", "tenant", " "])
+@pytest.mark.parametrize("latest_app", ["a-app", "z-app"])
+async def test_async_sqlite_list_app_ids_breaks_timestamp_ties(tmp_path, partition_key, latest_app):
+    db_path = str(tmp_path / "app-order.db")
+    first_app = "z-app" if latest_app == "a-app" else "a-app"
+    read_keys = (None, "") if partition_key in (None, "") else (partition_key,)
+    async with AsyncSQLitePersister.from_values(
+        db_path=db_path, table_name="test_table"
+    ) as persister:
+        await persister.initialize()
+        assert await persister.list_app_ids(partition_key) == []
+        for app_id, sequence_id in [(latest_app, 0), (first_app, 0), (latest_app, 1)]:
+            await persister.save(
+                partition_key, app_id, sequence_id, "step", State({"app": app_id}), "completed"
+            )
+        # A later row for the same app in another partition must not affect the order.
+        await persister.save("other-partition", first_app, 2, "step", State({}), "completed")
+        # Avoid wall-clock races: all saves have exactly the same timestamp.
+        await persister.connection.execute(
+            "UPDATE test_table SET created_at = '2026-01-01 00:00:00'"
+        )
+        await persister.connection.commit()
+        for read_key in read_keys:
+            assert await persister.list_app_ids(read_key) == [latest_app, first_app]
+
+    async with AsyncSQLitePersister.from_values(
+        db_path=db_path, table_name="test_table"
+    ) as persister:
+        for read_key in read_keys:
+            app_ids = await persister.list_app_ids(read_key)
+            assert app_ids == [latest_app, first_app]
+            assert (await persister.load(read_key, None))["app_id"] == app_ids[0]
+            assert (await persister.load(read_key, app_ids[0]))["state"] == State(
+                {"app": latest_app}
+            )
+        assert await persister.list_app_ids("missing-partition") == []
+
+
+@pytest.mark.parametrize(
+    "timestamps,expected",
+    [
+        (
+            ["2026-01-02 00:00:00", "2026-01-01 00:00:00", "2026-01-01 00:00:00"],
+            ["a-app", "z-app"],
+        ),
+        (
+            ["2026-01-02 00:00:00", "2026-01-02 00:00:00", "2026-01-01 00:00:00"],
+            ["z-app", "a-app"],
+        ),
+    ],
+    ids=["timestamp-before-insertion-order", "tie-break-uses-latest-timestamp-row"],
+)
+async def test_async_sqlite_list_app_ids_prioritizes_latest_timestamp_rows(timestamps, expected):
+    async with AsyncSQLitePersister.from_values(
+        db_path=":memory:", table_name="test_table"
+    ) as persister:
+        await persister.initialize()
+        saves = [("a-app", 0), ("z-app", 0), ("a-app", 1)]
+        for (app_id, sequence_id), created_at in zip(saves, timestamps):
+            await persister.save("pk", app_id, sequence_id, "step", State({}), "completed")
+            await persister.connection.execute(
+                "UPDATE test_table SET created_at = ? WHERE app_id = ? AND sequence_id = ?",
+                (created_at, app_id, sequence_id),
+            )
+        await persister.connection.commit()
+        assert await persister.list_app_ids("pk") == expected
+        assert (await persister.load("pk", None))["app_id"] == expected[0]
+
+
 @pytest.mark.parametrize("partition_key", [None, "partition"])
 @pytest.mark.parametrize("latest_app,latest_sequence", [("a-app", 12), ("z-app", 0)])
 async def test_async_sqlite_load_latest_breaks_timestamp_ties(

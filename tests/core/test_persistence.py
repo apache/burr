@@ -96,6 +96,65 @@ def test_sqlite_persister_list_app_ids_is_unique_and_newest_first():
     assert persister.list_app_ids("pk") == ["a-app", "z-app"]
 
 
+@pytest.mark.parametrize("partition_key", [None, "", "tenant", " "])
+@pytest.mark.parametrize("latest_app", ["a-app", "z-app"])
+def test_sqlite_list_app_ids_breaks_timestamp_ties(tmp_path, partition_key, latest_app):
+    db_path = str(tmp_path / "app-order.db")
+    first_app = "z-app" if latest_app == "a-app" else "a-app"
+    read_keys = (None, "") if partition_key in (None, "") else (partition_key,)
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        persister.initialize()
+        assert persister.list_app_ids(partition_key) == []
+        for app_id, sequence_id in [(latest_app, 0), (first_app, 0), (latest_app, 1)]:
+            persister.save(
+                partition_key, app_id, sequence_id, "step", State({"app": app_id}), "completed"
+            )
+        # A later row for the same app in another partition must not affect the order.
+        persister.save("other-partition", first_app, 2, "step", State({}), "completed")
+        # Avoid wall-clock races: all saves have exactly the same timestamp.
+        persister.connection.execute("UPDATE test_table SET created_at = '2026-01-01 00:00:00'")
+        persister.connection.commit()
+        for read_key in read_keys:
+            assert persister.list_app_ids(read_key) == [latest_app, first_app]
+
+    with SQLLitePersister(db_path=db_path, table_name="test_table") as persister:
+        for read_key in read_keys:
+            app_ids = persister.list_app_ids(read_key)
+            assert app_ids == [latest_app, first_app]
+            assert (persister.load(read_key, None))["app_id"] == app_ids[0]
+            assert (persister.load(read_key, app_ids[0]))["state"] == State({"app": latest_app})
+        assert persister.list_app_ids("missing-partition") == []
+
+
+@pytest.mark.parametrize(
+    "timestamps,expected",
+    [
+        (
+            ["2026-01-02 00:00:00", "2026-01-01 00:00:00", "2026-01-01 00:00:00"],
+            ["a-app", "z-app"],
+        ),
+        (
+            ["2026-01-02 00:00:00", "2026-01-02 00:00:00", "2026-01-01 00:00:00"],
+            ["z-app", "a-app"],
+        ),
+    ],
+    ids=["timestamp-before-insertion-order", "tie-break-uses-latest-timestamp-row"],
+)
+def test_sqlite_list_app_ids_prioritizes_latest_timestamp_rows(timestamps, expected):
+    with SQLLitePersister(db_path=":memory:", table_name="test_table") as persister:
+        persister.initialize()
+        saves = [("a-app", 0), ("z-app", 0), ("a-app", 1)]
+        for (app_id, sequence_id), created_at in zip(saves, timestamps):
+            persister.save("pk", app_id, sequence_id, "step", State({}), "completed")
+            persister.connection.execute(
+                "UPDATE test_table SET created_at = ? WHERE app_id = ? AND sequence_id = ?",
+                (created_at, app_id, sequence_id),
+            )
+        persister.connection.commit()
+        assert persister.list_app_ids("pk") == expected
+        assert (persister.load("pk", None))["app_id"] == expected[0]
+
+
 @pytest.mark.parametrize("partition_key", [None, "partition_key"])
 @pytest.mark.parametrize("has_saved_app", [False, True])
 def test_memory_persistence_missing_load_preserves_app_ids(partition_key, has_saved_app):
