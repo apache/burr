@@ -17,12 +17,15 @@
 
 import asyncio
 import collections
+import contextlib
 import datetime
+import gc
 import logging
 import typing
 import uuid
 from typing import Any, Awaitable, Callable, Dict, Generator, Literal, Optional, Tuple, Union
 
+import anyio
 import pytest
 
 from burr.core import State
@@ -40,6 +43,7 @@ from burr.core.action import (
     action,
     default,
     expr,
+    streaming_action,
 )
 from burr.core.application import (
     PRIOR_STEP,
@@ -2768,6 +2772,620 @@ async def test_astream_iterate(exhaust_intermediate_generators: bool):
     assert len(stream_event_tracker.pre_start_stream_calls) == 2
     assert len(stream_event_tracker.post_end_stream_calls) == 2
     assert len(stream_event_tracker.post_stream_item_calls) == 20
+
+
+# --- Stopping a streaming action early ---------------------------------------------------------
+# Every way of stopping a stream early (break, close()/aclose(), closing stream_iterate, task
+# cancellation, dropping the container) runs the action's cleanup *first*, then reports the step to
+# hooks/persisters exactly once as failed, without updating state -- independent of timing.
+
+
+class _EarlyStopCleanupError(Exception):
+    pass
+
+
+class _EarlyStopLog:
+    """Ordered record of what the action and the hooks did. Hooks store exception *types* only:
+    holding the exception would keep its traceback, and so the stream's frames, alive."""
+
+    def __init__(self):
+        self.events: list = []
+        self.post_end_stream_calls = 0
+
+    def hooks(self, is_async: bool) -> list:
+        log = self
+
+        def record(exception):
+            log.events.append(("reported", type(exception) if exception is not None else None))
+
+        class SyncHook(PostRunStepHook, PostEndStreamHook):
+            def post_run_step(self, *, exception, **future_kwargs):
+                record(exception)
+
+            def post_end_stream(self, **future_kwargs):
+                log.post_end_stream_calls += 1
+
+        class AsyncHook(PostRunStepHookAsync, PostEndStreamHook):
+            async def post_run_step(self, *, exception, **future_kwargs):
+                await asyncio.sleep(0)
+                record(exception)
+
+            def post_end_stream(self, **future_kwargs):
+                log.post_end_stream_calls += 1
+
+        return [AsyncHook() if is_async else SyncHook()]
+
+
+def _early_stop_action(
+    log: _EarlyStopLog, is_async: bool, cleanup_raises: bool = False, delay: float = 0.0
+):
+    """A streaming action holding a resource that it releases in ``finally``."""
+
+    def cleanup():
+        log.events.append("cleanup")
+        if cleanup_raises:
+            raise _EarlyStopCleanupError("cleanup failed")
+
+    if is_async:
+
+        @streaming_action(reads=[], writes=["x"])
+        async def act(state: State):
+            try:
+                for item in ["a", "b", "c"]:
+                    await asyncio.sleep(delay)
+                    yield {"item": item}, None
+                await asyncio.sleep(delay)
+                yield {"item": "done"}, state.update(x=1)
+            finally:
+                await asyncio.sleep(0)  # e.g. closing an HTTP stream
+                cleanup()
+
+    else:
+
+        @streaming_action(reads=[], writes=["x"])
+        def act(state: State):
+            try:
+                for item in ["a", "b", "c"]:
+                    yield {"item": item}, None
+                yield {"item": "done"}, state.update(x=1)
+            finally:
+                cleanup()
+
+    return act
+
+
+def _early_stop_multi_step_action(log: _EarlyStopLog, is_async: bool) -> Action:
+    if is_async:
+
+        class MultiStepAct(AsyncStreamingAction):
+            reads = []
+            writes = ["x"]
+
+            async def stream_run(self, state: State, **run_kwargs):
+                try:
+                    for i in range(3):
+                        yield {"i": i}
+                finally:
+                    await asyncio.sleep(0)
+                    log.events.append("cleanup")
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(x=result["i"])
+
+    else:
+
+        class MultiStepAct(StreamingAction):
+            reads = []
+            writes = ["x"]
+
+            def stream_run(self, state: State, **run_kwargs):
+                try:
+                    for i in range(3):
+                        yield {"i": i}
+                finally:
+                    log.events.append("cleanup")
+
+            def update(self, result: dict, state: State) -> State:
+                return state.update(x=result["i"])
+
+    return MultiStepAct()
+
+
+@action(reads=["x"], writes=["y"])
+def _early_stop_after(state: State) -> State:
+    return state.update(y=state["x"] + 1)
+
+
+def _early_stop_app(
+    act: Action,
+    log: _EarlyStopLog,
+    is_async: bool,
+    persister: Optional[SQLLitePersister] = None,
+    resume: bool = False,
+    hooks: tuple = (),
+) -> Application:
+    builder = (
+        ApplicationBuilder()
+        .with_actions(act=act, after=_early_stop_after)
+        .with_transitions(("act", "after"))
+        .with_hooks(*log.hooks(is_async), *hooks)
+        .with_identifiers(app_id="early-stop")
+    )
+    if resume:
+        builder = builder.initialize_from(
+            persister, resume_at_next_action=True, default_state={}, default_entrypoint="act"
+        )
+    else:
+        builder = builder.with_entrypoint("act").with_state(State())
+    if persister is not None:
+        builder = builder.with_state_persister(persister)
+    return builder.build()
+
+
+def _early_stop_persister() -> SQLLitePersister:
+    persister = SQLLitePersister(db_path=":memory:", table_name="early_stop")
+    persister.initialize()
+    return persister
+
+
+STOPPED = [("reported", GeneratorExit)]
+
+
+@pytest.fixture
+def no_cyclic_gc():
+    """Early-close behaviour must not depend on when the cyclic GC happens to run."""
+    gc.disable()
+    yield
+    gc.enable()
+
+
+def test_stream_result_break_runs_cleanup_then_reports_failed_step(no_cyclic_gc):
+    """Plain ``for ... break`` is all a sync caller needs: no explicit close()."""
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=False), log, is_async=False)
+    _, container = app.stream_result(halt_after=["act"])
+    for _ in container:
+        break
+    assert log.events == ["cleanup", *STOPPED]
+    assert log.post_end_stream_calls == 1
+    result, state = container.get()
+    assert result is None
+    assert "x" not in state and "x" not in app.state
+
+
+def test_stream_result_dropped_mid_stream_runs_cleanup_then_reports(no_cyclic_gc):
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=False), log, is_async=False)
+    _, container = app.stream_result(halt_after=["act"])
+    items = iter(container)
+    next(items)
+    del items, container
+    assert log.events == ["cleanup", *STOPPED]
+
+
+@pytest.mark.parametrize("awaits_before_aclose", [0, 1, 2, 3, 5])
+async def test_astream_result_break_then_aclose_runs_cleanup_then_reports(
+    awaits_before_aclose: int,
+):
+    """``async for ... break`` hands the iterator to the event loop's async-generator finalizer;
+    an aclose() racing it -- however many awaits later -- must give the same outcome."""
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=True), log, is_async=True)
+    _, container = await app.astream_result(halt_after=["act"])
+    async for _ in container:
+        break
+    for _ in range(awaits_before_aclose):
+        await asyncio.sleep(0)
+    await container.aclose()
+    assert log.events == ["cleanup", *STOPPED]
+    assert log.post_end_stream_calls == 1
+    result, state = await container.get()
+    assert result is None
+    assert "x" not in state and "x" not in app.state
+
+
+async def test_astream_result_dropped_mid_stream_runs_cleanup_then_reports(no_cyclic_gc):
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=True), log, is_async=True)
+    _, container = await app.astream_result(halt_after=["act"])
+    async for _ in container:
+        break
+    del container
+    for _ in range(10):  # let the event loop run the async-generator finalizer
+        await asyncio.sleep(0)
+    assert log.events == ["cleanup", *STOPPED]
+
+
+@pytest.mark.parametrize("multi_step", [False, True], ids=["single_step", "multi_step"])
+@pytest.mark.parametrize("consume_first_item", [True, False])
+def test_stream_iterate_closing_unwinds_in_flight_action(
+    consume_first_item: bool, multi_step: bool
+):
+    log = _EarlyStopLog()
+    act = (
+        _early_stop_multi_step_action(log, is_async=False)
+        if multi_step
+        else _early_stop_action(log, is_async=False)
+    )
+    app = _early_stop_app(act, log, is_async=False)
+    with contextlib.closing(app.stream_iterate(halt_after=["after"])) as steps:
+        for _, container in steps:
+            if consume_first_item:
+                for _ in container:
+                    break
+            break
+    # An action that never started has nothing to clean up.
+    assert log.events == (["cleanup"] if consume_first_item else []) + STOPPED
+    assert log.post_end_stream_calls == 1
+    assert "x" not in app.state
+
+
+@pytest.mark.parametrize("multi_step", [False, True], ids=["single_step", "multi_step"])
+@pytest.mark.parametrize("consume_first_item", [True, False])
+async def test_astream_iterate_aclosing_unwinds_in_flight_action(
+    consume_first_item: bool, multi_step: bool
+):
+    log = _EarlyStopLog()
+    act = (
+        _early_stop_multi_step_action(log, is_async=True)
+        if multi_step
+        else _early_stop_action(log, is_async=True)
+    )
+    app = _early_stop_app(act, log, is_async=True)
+    async with contextlib.aclosing(app.astream_iterate(halt_after=["after"])) as steps:
+        async for _, container in steps:
+            if consume_first_item:
+                async for _ in container:
+                    break
+            break
+    assert log.events == (["cleanup"] if consume_first_item else []) + STOPPED
+    assert log.post_end_stream_calls == 1
+    assert "x" not in app.state
+
+
+async def test_astream_iterate_cancelled_consumer_unwinds_and_reports_cancelled_error():
+    """A web server cancels the response task when the client disconnects."""
+    log = _EarlyStopLog()
+    persister = _early_stop_persister()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async=True, delay=0.05), log, is_async=True, persister=persister
+    )
+    first_item_seen = asyncio.Event()
+
+    async def respond_to_client():
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["after"])) as steps:
+            async for _, container in steps:
+                async for _ in container:
+                    first_item_seen.set()
+
+    task = asyncio.create_task(respond_to_client())
+    await first_item_seen.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert log.events == ["cleanup", ("reported", asyncio.CancelledError)]
+    assert persister.load("", "early-stop")["status"] == "failed"
+
+
+@pytest.mark.parametrize("shield", [False, True], ids=["unshielded", "shielded"])
+async def test_astream_iterate_cancel_scope_runs_cleanup_and_resume_reruns_the_step(shield: bool):
+    """Starlette cancels a disconnected response through an anyio cancel scope. That scope keeps
+    cancelling every ``await`` inside it, so (as for any code under it, not specific to Burr):
+
+    - the action's cleanup starts, but an ``await`` in it is cancelled unless shielded;
+    - Burr's await on async ``post_run_step`` hooks/persisters is cancelled: the step isn't recorded;
+    - resuming still lands on the interrupted action (the last saved step is the one before).
+    """
+
+    @action(reads=[], writes=["x"])
+    def before(state: State) -> State:
+        return state.update(x=0)
+
+    log = _EarlyStopLog()
+    persister = AsyncInMemoryPersister()
+
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            log.events.append("release started")
+            if shield:
+                with anyio.CancelScope(shield=True):
+                    await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(0)
+            log.events.append("release finished")
+
+    @streaming_action(reads=[], writes=["x"])
+    async def act(state: State):
+        async with Connection():
+            for item in ["a", "b", "c"]:
+                await asyncio.sleep(0.05)
+                yield {"item": item}, None
+            yield {"item": "done"}, state.update(x=1)
+
+    async def build(resume: bool) -> Application:
+        builder = (
+            ApplicationBuilder()
+            .with_actions(before=before, act=act)
+            .with_transitions(("before", "act"))
+            .with_hooks(*log.hooks(is_async=True))
+            .with_identifiers(app_id="early-stop")
+            .with_state_persister(persister)
+        )
+        if resume:
+            builder = builder.initialize_from(
+                persister, resume_at_next_action=True, default_state={}, default_entrypoint="before"
+            )
+        else:
+            builder = builder.with_entrypoint("before").with_state(State())
+        return await builder.abuild()
+
+    app = await build(resume=False)
+
+    async def respond_to_client(scope: anyio.CancelScope):
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["act"])) as steps:
+            async for step, container in steps:
+                async for _ in container:
+                    if step.name == "act":
+                        scope.cancel()
+
+    async with anyio.create_task_group() as response:
+        response.start_soon(respond_to_client, response.cancel_scope)
+
+    released = ["release started", "release finished"] if shield else ["release started"]
+    assert log.events == [("reported", None), *released]
+    assert (await persister.load(None, "early-stop"))["position"] == "before"
+    assert (await build(resume=True)).get_next_action().name == "act"
+
+
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+async def test_stopped_step_persists_failed_and_resume_reruns_it(is_async: bool):
+    log = _EarlyStopLog()
+    persister = _early_stop_persister()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async), log, is_async=is_async, persister=persister
+    )
+    if is_async:
+        async with contextlib.aclosing(app.astream_iterate(halt_after=["after"])) as steps:
+            async for _, container in steps:
+                async for _ in container:
+                    break
+                break
+    else:
+        with contextlib.closing(app.stream_iterate(halt_after=["after"])) as steps:
+            for _, container in steps:
+                for _ in container:
+                    break
+                break
+    assert persister.load("", "early-stop")["status"] == "failed"
+    resumed = _early_stop_app(
+        _early_stop_action(log, is_async), log, is_async, persister=persister, resume=True
+    )
+    assert resumed.get_next_action().name == "act"
+
+
+def test_stream_result_close_is_idempotent_and_noop_after_completion():
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=False), log, is_async=False)
+    _, stopped = app.stream_result(halt_after=["act"])
+    next(iter(stopped))
+    stopped.close()
+    stopped.close()
+    assert log.events == ["cleanup", *STOPPED]
+
+    log.events.clear()
+    _, completed = app.stream_result(halt_after=["act"])
+    result, state = completed.get()
+    completed.close()
+    assert result == {"item": "done"} and state["x"] == 1
+    assert log.events == ["cleanup", ("reported", None)]
+
+
+async def test_astream_result_aclose_is_idempotent_and_noop_after_completion():
+    log = _EarlyStopLog()
+    app = _early_stop_app(_early_stop_action(log, is_async=True), log, is_async=True)
+    _, stopped = await app.astream_result(halt_after=["act"])
+    await stopped.__aiter__().__anext__()
+    await stopped.aclose()
+    await stopped.aclose()
+    assert log.events == ["cleanup", *STOPPED]
+
+    log.events.clear()
+    _, completed = await app.astream_result(halt_after=["act"])
+    result, state = await completed.get()
+    await completed.aclose()
+    assert result == {"item": "done"} and state["x"] == 1
+    assert log.events == ["cleanup", ("reported", None)]
+
+
+def test_stream_result_cleanup_error_is_reported_and_raised_by_close(no_cyclic_gc, caplog):
+    """After ``for ... break`` there is nobody to raise a cleanup error to, so it's reported to
+    hooks and logged at the break -- and close() raises it, for callers that want it."""
+    log = _EarlyStopLog()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async=False, cleanup_raises=True), log, is_async=False
+    )
+    _, container = app.stream_result(halt_after=["act"])
+    for _ in container:
+        break
+    assert log.events == ["cleanup", ("reported", _EarlyStopCleanupError)]
+    assert "Stopping a streaming action early raised" in caplog.text
+    with pytest.raises(_EarlyStopCleanupError):
+        container.close()
+    with pytest.raises(_EarlyStopCleanupError):
+        container.close()
+
+
+@pytest.mark.parametrize("awaits_before_aclose", [0, 1, 2, 3, 5])
+async def test_astream_result_cleanup_error_is_reported_and_raised_by_aclose(
+    awaits_before_aclose: int,
+):
+    log = _EarlyStopLog()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async=True, cleanup_raises=True), log, is_async=True
+    )
+    _, container = await app.astream_result(halt_after=["act"])
+    async for _ in container:
+        break
+    for _ in range(awaits_before_aclose):
+        await asyncio.sleep(0)
+    with pytest.raises(_EarlyStopCleanupError):
+        await container.aclose()
+    assert log.events == ["cleanup", ("reported", _EarlyStopCleanupError)]
+
+
+class _EarlyStopHookError(Exception):
+    pass
+
+
+def _raising_post_run_step_hook(is_async: bool):
+    class RaisingHook(PostRunStepHook):
+        def post_run_step(self, **future_kwargs):
+            raise _EarlyStopHookError("bug in post_run_step")
+
+    class RaisingHookAsync(PostRunStepHookAsync):
+        async def post_run_step(self, **future_kwargs):
+            raise _EarlyStopHookError("bug in post_run_step")
+
+    return RaisingHookAsync() if is_async else RaisingHook()
+
+
+@pytest.mark.parametrize("how", ["close", "break_then_close"])
+@pytest.mark.parametrize(
+    "cleanup_raises", [True, False], ids=["cleanup_and_hook_raise", "only_hook_raises"]
+)
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+async def test_close_raises_the_first_error_and_the_same_one_every_time(
+    is_async: bool, cleanup_raises: bool, how: str, no_cyclic_gc, caplog
+):
+    """Contract for errors while stopping a stream, identical for sync and async:
+
+    - the first error wins: a cleanup error, else the ``post_run_step`` hook's error;
+    - every ``close()`` / ``aclose()`` call raises that same error (the step is not re-reported);
+    - hooks see the cleanup error; a hook error superseded by it is logged, not lost.
+    """
+    log = _EarlyStopLog()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async, cleanup_raises=cleanup_raises),
+        log,
+        is_async,
+        hooks=(_raising_post_run_step_hook(is_async),),
+    )
+    expected = _EarlyStopCleanupError if cleanup_raises else _EarlyStopHookError
+    if is_async:
+        _, container = await app.astream_result(halt_after=["act"])
+        if how == "close":
+            iterator = container.__aiter__()
+            await iterator.__anext__()
+        else:
+            async for _ in container:
+                break  # the stop's error has nobody to go to here; aclose() raises it
+            await asyncio.sleep(0)
+        raised = []
+        for _ in range(3):
+            with pytest.raises(expected) as e:
+                await container.aclose()
+            raised.append(e.value)
+        if how == "close":
+            await iterator.aclose()  # leaving the loop afterwards doesn't raise again
+    else:
+        _, container = app.stream_result(halt_after=["act"])
+        if how == "close":
+            iterator = iter(container)
+            next(iterator)
+        else:
+            for _ in container:
+                break
+        raised = []
+        for _ in range(3):
+            with pytest.raises(expected) as e:
+                container.close()
+            raised.append(e.value)
+        if how == "close":
+            iterator.close()
+    assert raised[0] is raised[1] is raised[2]
+    assert log.events == [
+        "cleanup",
+        ("reported", _EarlyStopCleanupError if cleanup_raises else GeneratorExit),
+    ]
+    if cleanup_raises:
+        assert "bug in post_run_step" in caplog.text
+
+
+class _BrokenStreamItemHook(PostStreamItemHook):
+    def post_stream_item(self, **future_kwargs):
+        raise KeyError("bug in a hook")
+
+
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+async def test_cleanup_error_does_not_mask_the_error_that_stopped_the_stream(
+    is_async: bool, caplog
+):
+    log = _EarlyStopLog()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async, cleanup_raises=True),
+        log,
+        is_async,
+        hooks=(_BrokenStreamItemHook(),),
+    )
+    with pytest.raises(KeyError, match="bug in a hook"):
+        if is_async:
+            _, container = await app.astream_result(halt_after=["act"])
+            async for _ in container:
+                pass
+        else:
+            _, container = app.stream_result(halt_after=["act"])
+            for _ in container:
+                pass
+    assert log.events == ["cleanup", ("reported", KeyError)]
+    assert "Cleanup of streaming action 'act' raised while handling" in caplog.text
+
+
+def test_stream_result_close_from_a_hook_raises_a_clear_error():
+    """Closing while the stream is producing an item is not supported: stop from the consumer."""
+    log = _EarlyStopLog()
+    holder = {}
+
+    class CloseFromHook(PostStreamItemHook):
+        def post_stream_item(self, **future_kwargs):
+            holder["container"].close()
+
+    app = _early_stop_app(
+        _early_stop_action(log, is_async=False), log, is_async=False, hooks=(CloseFromHook(),)
+    )
+    _, holder["container"] = app.stream_result(halt_after=["act"])
+    with pytest.raises(RuntimeError, match="Cannot close a streaming result while it is producing"):
+        for _ in holder["container"]:
+            pass
+    assert log.events == ["cleanup", ("reported", RuntimeError)]
+
+
+@pytest.mark.parametrize("during", ["middle_item", "final_item"])
+async def test_astream_result_aclose_from_another_task_raises_and_stream_continues(during: str):
+    """Closing from another task while the consumer is awaiting the next item raises a clear
+    error and leaves the stream alone: the step's outcome is decided by its consumer."""
+    log = _EarlyStopLog()
+    persister = _early_stop_persister()
+    app = _early_stop_app(
+        _early_stop_action(log, is_async=True, delay=0.05), log, is_async=True, persister=persister
+    )
+    _, container = await app.astream_result(halt_after=["act"])
+
+    async def consume():
+        async for _ in container:
+            pass
+
+    async def close_from_elsewhere():
+        await asyncio.sleep(0.07 if during == "middle_item" else 0.17)
+        with pytest.raises(RuntimeError, match="cancel the task that consumes it"):
+            await container.aclose()
+
+    await asyncio.gather(consume(), close_from_elsewhere())
+    assert log.events == ["cleanup", ("reported", None)]
+    assert persister.load("", "early-stop")["status"] == "completed"
+    assert app.state["x"] == 1
 
 
 async def test_astream_result_halt_after_run_through_streaming():

@@ -95,7 +95,7 @@ except ImportError as e:
     )
 
 
-def _format_exception(exception: Exception) -> Optional[str]:
+def _format_exception(exception: Optional[BaseException]) -> Optional[str]:
     if exception is None:
         return None
     return "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))

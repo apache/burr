@@ -224,6 +224,76 @@ This object is effectively a cached iterator. You can use it as follows:
 
 Thus you can run this in a web-service, a streamlit app, etc...
 
+Stopping a stream early
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When you stop reading a stream before it finishes (the user hit stop, a check tripped, the client
+disconnected), Burr stops the action right away: its cleanup (``finally`` blocks, ``with``/``async with``
+exits such as an open HTTP stream) runs, then the step is reported. You don't need to drain the stream.
+
+**Sync: just** ``break``. This works the same for ``stream_result`` and ``stream_iterate``:
+
+.. code-block:: python
+
+    action, streaming_result = application.stream_result(
+        halt_after='streaming_response', inputs={"prompt": prompt}
+    )
+    for result in streaming_result:
+        if should_stop(result):
+            break  # the action's cleanup runs here
+
+**Async:** ``break`` **inside** ``contextlib.aclosing``. Python never closes an async generator synchronously
+when you ``break``; it leaves that to the event loop, at some later point. ``aclosing`` makes it happen as you
+leave the block:
+
+.. code-block:: python
+
+    import contextlib
+
+    action, async_streaming_result = await application.astream_result(
+        halt_after='streaming_response', inputs={"prompt": prompt}
+    )
+    async with contextlib.aclosing(async_streaming_result):
+        async for result in async_streaming_result:
+            if should_stop(result):
+                break
+
+    async with contextlib.aclosing(application.astream_iterate(halt_after=["respond"])) as steps:
+        async for action, streaming_result in steps:
+            async for item in streaming_result:
+                ...
+
+``await async_streaming_result.aclose()`` (or ``streaming_result.close()``) does the same explicitly.
+
+**Web servers:** use the async pattern in your response generator. When a client disconnects, the server
+cancels the task that is producing the response, and the cancellation unwinds the action. To stop a stream from
+*another* task, cancel the task that consumes it: closing a stream while it is producing an item (from a hook,
+or from another task) raises a ``RuntimeError``.
+
+A step that is stopped before it completes does not update state, and is reported to ``post_run_step`` hooks
+with the exception that stopped it -- ``GeneratorExit`` when it is closed, ``CancelledError`` when the consuming
+task is cancelled. Persisters record it as ``failed``, so resuming re-runs that action.
+
+If stopping raises, the first error wins. An error from the action's cleanup is what hooks receive, and what
+``close()`` / ``aclose()`` raise; failing that, an error from a ``post_run_step`` hook is raised. Every later
+``close()`` / ``aclose()`` raises the same error. After a bare ``break`` there is nobody to raise it to, so it is
+logged. An error raised while stopping never replaces an error that was already stopping the stream (such as a
+bug in a hook); it is logged instead.
+
+**Client disconnects** are an exception to the reporting above. Starlette/FastAPI cancel a disconnected response through an anyio
+cancel scope, which keeps cancelling every ``await`` inside it:
+
+* the action's cleanup starts, but an ``await`` inside it is cancelled too; wrap cleanup that must finish in
+  ``anyio.CancelScope(shield=True)``;
+* Burr's await on *async* ``post_run_step`` hooks and persisters is cancelled, so the stopped step isn't
+  recorded;
+* resuming is unaffected: the last saved step is the one before, so the interrupted action runs again.
+
+Don't add sync hooks to an async application to work around this; they block the event loop.
+
+See the `streaming-early-stop example <https://github.com/apache/burr/tree/main/examples/streaming-early-stop>`_
+for runnable versions of these patterns, including a FastAPI endpoint that handles client disconnects.
+
 --------------
 Considerations
 --------------

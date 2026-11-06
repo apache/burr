@@ -98,7 +98,7 @@ class PostRunStepHook(abc.ABC):
         state: "State",
         action: "Action",
         result: Optional[Dict[str, Any]],
-        exception: Exception,
+        exception: Optional[BaseException],
         **future_kwargs: Any,
     ):
         """Run after a step is executed.
@@ -107,7 +107,9 @@ class PostRunStepHook(abc.ABC):
         :param action: Action that was executed
         :param result: Result of the action
         :param sequence_id: Sequence ID of the action
-        :param exception: Exception that was raised
+        :param exception: Exception that was raised, or ``None`` if the step completed. A streaming
+            step stopped early is reported with ``GeneratorExit`` (closed) or ``CancelledError``
+            (its task was cancelled).
         :param future_kwargs: Future keyword arguments
         """
         pass
@@ -127,7 +129,7 @@ class PostRunStepHookAsync(abc.ABC):
         state: "State",
         action: "Action",
         result: Optional[dict],
-        exception: Exception,
+        exception: Optional[BaseException],
         **future_kwargs: Any,
     ):
         """Async run after a step is executed
@@ -136,7 +138,9 @@ class PostRunStepHookAsync(abc.ABC):
         :param action: Action that was executed
         :param result: Result of the action
         :param sequence_id: Sequence ID of the action
-        :param exception: Exception that was raised
+        :param exception: Exception that was raised, or ``None`` if the step completed. A streaming
+            step stopped early is reported with ``GeneratorExit`` (closed) or ``CancelledError``
+            (its task was cancelled).
         :param future_kwargs: Future keyword arguments
         """
         pass
@@ -354,7 +358,7 @@ class PostApplicationExecuteCallHook(abc.ABC):
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         pass
@@ -372,7 +376,7 @@ class PostApplicationExecuteCallHookAsync(abc.ABC):
         partition_key: str,
         state: "State",
         method: ExecuteMethod,
-        exception: Optional[Exception],
+        exception: Optional[BaseException],
         **future_kwargs,
     ):
         pass
