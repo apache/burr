@@ -203,9 +203,10 @@ class TaskBasedParallelAction(SingleStepAction):
 
     .. code-block:: python
 
-        from burr.core import action, state, ApplicationContext
-        from burr.core.parallelism import MapStates, RunnableGraph
-        from typing import Callable, Generator, List
+        import hashlib
+        from burr.core import action, State, ApplicationContext
+        from burr.core.parallelism import RunnableGraph, SubGraphTask, TaskBasedParallelAction
+        from typing import Any, Dict, Generator
 
         @action(reads=["prompt", "model"], writes=["llm_output"])
         def query_llm(state: State, model: str) -> State:
@@ -213,19 +214,15 @@ class TaskBasedParallelAction(SingleStepAction):
             return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model))
 
         class MultipleTaskExample(TaskBasedParallelAction):
-            def tasks(state: State, context: ApplicationContext) -> Generator[SubGraphTask, None, None]:
+            def tasks(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[SubGraphTask, None, None]:
                 for prompt in state["prompts"]:
-                    for action in [
-                        query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                        query_llm.bind(model="o1").with_name("o1_answer"),
-                        query_llm.bind(model="claude").with_name("claude_answer"),
-                    ]
+                    for model in ["gpt-4", "o1", "claude"]:
                         yield SubGraphTask(
-                            action=action, # can be a RunnableGraph as well
-                            state=state.update(prompt=prompt),
+                            graph=RunnableGraph.create(query_llm.bind(model=model)), # can be any RunnableGraph
+                            state=state.update(prompt=prompt, model=model),
                             inputs={},
                             # stable hash -- up to you to ensure uniqueness
-                            application_id=hashlib.sha256(context.application_id + action.name + prompt).hexdigest(),
+                            application_id=hashlib.sha256((context.app_id + model + prompt).encode()).hexdigest(),
                             # a few other parameters we might add -- see advanced usage -- failure conditions, etc...
                         )
 
@@ -399,24 +396,23 @@ class MapActionsAndStates(TaskBasedParallelAction):
 
     .. code-block:: python
 
-        from burr.core import action, state
+        from burr.core import action, Action, ApplicationContext, State
         from burr.core.parallelism import MapActionsAndStates, RunnableGraph
-        from typing import Callable, Generator, List
+        from typing import Any, Callable, Dict, Generator, List
 
-        @action(reads=["prompt", "model"], writes=["llm_output"])
+        @action(reads=["prompt"], writes=["llm_output", "model"])
         def query_llm(state: State, model: str) -> State:
             # TODO -- implement _query_my_llm to call litellm or something
-            return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model))
+            return state.update(llm_output=_query_my_llm(prompt=state["prompt"], model=model), model=model)
 
         class TestModelsOverPrompts(MapActionsAndStates):
 
             def actions(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[Action | Callable | RunnableGraph, None, None]:
-                # make sure to add a name to the action
-                # This is not necessary for subgraphs, as actions will already have names
+                # functions (including bound ones) are named for you, so they can be yielded directly
                 for action in [
-                    query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                    query_llm.bind(model="o1").with_name("o1_answer"),
-                    query_llm.bind(model="claude").with_name("claude_answer"),
+                    query_llm.bind(model="gpt-4"),
+                    query_llm.bind(model="o1"),
+                    query_llm.bind(model="claude"),
                 ]:
                     yield action
 
@@ -604,9 +600,9 @@ class MapActions(MapActionsAndStates, abc.ABC):
 
     .. code-block:: python
 
-        from burr.core import action, state
+        from burr.core import action, Action, ApplicationContext, State
         from burr.core.parallelism import MapActions, RunnableGraph
-        from typing import Callable, Generator, List
+        from typing import Any, Callable, Dict, Generator, List
 
         @action(reads=["prompt", "model"], writes=["llm_output"])
         def query_llm(state: State, model: str) -> State:
@@ -616,24 +612,24 @@ class MapActions(MapActionsAndStates, abc.ABC):
         class TestMultipleModels(MapActions):
 
             def actions(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[Action | Callable | RunnableGraph, None, None]:
-                # Make sure to add a name to the action if you use bind() with a function,
-                # note that these can be different actions, functions, etc...
+                # Functions (including bound ones) are named for you, so they can be yielded directly.
+                # Note that these can be different actions, functions, etc...
                 # in this case we're using `.bind()` to create multiple actions, but we can use some mix of
                 # subgraphs, functions, action objects, etc...
                 for action in [
-                    query_llm.bind(model="gpt-4").with_name("gpt_4_answer"),
-                    query_llm.bind(model="o1").with_name("o1_answer"),
-                    query_llm.bind(model="claude").with_name("claude_answer"),
+                    query_llm.bind(model="gpt-4"),
+                    query_llm.bind(model="o1"),
+                    query_llm.bind(model="claude"),
                 ]:
                     yield action
 
             def state(self, state: State, inputs: Dict[str, Any]) -> State:
                 return state.update(prompt="What is the meaning of life?")
 
-            def reduce(self, states: Generator[State, None, None]) -> State:
+            def reduce(self, state: State, states: Generator[State, None, None]) -> State:
                 all_llm_outputs = []
-                for state in states:
-                    all_llm_outputs.append(state["llm_output"])
+                for sub_state in states:
+                    all_llm_outputs.append(sub_state["llm_output"])
                 return state.update(all_llm_outputs=all_llm_outputs)
 
             @property
@@ -704,9 +700,9 @@ class MapStates(MapActionsAndStates, abc.ABC):
 
     .. code-block:: python
 
-        from burr.core import action, state
+        from burr.core import action, Action, ApplicationContext, State
         from burr.core.parallelism import MapStates, RunnableGraph
-        from typing import Callable, Generator, List
+        from typing import Any, Callable, Dict, Generator, List
 
         @action(reads=["prompt"], writes=["llm_output"])
         def query_llm(state: State) -> State:
@@ -715,11 +711,10 @@ class MapStates(MapActionsAndStates, abc.ABC):
         class TestMultiplePrompts(MapStates):
 
             def action(self, state: State, inputs: Dict[str, Any]) -> Action | Callable | RunnableGraph:
-                # make sure to add a name to the action
-                # This is not necessary for subgraphs, as actions will already have names
-                return query_llm.with_name("query_llm")
+                # functions are named for you, so they can be returned directly
+                return query_llm
 
-            def states(self, state: State, inputs: Dict[str, Any], context: ApplicationContext) -> Generator[State, None, None]:
+            def states(self, state: State, context: ApplicationContext, inputs: Dict[str, Any]) -> Generator[State, None, None]:
                 # You could easily have a list_prompts upstream action that writes to "prompts" in state
                 # And loop through those
                 # This hardcodes for simplicity
