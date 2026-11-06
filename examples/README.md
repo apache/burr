@@ -50,5 +50,6 @@ Note we have a few more in [other-examples](other-examples/), but those do not y
 - [streaming-overview](streaming-overview/) - This example shows how we can use the streaming API to respond to return quicker results to the user and build a seamless experience
 - [streaming-early-stop](streaming-early-stop/) - This example shows how to stop a streaming action early (user stop, moderation, client disconnect) so its resources are released right away and the step is reported as failed.
 - [integrations/bedrock](integrations/bedrock/) - Minimal graphs using Amazon Bedrock (`BedrockAction` and `BedrockStreamingAction`).
+- [integrations/litellm](integrations/litellm/) - Minimal graphs using the LiteLLM AI gateway (`LiteLLMAction` and `LiteLLMStreamingAction`).
 - [tracing-and-spans](tracing-and-spans/) - This example shows how to use Burr to create a simple chatbot with additional visibility. This is a good starting point for understanding how to use Burr's tracing functionality.
 - [web-server](web-server/) - This example shows how to use Burr in a web server. This is a good starting point for understanding how to use Burr for interaction.
