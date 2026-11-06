@@ -4801,6 +4801,17 @@ class ActionWithKwargs(ActionWithoutContext):
         return ["other_param", "foo", "__context"]
 
 
+class ActionWithSuffixedContextInput(ActionWithoutContext):
+    """``user__context`` is a genuine input whose name merely ends with the dunder. Only
+    ``_ActionWithSuffixedContextInput__context`` is the mangled form of the injected one."""
+
+    def run(self, user__context, foo, __context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["user__context", "foo", "__context"]
+
+
 class ActionWithContextTracer(ActionWithoutContext):
     def run(self, __context, other_param, foo, __tracer):
         pass
@@ -4823,6 +4834,172 @@ def test_remap_context_variable_with_mangled_context_kwargs():
         "foo": "foo_value",
     }
     assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+def test_remap_context_variable_does_not_clobber_input_ending_with_dunder():
+    _action = ActionWithSuffixedContextInput()
+
+    inputs = {
+        "__context": "context_value",
+        "user__context": "user_value",
+        "foo": "foo_value",
+    }
+    expected = {
+        "user__context": "user_value",
+        "foo": "foo_value",
+        "_ActionWithSuffixedContextInput__context": "context_value",
+    }
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+class ActionWithUnderscorePrefixedContextInput(ActionWithoutContext):
+    """Neither name is a mangled form of the injected ``__context``: one leading underscore is not
+    enough to be mangled, and another class' mangled name is not this class'."""
+
+    def run(self, _user__context, _OtherAction__context, foo, __context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["_user__context", "_OtherAction__context", "foo", "__context"]
+
+
+def test_remap_context_variable_does_not_clobber_underscore_prefixed_or_foreign_names():
+    _action = ActionWithUnderscorePrefixedContextInput()
+
+    inputs = {
+        "__context": "context_value",
+        "_user__context": "user_value",
+        "_OtherAction__context": "other_value",
+        "foo": "foo_value",
+    }
+    expected = {
+        "_user__context": "user_value",
+        "_OtherAction__context": "other_value",
+        "foo": "foo_value",
+        "_ActionWithUnderscorePrefixedContextInput__context": "context_value",
+    }
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+class _LeadingUnderscoreAction(ActionWithoutContext):
+    """CPython strips leading underscores from the class name before mangling."""
+
+    def run(self, foo, __context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["foo", "__context"]
+
+
+def test_remap_context_variable_strips_leading_underscores_from_class_name():
+    _action = _LeadingUnderscoreAction()
+
+    result = _remap_dunder_parameters(
+        _action.run, {"foo": 1, "__context": "context_value"}, ["__context"]
+    )
+    assert result == {"foo": 1, "_LeadingUnderscoreAction__context": "context_value"}
+
+
+class TracerBase(ActionWithoutContext):
+    def run(self, other_param, foo, __tracer, __context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["other_param", "foo", "__tracer", "__context"]
+
+
+class TracerChild(TracerBase):
+    pass
+
+
+def test_remap_context_variable_uses_the_defining_class_for_inherited_methods():
+    """``run`` is defined in ``TracerBase``, so the mangled parameters keep the base name even though
+    the runtime object is a ``TracerChild`` -- mangling follows ``__qualname__``, not ``type(self)``.
+    """
+    _action = TracerChild()
+
+    inputs = {
+        "other_param": 1,
+        "foo": "foo_value",
+        "__tracer": "tracer_value",
+        "__context": "context_value",
+    }
+    expected = {
+        "other_param": 1,
+        "foo": "foo_value",
+        "_TracerBase__tracer": "tracer_value",
+        "_TracerBase__context": "context_value",
+    }
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
+
+
+def test_remap_context_variable_injected_value_wins_for_its_own_parameter():
+    """A caller passing the mangled name directly is using an undocumented back door; the injected
+    value is what the declared ``__context`` binds to. Pinned so the precedence is not implicit."""
+    _action = ActionWithContext()
+
+    inputs = {
+        "__context": "injected",
+        "_ActionWithContext__context": "caller_supplied",
+        "other_param": "other_value",
+        "foo": "foo_value",
+    }
+    result = _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"])
+    assert result["_ActionWithContext__context"] == "injected"
+
+
+@action(reads=[], writes=["app_id"])
+def _function_based_context_action(state: State, __context: ApplicationContext) -> State:
+    return state.update(app_id=__context.app_id)
+
+
+def test_function_based_action_still_receives_context_after_remap_change():
+    """The function-based path never mangles, so it must keep binding the literal name."""
+    app = (
+        ApplicationBuilder()
+        .with_actions(ctx_action=_function_based_context_action)
+        .with_transitions()
+        .with_entrypoint("ctx_action")
+        .with_identifiers(app_id="context-app-id")
+        .build()
+    )
+    _, _, state = app.step()
+
+    assert state["app_id"] == "context-app-id"
+
+
+class SingleStepActionWithContextAndUserInput(SingleStepAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id", "user_value"]
+
+    @property
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["__context", "_user__context"]
+
+    def run_and_update(self, state: State, __context, _user__context) -> State:
+        return state.update(app_id=__context.app_id, user_value=_user__context)
+
+
+def test_step_single_step_action_keeps_user_input_ending_with_dunder():
+    """End to end: the injected context binds to the mangled parameter while the caller's own
+    ``_user__context`` input reaches the action unchanged."""
+    app = (
+        ApplicationBuilder()
+        .with_actions(ctx_action=SingleStepActionWithContextAndUserInput())
+        .with_transitions()
+        .with_entrypoint("ctx_action")
+        .with_identifiers(app_id="context-app-id")
+        .build()
+    )
+    _, _, state = app.step(inputs={"_user__context": "user_value"})
+
+    assert state["app_id"] == "context-app-id"
+    assert state["user_value"] == "user_value"
 
 
 def test_remap_context_variable_with_mangled_context():
@@ -4967,6 +5144,137 @@ def test_stream_result_class_based_streaming_action_receives_context():
 
 async def test_astream_result_class_based_async_streaming_action_receives_context():
     app = _build_context_app(AsyncStreamingActionWithContext())
+    _, container = await app.astream_result(halt_after=["ctx_action"])
+    result, state = await container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+class SyncActionWithContext(Action):
+    """Class-based sync action whose run() takes the injected ``__context``."""
+
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def run(self, state: State, __context: ApplicationContext) -> dict:
+        return {"app_id": __context.app_id}
+
+    def update(self, result: dict, state: State) -> State:
+        return state.update(**result)
+
+
+class SingleStepActionWithContext(SingleStepAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id)
+
+
+class AsyncSingleStepActionWithContext(SingleStepAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id)
+
+
+class SingleStepStreamingActionWithContext(SingleStepStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    def stream_run_and_update(
+        self, state: State, __context: ApplicationContext
+    ) -> Generator[Tuple[dict, Optional[State]], None, None]:
+        yield {"app_id": __context.app_id}, state.update(app_id=__context.app_id)
+
+
+class AsyncSingleStepStreamingActionWithContext(SingleStepStreamingAction):
+    @property
+    def reads(self) -> list[str]:
+        return []
+
+    @property
+    def writes(self) -> list[str]:
+        return ["app_id"]
+
+    @property
+    def inputs(self) -> list[str]:
+        return ["__context"]
+
+    async def stream_run_and_update(
+        self, state: State, __context: ApplicationContext
+    ) -> AsyncGenerator[Tuple[dict, Optional[State]], None]:
+        yield {"app_id": __context.app_id}, state.update(app_id=__context.app_id)
+
+
+def test_step_class_based_multi_step_action_receives_context():
+    app = _build_context_app(SyncActionWithContext())
+    _, result, state = app.step()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_step_class_based_single_step_action_receives_context():
+    app = _build_context_app(SingleStepActionWithContext())
+    _, result, state = app.step()
+    assert result == {}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astep_class_based_single_step_action_receives_context():
+    app = _build_context_app(AsyncSingleStepActionWithContext())
+    _, result, state = await app.astep()
+    assert result == {}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_stream_result_class_based_single_step_streaming_action_receives_context():
+    app = _build_context_app(SingleStepStreamingActionWithContext())
+    _, container = app.stream_result(halt_after=["ctx_action"])
+    result, state = container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astream_result_class_based_single_step_async_streaming_action_receives_context():
+    app = _build_context_app(AsyncSingleStepStreamingActionWithContext())
     _, container = await app.astream_result(halt_after=["ctx_action"])
     result, state = await container.get()
     assert result == {"app_id": "context-app-id"}
