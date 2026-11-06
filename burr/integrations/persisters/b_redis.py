@@ -46,6 +46,7 @@ class RedisBasePersister(persistence.BaseStatePersister):
     """Main class for Redis persister.
 
     Use this class if you want to directly control injecting the Redis client.
+    Both byte responses and clients configured with ``decode_responses=True`` are supported.
 
     This class is responsible for persisting state data to a Redis database.
     It inherits from the BaseStatePersister class.
@@ -113,7 +114,8 @@ class RedisBasePersister(persistence.BaseStatePersister):
             partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         app_ids = self.connection.zrevrange(namespaced_partition_key, 0, -1)
-        return [app_id.decode() for app_id in app_ids]
+        decode = self.connection.get_encoder().decode
+        return [decode(app_id, force=True) for app_id in app_ids]
 
     def load(
         self, partition_key: Optional[str], app_id: str, sequence_id: int = None, **kwargs
@@ -140,15 +142,17 @@ class RedisBasePersister(persistence.BaseStatePersister):
         data = self.connection.hgetall(key)
         if not data:
             return None
-        _state = state.State.deserialize(json.loads(data[b"state"].decode()), **self.serde_kwargs)
+        decode = self.connection.get_encoder().decode
+        data = {decode(key, force=True): decode(value, force=True) for key, value in data.items()}
+        _state = state.State.deserialize(json.loads(data["state"]), **self.serde_kwargs)
         return {
             "partition_key": partition_key,
             "app_id": app_id,
             "sequence_id": sequence_id,
-            "position": data[b"position"].decode(),
+            "position": data["position"],
             "state": _state,
-            "created_at": data[b"created_at"].decode(),
-            "status": data[b"status"].decode(),
+            "created_at": data["created_at"],
+            "status": data["status"],
         }
 
     def create_key(self, app_id, partition_key, sequence_id):
@@ -231,6 +235,8 @@ class RedisBasePersister(persistence.BaseStatePersister):
 class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
     """Main class for async Redis persister.
 
+    Both byte responses and clients configured with ``decode_responses=True`` are supported.
+
     .. warning::
         The synchronous persister closes the connection on deletion of the class using the ``__del__`` method.
         In an async context that is not reliable (the event loop may already be closed by the time ``__del__``
@@ -302,7 +308,8 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
             partition_key = self.PARTITION_KEY_DEFAULT
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
         app_ids = await self.connection.zrevrange(namespaced_partition_key, 0, -1)
-        return [app_id.decode() for app_id in app_ids]
+        decode = self.connection.get_encoder().decode
+        return [decode(app_id, force=True) for app_id in app_ids]
 
     async def load(
         self, partition_key: Optional[str], app_id: str, sequence_id: int = None, **kwargs
@@ -329,15 +336,17 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         data = await self.connection.hgetall(key)
         if not data:
             return None
-        _state = state.State.deserialize(json.loads(data[b"state"].decode()), **self.serde_kwargs)
+        decode = self.connection.get_encoder().decode
+        data = {decode(key, force=True): decode(value, force=True) for key, value in data.items()}
+        _state = state.State.deserialize(json.loads(data["state"]), **self.serde_kwargs)
         return {
             "partition_key": partition_key,
             "app_id": app_id,
             "sequence_id": sequence_id,
-            "position": data[b"position"].decode(),
+            "position": data["position"],
             "state": _state,
-            "created_at": data[b"created_at"].decode(),
-            "status": data[b"status"].decode(),
+            "created_at": data["created_at"],
+            "status": data["status"],
         }
 
     def create_key(self, app_id, partition_key, sequence_id):

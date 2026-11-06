@@ -17,6 +17,7 @@
 
 import os
 import pickle
+import uuid
 
 import pytest
 
@@ -201,3 +202,116 @@ async def test_async_list_app_ids_with_ns(async_redis_persister_with_ns):
 async def test_async_load_nonexistent_key_with_ns(async_redis_persister_with_ns):
     state_data = await async_redis_persister_with_ns.load("pk", "nonexistent_key")
     assert state_data is None
+
+
+@pytest.fixture(
+    params=[
+        {},
+        {"decode_responses": True},
+        {"encoding": "latin-1"},
+        {"encoding": "latin-1", "decode_responses": True},
+    ],
+    ids=["default-bytes", "decoded-utf8", "bytes-latin1", "decoded-latin1"],
+)
+def redis_response_options(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "partition_key,read_partition", [(None, ""), ("", None), ("tenant", "tenant")]
+)
+@pytest.mark.parametrize("namespace", [None, "response_modes"])
+def test_response_modes(redis_response_options, partition_key, read_partition, namespace):
+    app_id = f"caf\u00e9-{uuid.uuid4().hex}"
+    with RedisBasePersister.from_values(
+        host="localhost",
+        port=6379,
+        db=0,
+        redis_client_kwargs=redis_response_options,
+        namespace=namespace,
+    ) as persister:
+        try:
+            persister.save(
+                partition_key, app_id, 0, "", state.State({"text": "caf\u00e9"}), "completed"
+            )
+            persister.save(
+                partition_key, app_id, 1, "\u00e9tape", state.State({"text": "next"}), "failed"
+            )
+            first = persister.load(read_partition, app_id, 0)
+            assert first["partition_key"] == (partition_key or "")
+            assert first["app_id"] == app_id
+            assert first["sequence_id"] == 0
+            assert first["position"] == ""
+            assert first["state"].get_all() == {"text": "caf\u00e9"}
+            assert first["status"] == "completed"
+            assert isinstance(first["created_at"], str)
+            latest = persister.load(read_partition, app_id)
+            assert latest["sequence_id"] == 1
+            assert latest["position"] == "\u00e9tape"
+            assert latest["state"].get_all() == {"text": "next"}
+            assert latest["status"] == "failed"
+            assert app_id in persister.list_app_ids(read_partition)
+            assert persister.load(read_partition, app_id, 2) is None
+            assert persister.load(read_partition, f"{app_id}-missing") is None
+            raw = persister.connection.hgetall(persister.create_key(app_id, partition_key or "", 0))
+            response_type = str if redis_response_options.get("decode_responses") else bytes
+            assert all(isinstance(key, response_type) for key in raw)
+        finally:
+            index = f"{namespace}:{partition_key or ''}" if namespace else (partition_key or "")
+            persister.connection.zrem(index, app_id)
+            for sequence_id in (0, 1):
+                persister.connection.delete(
+                    persister.create_key(app_id, partition_key or "", sequence_id)
+                )
+
+
+@pytest.mark.parametrize(
+    "partition_key,read_partition", [(None, ""), ("", None), ("tenant", "tenant")]
+)
+@pytest.mark.parametrize("namespace", [None, "response_modes_async"])
+async def test_async_response_modes(
+    redis_response_options, partition_key, read_partition, namespace
+):
+    app_id = f"caf\u00e9-{uuid.uuid4().hex}"
+    async with AsyncRedisBasePersister.from_values(
+        host="localhost",
+        port=6379,
+        db=1,
+        redis_client_kwargs=redis_response_options,
+        namespace=namespace,
+    ) as persister:
+        try:
+            await persister.save(
+                partition_key, app_id, 0, "", state.State({"text": "caf\u00e9"}), "completed"
+            )
+            await persister.save(
+                partition_key, app_id, 1, "\u00e9tape", state.State({"text": "next"}), "failed"
+            )
+            first = await persister.load(read_partition, app_id, 0)
+            assert first["partition_key"] == (partition_key or "")
+            assert first["app_id"] == app_id
+            assert first["sequence_id"] == 0
+            assert first["position"] == ""
+            assert first["state"].get_all() == {"text": "caf\u00e9"}
+            assert first["status"] == "completed"
+            assert isinstance(first["created_at"], str)
+            latest = await persister.load(read_partition, app_id)
+            assert latest["sequence_id"] == 1
+            assert latest["position"] == "\u00e9tape"
+            assert latest["state"].get_all() == {"text": "next"}
+            assert latest["status"] == "failed"
+            assert app_id in await persister.list_app_ids(read_partition)
+            assert await persister.load(read_partition, app_id, 2) is None
+            assert await persister.load(read_partition, f"{app_id}-missing") is None
+            raw = await persister.connection.hgetall(
+                persister.create_key(app_id, partition_key or "", 0)
+            )
+            response_type = str if redis_response_options.get("decode_responses") else bytes
+            assert all(isinstance(key, response_type) for key in raw)
+        finally:
+            index = f"{namespace}:{partition_key or ''}" if namespace else (partition_key or "")
+            await persister.connection.zrem(index, app_id)
+            for sequence_id in (0, 1):
+                await persister.connection.delete(
+                    persister.create_key(app_id, partition_key or "", sequence_id)
+                )
