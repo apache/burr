@@ -19,6 +19,7 @@ import asyncio
 import concurrent.futures
 import dataclasses
 import datetime
+import time
 from random import random
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Literal, Optional, Union
 
@@ -33,13 +34,14 @@ from burr.core import (
     State,
     action,
 )
-from burr.core.action import Input, Result
+from burr.core.action import Input, Result, streaming_action
 from burr.core.graph import GraphBuilder
 from burr.core.parallelism import (
     MapActions,
     MapActionsAndStates,
     MapStates,
     RunnableGraph,
+    StreamItem,
     SubGraphTask,
     TaskBasedParallelAction,
     _cascade_adapter,
@@ -167,6 +169,30 @@ async def final_result_async(state: State) -> State:
     return final_result(state)
 
 
+@streaming_action(reads=["current_number"], writes=["output_number"])
+def streaming_final_result(
+    state: State, additional_number: int = 1, identifying_number: int = 3000
+) -> Generator[tuple[dict, Optional[State]], None, None]:
+    current_number = state["current_number"]
+    yield {"token": current_number}, None
+    time.sleep(0.001)
+    yield {"token": current_number + additional_number}, None
+    final_value = current_number + additional_number + identifying_number
+    yield {"output_number": final_value}, state.update(output_number=final_value)
+
+
+@streaming_action(reads=["current_number"], writes=["output_number"])
+async def streaming_final_result_async(
+    state: State, additional_number: int = 1, identifying_number: int = 3000
+) -> AsyncGenerator[tuple[dict, Optional[State]], None]:
+    current_number = state["current_number"]
+    yield {"token": current_number}, None
+    await asyncio.sleep(0)
+    yield {"token": current_number + additional_number}, None
+    final_value = current_number + additional_number + identifying_number
+    yield {"output_number": final_value}, state.update(output_number=final_value)
+
+
 SubGraphType = Union[Action, Callable, RunnableGraph]
 
 
@@ -211,6 +237,46 @@ def create_full_subgraph_async(identifying_number: int = 0) -> SubGraphType:
         .build(),
         entrypoint="entry_action_for_subgraph",
         halt_after=["final_result"],
+    )
+
+
+def create_streaming_subgraph(identifying_number: int = 0) -> SubGraphType:
+    return RunnableGraph(
+        graph=(
+            GraphBuilder()
+            .with_actions(
+                entry_action_for_subgraph,
+                add_number_to_add,
+                streaming_final_result.bind(identifying_number=identifying_number),
+            )
+            .with_transitions(
+                ("entry_action_for_subgraph", "add_number_to_add"),
+                ("add_number_to_add", "streaming_final_result"),
+            )
+            .build()
+        ),
+        entrypoint="entry_action_for_subgraph",
+        halt_after=["streaming_final_result"],
+    )
+
+
+def create_streaming_subgraph_async(identifying_number: int = 0) -> SubGraphType:
+    return RunnableGraph(
+        graph=GraphBuilder()
+        .with_actions(
+            entry_action_for_subgraph=entry_action_for_subgraph_async,
+            add_number_to_add=add_number_to_add_async,
+            streaming_final_result=streaming_final_result_async.bind(
+                identifying_number=identifying_number
+            ),
+        )
+        .with_transitions(
+            ("entry_action_for_subgraph", "add_number_to_add"),
+            ("add_number_to_add", "streaming_final_result"),
+        )
+        .build(),
+        entrypoint="entry_action_for_subgraph",
+        halt_after=["streaming_final_result"],
     )
 
 
@@ -941,6 +1007,166 @@ async def test_task_level_API_e2e_async():
     _, map_event, __ = events
     grouped_events = _group_events_by_app_id(map_event.children)
     assert len(grouped_events) == 9  # cartesian product of 3 actions and 3 states
+
+
+def test_task_level_API_streaming_sync():
+    class StreamingTaskBasedAction(TaskBasedParallelAction):
+        def tasks(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[SubGraphTask, None, None]:
+            for i, input_number in enumerate(state["input_numbers_in_state"]):
+                yield SubGraphTask(
+                    graph=create_streaming_subgraph(identifying_number=1000 + i),
+                    inputs={},
+                    state=state.update(input_number=input_number, number_to_add=10),
+                    application_id=f"streaming_sync_{i}",
+                )
+
+        def reduce(self, state: State, states: Generator[State, None, None]) -> State:
+            new_state = state
+            for output_state in states:
+                new_state = new_state.append(output_numbers_in_state=output_state["output_number"])
+            return new_state
+
+        @property
+        def writes(self) -> list[str]:
+            return ["output_numbers_in_state"]
+
+        @property
+        def reads(self) -> list[str]:
+            return ["input_numbers_in_state"]
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(
+            initial_action=Input("input_numbers_in_state"),
+            map_action=StreamingTaskBasedAction(),
+            final_action=Result("output_numbers_in_state"),
+        )
+        .with_transitions(("initial_action", "map_action"), ("map_action", "final_action"))
+        .with_entrypoint("initial_action")
+        .build()
+    )
+    action, streaming_result = app.stream_result(
+        halt_after=["map_action"], inputs={"input_numbers_in_state": [100, 200]}
+    )
+    assert action.name == "map_action"
+    items = list(streaming_result)
+    assert len(items) == 10
+    assert all(isinstance(item, StreamItem) for item in items)
+    assert {item.task_key for item in items} == {"0", "1"}
+    assert {item.application_id for item in items} == {"streaming_sync_0", "streaming_sync_1"}
+    assert sum(item.state_update is not None for item in items) == 6
+    result, state = streaming_result.get()
+    assert result == {}
+    assert state["output_numbers_in_state"] == [1111, 1212]
+
+
+async def test_task_level_API_streaming_async():
+    class StreamingTaskBasedActionAsync(TaskBasedParallelAction):
+        async def tasks(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> AsyncGenerator[SubGraphTask, None]:
+            for i, input_number in enumerate(state["input_numbers_in_state"]):
+                yield SubGraphTask(
+                    graph=create_streaming_subgraph_async(identifying_number=1000 + i),
+                    inputs={},
+                    state=state.update(input_number=input_number, number_to_add=10),
+                    application_id=f"streaming_async_{i}",
+                )
+
+        async def reduce(self, state: State, states: AsyncGenerator[State, None]) -> State:
+            new_state = state
+            async for output_state in states:
+                new_state = new_state.append(output_numbers_in_state=output_state["output_number"])
+            return new_state
+
+        @property
+        def writes(self) -> list[str]:
+            return ["output_numbers_in_state"]
+
+        @property
+        def reads(self) -> list[str]:
+            return ["input_numbers_in_state"]
+
+        def is_async(self) -> bool:
+            return True
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(
+            initial_action=Input("input_numbers_in_state"),
+            map_action=StreamingTaskBasedActionAsync(),
+            final_action=Result("output_numbers_in_state"),
+        )
+        .with_transitions(("initial_action", "map_action"), ("map_action", "final_action"))
+        .with_entrypoint("initial_action")
+        .build()
+    )
+    action, streaming_result = await app.astream_result(
+        halt_after=["map_action"], inputs={"input_numbers_in_state": [100, 200]}
+    )
+    assert action.name == "map_action"
+    items = [item async for item in streaming_result]
+    assert len(items) == 10
+    assert all(isinstance(item, StreamItem) for item in items)
+    assert {item.task_key for item in items} == {"0", "1"}
+    assert {item.application_id for item in items} == {"streaming_async_0", "streaming_async_1"}
+    assert sum(item.state_update is not None for item in items) == 6
+    result, state = await streaming_result.get()
+    assert result == {}
+    assert state["output_numbers_in_state"] == [1111, 1212]
+
+
+def test_task_level_API_streaming_can_disable_token_events():
+    class StreamingTaskBasedAction(TaskBasedParallelAction):
+        def __init__(self):
+            super().__init__(intermediate_stream_outputs=False, intermediate_nodes=False)
+
+        def tasks(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[SubGraphTask, None, None]:
+            for i, input_number in enumerate(state["input_numbers_in_state"]):
+                yield SubGraphTask(
+                    graph=create_streaming_subgraph(identifying_number=1000 + i),
+                    inputs={},
+                    state=state.update(input_number=input_number, number_to_add=10),
+                    application_id=f"streaming_disabled_{i}",
+                )
+
+        def reduce(self, state: State, states: Generator[State, None, None]) -> State:
+            new_state = state
+            for output_state in states:
+                new_state = new_state.append(output_numbers_in_state=output_state["output_number"])
+            return new_state
+
+        @property
+        def writes(self) -> list[str]:
+            return ["output_numbers_in_state"]
+
+        @property
+        def reads(self) -> list[str]:
+            return ["input_numbers_in_state"]
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(
+            initial_action=Input("input_numbers_in_state"),
+            map_action=StreamingTaskBasedAction(),
+            final_action=Result("output_numbers_in_state"),
+        )
+        .with_transitions(("initial_action", "map_action"), ("map_action", "final_action"))
+        .with_entrypoint("initial_action")
+        .build()
+    )
+    _, streaming_result = app.stream_result(
+        halt_after=["map_action"], inputs={"input_numbers_in_state": [100, 200]}
+    )
+    items = list(streaming_result)
+    assert len(items) == 2
+    assert all(isinstance(item, StreamItem) for item in items)
+    assert all(item.state_update is not None for item in items)
+    assert {item.action.name for item in items} == {"streaming_final_result"}
 
 
 def test_map_reduce_function_e2e():
