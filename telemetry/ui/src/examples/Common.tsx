@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApplicationSummary } from '../api/models/ApplicationSummary';
 import { DateTimeDisplay } from '../components/common/dates';
 import { MiniTelemetry } from './MiniTelemetry';
@@ -72,26 +72,25 @@ export const ChatbotAppSelector = (props: {
   createNewApp: CreateNewApp;
 }) => {
   const { projectId, setApp } = props;
-  const { data, refetch } = useQuery(
-    ['apps', projectId],
+  const { data, refetch } = useQuery({
+    queryKey: ['apps', projectId],
     // TODO - use the right partition key
-    () => DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(projectId as string, '__none__'),
-    { enabled: projectId !== undefined }
-  );
-  const createAndUpdateMutation = useMutation(
-    (app_id: string) => props.createNewApp(projectId, app_id),
-    {
-      onSuccess: (appID) => {
-        refetch().then((data) => {
-          const appSummaries = data.data?.applications || [];
-          const app = appSummaries.find((app) => app.app_id === appID);
-          if (app) {
-            setApp(app);
-          }
-        });
-      }
+    queryFn: () =>
+      DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(projectId as string, '__none__'),
+    enabled: projectId !== undefined
+  });
+  const createAndUpdateMutation = useMutation({
+    mutationFn: (app_id: string) => props.createNewApp(projectId, app_id),
+    onSuccess: (appID) => {
+      refetch().then((data) => {
+        const appSummaries = data.data?.applications || [];
+        const app = appSummaries.find((app) => app.app_id === appID);
+        if (app) {
+          setApp(app);
+        }
+      });
     }
-  );
+  });
   const appSummaries = data?.applications || [];
   const appSetter = (appID: string) => createAndUpdateMutation.mutate(appID);
   const dataOrEmpty = Array.from(appSummaries || []);

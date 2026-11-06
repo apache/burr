@@ -35,7 +35,7 @@ import { FaClipboardList, FaExternalLinkAlt, FaThumbsDown, FaThumbsUp } from 're
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../common/table';
 import { Chip } from '../../common/chip';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loading } from '../../common/loading';
 import {
   ChevronDownIcon,
@@ -535,20 +535,18 @@ export const AnnotationsTable = (props: {
   refetchAnnotations?: () => void;
 }) => {
   // Just in case we want to do live-updating, we need to pass it into the form...
-  const updateAnnotationMutation = useMutation(
-    (data: { annotationID: number; annotationData: AnnotationUpdate }) =>
+  const updateAnnotationMutation = useMutation({
+    mutationFn: (data: { annotationID: number; annotationData: AnnotationUpdate }) =>
       DefaultService.updateAnnotationApiV0ProjectIdAnnotationIdUpdateAnnotationsPut(
         props.projectId,
         data.annotationID,
         data.annotationData
       ),
-    {
-      onSuccess: () => {
-        props.refetchAnnotations && props.refetchAnnotations();
-        setCurrentlyEditingAnnotation(null); // We have to reset it somehow
-      }
+    onSuccess: () => {
+      props.refetchAnnotations && props.refetchAnnotations();
+      setCurrentlyEditingAnnotation(null); // We have to reset it somehow
     }
-  );
+  });
   const anyHavePartitionKey = props.annotations.some(
     (annotation) => annotation.partition_key !== null
   );
@@ -572,18 +570,16 @@ export const AnnotationsTable = (props: {
     actionName: currentlyEditingAnnotation?.step_name || '',
     spanId: currentlyEditingAnnotation?.span_id || null
   };
-  const { data: appData } = useQuery(
-    ['steps', currentlyEditingAnnotation?.app_id],
-    () =>
+  const { data: appData } = useQuery({
+    queryKey: ['steps', currentlyEditingAnnotation?.app_id],
+    queryFn: () =>
       DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
         props.projectId,
         currentlyEditingAnnotation?.app_id as string,
         currentlyEditingAnnotation?.partition_key as string
       ),
-    {
-      enabled: currentlyEditingAnnotation !== null
-    }
-  );
+    enabled: currentlyEditingAnnotation !== null
+  });
   // Either we're editing one that exists, or we're creating a new one...
   // TODO -- simplify the logic here, we should have one path...
   const annotationStep = currentlyEditingAnnotation
@@ -1229,16 +1225,19 @@ const AnnotationEditCreateForm = (props: {
  */
 export const AnnotationsViewContainer = () => {
   const { projectId } = useLocationParams();
-  const { data: backendSpec } = useQuery(['backendSpec'], () =>
-    DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
-      return response;
-    })
-  );
+  const { data: backendSpec } = useQuery({
+    queryKey: ['backendSpec'],
+    queryFn: () =>
+      DefaultService.getAppSpecApiV0MetadataAppSpecGet().then((response) => {
+        return response;
+      })
+  });
 
   // TODO -- use a skiptoken to bypass annotation loading if we don't need them
-  const { data, refetch } = useQuery(['annotations', projectId], () =>
-    DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(projectId as string)
-  );
+  const { data, refetch } = useQuery({
+    queryKey: ['annotations', projectId],
+    queryFn: () => DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(projectId as string)
+  });
   // dummy value as this will not be linked to if annotations are not supported
 
   if (data === undefined || backendSpec === undefined) return <Loading />;

@@ -408,14 +408,18 @@ The following components are licensed under the MIT license:
       Copyright (c) 2020 Tailwind Labs
   @heroicons/react@2.1.1
       [no license file shipped; declared as MIT in package.json]
-  @reactflow/controls@11.2.9
-      Copyright (c) 2019-2023 webkid GmbH
-  @reactflow/core@11.10.4
-      Copyright (c) 2019-2023 webkid GmbH
-  @tisoap/react-flow-smart-edge@3.0.0
+  @tanstack/query-core@5.105.3
+      Copyright (c) 2021-present Tanner Linsley
+  @tanstack/react-query@5.105.3
+      Copyright (c) 2021-present Tanner Linsley
+  @tisoap/react-flow-smart-edge@5.0.0
       Copyright (c) 2021 Tiso Alvarez Puccinelli
   @uiw/react-json-view@2.0.0-alpha.12
       [no license file shipped; declared as MIT in package.json]
+  @xyflow/react@12.12.1
+      Copyright (c) 2019-2025 webkid GmbH
+  @xyflow/system@0.0.84
+      Copyright (c) 2019-2025 webkid GmbH
   bail@2.0.2
       Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
   ccount@2.0.1
@@ -424,7 +428,7 @@ The following components are licensed under the MIT license:
       Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
   character-reference-invalid@2.0.1
       Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
-  classcat@5.0.4
+  classcat@5.0.5
       Copyright © Jorge Bucaran <<https://jorgebucaran.com>>
   clsx@2.1.0
       Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com)
@@ -548,8 +552,6 @@ The following components are licensed under the MIT license:
       [no license file shipped; declared as MIT in package.json]
   parse-entities@4.0.2
       Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
-  pathfinding@0.4.18
-      [no license file shipped; declared as MIT in package.json]
   property-information@7.2.0
       Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
   react@18.2.0
@@ -562,8 +564,6 @@ The following components are licensed under the MIT license:
       Copyright (c) Facebook, Inc. and its affiliates.
   react-markdown@9.0.1
       Copyright (c) 2015 Espen Hovlandsdal
-  react-query@3.39.3
-      Copyright (c) 2019 Tanner Linsley
   react-router@7.18.2
       Copyright (c) React Training LLC 2015-2019
       Copyright (c) Remix Software Inc. 2020-2021
@@ -607,13 +607,13 @@ The following components are licensed under the MIT license:
       Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
   use-isomorphic-layout-effect@1.1.2
       Copyright (c) Mateusz Burzyński
-  use-sync-external-store@1.2.0
-      Copyright (c) Facebook, Inc. and its affiliates.
+  use-sync-external-store@1.7.0
+      Copyright (c) Meta Platforms, Inc. and affiliates.
   vfile@6.0.1
       Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
   vfile-message@4.0.2
       Copyright (c) 2017 Titus Wormer <tituswormer@gmail.com>
-  zustand@4.5.1
+  zustand@4.5.7
       Copyright (c) 2019 Paul Henschel
 
   --- MIT license text (variant 1) ---
@@ -1011,9 +1011,3 @@ The following components are licensed under the MIT license:
   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-----------------------------------------------------------------------
-The following components are licensed under the PSF license:
-
-  heap@0.2.5
-      [no license file shipped; declared as PSF in package.json]
