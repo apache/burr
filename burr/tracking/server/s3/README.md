@@ -44,12 +44,42 @@ See [these instructions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/c
 
 This will save data in batched files to s3, which the server will read up and index.
 
-## Running Locally
+## Initializing the database
 
-To test it out after installing/setting up, you can run the server with the following command:
+The server indexes s3 into a local SQLite database, which has to be created (and have its schema applied)
+before the server is started for the first time. The server does not do this itself. The database lives at
+`$BURR_SERVER_ROOT/$BURR_DB_FILENAME` (defaults to `~/.burr_server/db.sqlite3`).
+
+Migrations are managed by [aerich](https://github.com/tortoise/aerich), which is installed with the
+`tracking-server-s3` target. Run the following once, before the first start:
 
 ```bash
-BURR_S3_BUCKET=my-bucket-name burr --no-open
+export BURR_SERVER_ROOT=~/.burr_server # or wherever you want the database/migrations to live
+mkdir -p "$BURR_SERVER_ROOT"
+cd "$BURR_SERVER_ROOT" # aerich writes its config (pyproject.toml) to, and reads it from, the current directory
+aerich init -t burr.tracking.server.s3.settings.TORTOISE_ORM --location "$BURR_SERVER_ROOT"/migrations
+aerich init-db # creates db.sqlite3, the initial migration, and the tables
+```
+
+`BURR_SERVER_ROOT` (and `BURR_DB_FILENAME`, if you set it) must be the same when you run these commands
+as when you run the server. If you deploy in a container, put `BURR_SERVER_ROOT` on a persistent volume and run
+these steps in your entrypoint before starting the server -- re-running `aerich init-db` against an initialized
+directory is a no-op.
+
+After upgrading Burr, apply any schema changes from the same directory:
+
+```bash
+cd "$BURR_SERVER_ROOT"
+aerich migrate # generates a migration if the models changed
+aerich upgrade # applies it
+```
+
+## Running Locally
+
+Once the database is initialized (see [above](#initializing-the-database)), you can run the server with the following command:
+
+```bash
+BURR_S3_BUCKET=my-bucket-name burr --no-open --backend s3
 ```
 
 As the normal burr command will, this opens up a browser window to the burr UI, on port 7241.
@@ -175,8 +205,8 @@ Then to reset everything, run:
 ```bash
 rm -rf "$BURR_SERVER_ROOT" # clear everything, including migrations
 mkdir "$BURR_SERVER_ROOT" # create the directory
+cd "$BURR_SERVER_ROOT" # change to the directory -- aerich keeps its config here
 aerich init -t burr.tracking.server.s3.settings.TORTOISE_ORM --location "$BURR_SERVER_ROOT"/migrations # create the migrations directory if needed
-cd "$BURR_SERVER_ROOT" # change to the directory
 aerich init-db # initialize
 burr --no-open --backend s3 # should use all the other env variables you set
 ```
