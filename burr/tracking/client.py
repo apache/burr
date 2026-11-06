@@ -46,7 +46,6 @@ except ImportError:
 import json
 import logging
 import os
-import re
 import traceback
 from abc import ABC
 from typing import Any, Dict, Optional, Tuple
@@ -68,6 +67,7 @@ from burr.lifecycle import (
     PreRunStepHook,
     PreStartSpanHook,
 )
+from burr.tracking.common.identifiers import join_within, validate_identifier
 from burr.tracking.common.models import (
     ApplicationMetadataModel,
     ApplicationModel,
@@ -109,13 +109,15 @@ def _filter_inputs(d: dict) -> dict:
 
 
 def _allowed_project_name(project_name: str, on_windows: bool) -> bool:
-    allowed_chars = r"a-zA-Z0-9_\-"
-    if not on_windows:
-        allowed_chars += ":"
-    pattern = f"^[{allowed_chars}]+$"
+    """Whether ``project_name`` passes the identifier rule shared with app ids.
 
-    # Use regular expression to check if the string is valid
-    return bool(re.match(pattern, project_name))
+    Kept as a boolean wrapper around :func:`validate_identifier` for existing callers.
+    """
+    try:
+        validate_identifier(project_name, "project", on_windows=on_windows)
+    except ValueError:
+        return False
+    return True
 
 
 @dataclasses.dataclass
@@ -190,11 +192,7 @@ class LocalTrackingClient(
         """
 
         self.f = None
-        if not _allowed_project_name(project, on_windows=system.IS_WINDOWS):
-            raise ValueError(
-                f"Project: {project} is not valid. Project name cannot contain non-alphanumeric (except _ and -) characters."
-                "We will be relaxing this restriction later but for now please rename your project!"
-            )
+        validate_identifier(project, "project")
         self.raw_storage_dir = storage_dir
         self.storage_dir = LocalTrackingClient.get_storage_path(project, storage_dir)
         self.project_id = project
@@ -255,7 +253,7 @@ class LocalTrackingClient(
                 )
             )
         for parent_id, child_of in parent_relationships:
-            parent_path = os.path.join(self.storage_dir, parent_id)
+            parent_path = self._application_directory(parent_id)
             if not os.path.exists(parent_path):
                 # This currently makes the parent directory so that it does not fail
                 # If the parent directory exists we'll just use that
@@ -285,7 +283,22 @@ class LocalTrackingClient(
 
     @classmethod
     def get_storage_path(cls, project, storage_dir) -> str:
-        return str(os.path.join(os.path.expanduser(storage_dir), project))
+        return str(join_within(os.path.expanduser(storage_dir), project))
+
+    @classmethod
+    def _application_log_path(cls, project: str, app_id: str, storage_dir: str) -> str:
+        """Path to an application's log file, with both identifiers validated and the
+        result kept inside the storage directory."""
+        validate_identifier(project, "project")
+        validate_identifier(app_id, "app_id")
+        application_path = join_within(cls.get_storage_path(project, storage_dir), app_id)
+        return os.path.join(application_path, cls.LOG_FILENAME)
+
+    def _application_directory(self, app_id: str) -> str:
+        """Directory for one application run, validated to sit inside this project's
+        storage directory. Nothing is created on disk."""
+        validate_identifier(app_id, "app_id")
+        return join_within(self.storage_dir, app_id)
 
     @classmethod
     def app_log_exists(
@@ -301,7 +314,7 @@ class LocalTrackingClient(
         :param storage_dir: the storage directory.
         :return: True if state exists, False otherwise.
         """
-        path = os.path.join(cls.get_storage_path(project, storage_dir), app_id, cls.LOG_FILENAME)
+        path = cls._application_log_path(project, app_id, storage_dir)
         if not os.path.exists(path):
             return False
         lines = open(path, "r", errors="replace", encoding="utf-8").readlines()
@@ -336,7 +349,7 @@ class LocalTrackingClient(
         """
         if sequence_id is None:
             sequence_id = -1  # get the last one
-        path = os.path.join(cls.get_storage_path(project, storage_dir), app_id, cls.LOG_FILENAME)
+        path = cls._application_log_path(project, app_id, storage_dir)
         if not os.path.exists(path):
             raise ValueError(f"No logs found for {project}/{app_id} under {storage_dir}")
         with open(path, "r", errors="replace", encoding="utf-8") as f:
@@ -370,14 +383,16 @@ class LocalTrackingClient(
         prior_state["__SEQUENCE_ID"] = line_seq  # add the sequence id back
         return prior_state, entry_point
 
-    def _ensure_dir_structure(self, app_id: str):
+    def _ensure_dir_structure(self, app_id: str) -> str:
+        # Validate the id before anything is created on disk
+        application_path = self._application_directory(app_id)
         if not os.path.exists(self.storage_dir):
             logger.info(f"Creating storage directory: {self.storage_dir}")
             os.makedirs(self.storage_dir)
-        application_path = os.path.join(self.storage_dir, app_id)
         if not os.path.exists(application_path):
             logger.info(f"Creating application directory: {application_path}")
             os.makedirs(application_path)
+        return application_path
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -402,15 +417,20 @@ class LocalTrackingClient(
         spawning_parent_pointer: Optional[burr_types.ParentPointer],
         **future_kwargs: Any,
     ):
-        self._ensure_dir_structure(app_id)
+        # Every identifier that becomes a path is checked before the first write. A pointer
+        # with no app_id (plain resume, not a fork) never becomes a path, so it is skipped.
+        for pointer in (parent_pointer, spawning_parent_pointer):
+            if pointer is not None and pointer.app_id is not None:
+                validate_identifier(pointer.app_id, "app_id")
+        application_path = self._ensure_dir_structure(app_id)
         self.f = open(
-            os.path.join(self.storage_dir, app_id, self.LOG_FILENAME),
+            os.path.join(application_path, self.LOG_FILENAME),
             "a",
             encoding="utf-8",
             errors="replace",
         )
 
-        graph_path = os.path.join(self.storage_dir, app_id, self.GRAPH_FILENAME)
+        graph_path = os.path.join(application_path, self.GRAPH_FILENAME)
         if os.path.exists(graph_path):
             logger.info(f"Graph already exists at {graph_path}. Not overwriting.")
             return
@@ -420,7 +440,7 @@ class LocalTrackingClient(
         with open(graph_path, "w", encoding="utf-8", errors="replace") as f:
             json.dump(graph, f)
 
-        metadata_path = os.path.join(self.storage_dir, app_id, self.METADATA_FILENAME)
+        metadata_path = os.path.join(application_path, self.METADATA_FILENAME)
         if os.path.exists(metadata_path):
             logger.info(f"Metadata already exists at {metadata_path}. Not overwriting.")
             return
@@ -617,7 +637,7 @@ class LocalTrackingClient(
         # TODO:
         if app_id is None:
             return  # no application ID
-        path = os.path.join(self.storage_dir, app_id, self.LOG_FILENAME)
+        path = os.path.join(self._application_directory(app_id), self.LOG_FILENAME)
         if not os.path.exists(path):
             return None
         with open(path, "r", errors="replace", encoding="utf-8") as f:

@@ -24,9 +24,11 @@ from importlib.resources import files
 from typing import Optional, Sequence
 
 from starlette import status
+from starlette.responses import JSONResponse
 
 # TODO -- remove this, just for testing
 from burr.log_setup import setup_logging
+from burr.tracking.common.identifiers import InvalidIdentifier
 from burr.tracking.server.backend import (
     AnnotationsBackendMixin,
     BackendBase,
@@ -200,6 +202,13 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
     :return: A fully-configured FastAPI application.
     """
     ui_app = FastAPI(lifespan=lifespan)
+
+    @ui_app.exception_handler(InvalidIdentifier)
+    async def invalid_identifier_to_400(request: Request, exc: InvalidIdentifier):
+        # An identifier that cannot be used as a path segment under the storage directory
+        # (the tracking client behind the demo routes raises this) is a client error, so
+        # report it as 400 with the reason rather than letting it surface as a 500.
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)})
 
     @ui_app.get("/ready")
     def is_ready():
