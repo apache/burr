@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import dataclasses
 import functools
@@ -1195,6 +1196,10 @@ class Application(Generic[ApplicationStateType]):
                         new_state = _run_reducer(next_action, self._state, result, next_action.name)
                     new_state = self._update_internal_state_value(new_state, next_action)
                     self._set_state(new_state)
+            except asyncio.CancelledError as e:
+                # Persist an interrupted action as failed so resuming retries it.
+                exc = e
+                raise
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))

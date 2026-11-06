@@ -1960,6 +1960,86 @@ async def test_app_astep_sync_single_step_action_persists_executed_state():
     assert persisted_state["status"] == "completed"
 
 
+@pytest.mark.parametrize("execute_method", ["astep", "arun"])
+@pytest.mark.parametrize("single_step", [False, True])
+async def test_cancelled_action_persists_failure_and_is_retried(execute_method, single_step):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    attempts = 0
+    persister = AsyncInMemoryPersister()
+    tracker = ActionTrackerAsync()
+
+    async def work_result(state):
+        nonlocal attempts
+        attempts += 1
+        started.set()
+        await release.wait()
+        return {"count": state["count"] + 1}
+
+    @action(reads=["count"], writes=["count"])
+    async def work(state):
+        return state.update(**await work_result(state))
+
+    work_action = (
+        work
+        if single_step
+        else PassedInActionAsync(
+            reads=["count"],
+            writes=["count"],
+            fn=work_result,
+            update_fn=lambda result, state: state.update(**result),
+            inputs=[],
+        )
+    )
+
+    @action(reads=["count"], writes=["observed"])
+    def after(state):
+        return state.update(observed=state["count"])
+
+    async def build(resume=False):
+        builder = (
+            ApplicationBuilder()
+            .with_actions(work=work_action, after=after)
+            .with_transitions(("work", "after"))
+            .with_identifiers(app_id="cancelled-action", partition_key="test")
+            .with_state_persister(persister)
+            .with_hooks(tracker)
+        )
+        if resume:
+            builder.initialize_from(
+                persister,
+                resume_at_next_action=True,
+                default_state={"count": 0},
+                default_entrypoint="work",
+            )
+        else:
+            builder.with_state(count=0).with_entrypoint("work")
+        return await builder.abuild()
+
+    app = await build()
+    operation = app.astep() if execute_method == "astep" else app.arun(halt_after=["after"])
+    task = asyncio.create_task(operation)
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError) as cancelled:
+        await task
+
+    # A cancelled action must be retried, not skipped as though it had completed.
+    resumed = await build(resume=True)
+    assert resumed.get_next_action().name == "work"
+    saved = await persister.load("test", "cancelled-action")
+    assert saved["status"] == "failed"
+    assert saved["state"]["count"] == app.state["count"] == 0
+    assert tracker.post_called[0][1]["exception"] is cancelled.value
+    assert tracker.post_called[0][1]["result"] is None
+
+    release.set()
+    await resumed.arun(halt_after=["after"])
+    assert attempts == 2
+    assert resumed.state["observed"] == 1
+    assert (await persister.load("test", "cancelled-action"))["status"] == "completed"
+
+
 def test_app_step_context():
     APP_ID = str(uuid.uuid4())
     PARTITION_KEY = str(uuid.uuid4())
