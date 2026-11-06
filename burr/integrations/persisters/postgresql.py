@@ -65,7 +65,7 @@ class PostgreSQLPersister(Psycopg2Persister):
         connection = psycopg2.connect(
             dbname=db_name, user=user, password=password, host=host, port=port
         )
-        return Psycopg2Persister(connection, table_name)
+        return Psycopg2Persister(connection, table_name, manage_transactions=True)
 
 
 if __name__ == "__main__":
