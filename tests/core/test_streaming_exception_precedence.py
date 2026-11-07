@@ -541,3 +541,176 @@ def test_callback_runs_once_when_get_is_called_twice():
         container.get()
     assert spy.exceptions == [None], "the post-step callback ran more than once"
     assert persister.statuses == ["completed"]
+
+
+# ------------------------------------------------------------------ 5. async close/cancel races
+class EndStreamSpy(PostEndStreamHook):
+    """Sync-only ``post_end_stream`` observer, used to see whether the stream was closed."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def post_end_stream(self, **kwargs):
+        self.calls += 1
+
+
+class StreamGate:
+    """Event-based handshake points for the race tests. No ``sleep`` is used to synchronise."""
+
+    def __init__(self) -> None:
+        self.produce_started = asyncio.Event()
+        self.allow_produce = asyncio.Event()
+        self.cleanup_started = asyncio.Event()
+        self.allow_cleanup = asyncio.Event()
+        self.block_cleanup = False
+        self.cleanup_count = 0
+
+
+def gated_async_stream(gate: StreamGate):
+    """A streaming action that parks on an ``Event`` after the first chunk and in its cleanup."""
+
+    @streaming_action(reads=[], writes=["x"])
+    async def act(state: State):
+        try:
+            yield {"chunk": 0}, None
+            gate.produce_started.set()
+            await gate.allow_produce.wait()
+            yield {"chunk": "final"}, state.update(x=1)
+        finally:
+            gate.cleanup_count += 1
+            gate.cleanup_started.set()
+            if gate.block_cleanup:
+                await gate.allow_cleanup.wait()
+
+    return act
+
+
+def test_async_aclose_race_reports_the_early_stop_not_the_cancellation():
+    """``aclose()`` in flight, the iterator finalizer parked on ``_close_future``, then cancelled.
+
+    The step was stopped early, so the step's error is ``GeneratorExit`` -- that is what
+    ``aclose`` promises to report. Reading the thread's current exception in the ``finally``
+    reported the *caller's* ``CancelledError`` instead, which is a different step outcome.
+    """
+    gate = StreamGate()
+    gate.block_cleanup = True
+    spy = SpyAsync()
+    persister = RecordingPersister()
+    app = build(gated_async_stream(gate), hooks=[spy], persister=persister)
+
+    async def run():
+        _, container = await app.astream_result(halt_after=["a"])
+        iterator = container.__aiter__()
+        await iterator.__anext__()  # the action is now suspended at its first yield
+
+        close_task = asyncio.create_task(container.aclose())
+        # ``aclose()`` has created ``_close_future`` and is inside the action's cleanup.
+        await gate.cleanup_started.wait()
+
+        # The iterator's own GeneratorExit path now parks on ``asyncio.wait([_close_future])``.
+        finalizer = asyncio.create_task(iterator.aclose())
+        for _ in range(5):
+            await asyncio.sleep(0)
+        finalizer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await finalizer
+
+        gate.allow_cleanup.set()
+        await close_task
+
+    asyncio.run(run())
+    reported = spy.exceptions
+    assert reported == ["GeneratorExit"], f"the early stop was reported as {reported}"
+    assert persister.statuses == ["failed"], "a stream closed before completing is a failed step"
+    assert gate.cleanup_count == 1, "the action's cleanup must run exactly once"
+
+
+def test_cancellation_during_anext_marks_the_step_failed():
+    """Cancelling the consuming task is the step's own error, and must be reported as such."""
+    gate = StreamGate()
+    spy = SpyAsync()
+    persister = RecordingPersister()
+    app = build(gated_async_stream(gate), hooks=[spy], persister=persister)
+
+    async def run():
+        async def consume():
+            _, container = await app.astream_result(halt_after=["a"])
+            async for _ in container:
+                pass
+
+        task = asyncio.create_task(consume())
+        await gate.produce_started.wait()  # the consumer is inside ``__anext__``
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(run())
+    assert spy.exceptions == ["CancelledError"]
+    assert persister.statuses == ["failed"], "a cancelled step must not be recorded as completed"
+    assert gate.cleanup_count == 1
+
+
+def test_post_end_stream_runs_when_post_run_step_fails_async():
+    spy = SpyAsync(raises=HookError("hook exploded"))
+    end = EndStreamSpy()
+    app = build(async_stream(), hooks=[spy, end])
+
+    async def consume():
+        _, container = await app.astream_result(halt_after=["a"])
+        await container.get()
+
+    with pytest.raises(HookError):
+        asyncio.run(consume())
+    assert end.calls == 1, "post_end_stream did not run after post_run_step failed"
+
+
+@pytest.mark.parametrize("is_async", [False, True])
+def test_post_end_stream_runs_when_a_hook_fails_on_a_successful_step(is_async):
+    """``pre_start_stream`` ran, so ``post_end_stream`` owes a matching call even when a hook
+    fails: hooks that keep per-stream state release it there (see the tracker test below)."""
+    spy = SpyAsync(raises=HookError("hook exploded")) if is_async else Spy(raises=HookError())
+    end = EndStreamSpy()
+    app = build(async_stream() if is_async else sync_stream(), hooks=[spy, end])
+
+    if is_async:
+
+        async def consume():
+            _, container = await app.astream_result(halt_after=["a"])
+            await container.get()
+
+        with pytest.raises(HookError):
+            asyncio.run(consume())
+    else:
+        _, container = app.stream_result(halt_after=["a"])
+        with pytest.raises(HookError):
+            container.get()
+    assert end.calls == 1
+    assert app.state["x"] == 1, "the step itself succeeded and must not be rolled back"
+
+
+def test_a_failing_hook_does_not_leak_the_tracker_stream_state(tmp_path):
+    """``LocalTrackingClient.post_end_stream`` is the only place that releases its per-stream
+    state and writes the ``end_stream`` line. Skipping it leaks the entry and leaves an
+    unterminated stream in ``log.jsonl``."""
+    from burr.tracking import LocalTrackingClient
+
+    tracker = LocalTrackingClient(project="probe", storage_dir=str(tmp_path))
+    app = (
+        ApplicationBuilder()
+        .with_actions(a=sync_stream())
+        .with_entrypoint("a")
+        .with_hooks(Spy(raises=HookError("hook exploded")))
+        .with_tracker(tracker)
+        .with_identifiers(app_id="app", partition_key="pk")
+        .build()
+    )
+    _, container = app.stream_result(halt_after=["a"])
+    with pytest.raises(HookError):
+        container.get()
+
+    assert tracker.stream_state == {}, "the tracker never released its per-stream state"
+    log = tmp_path / "probe" / "app" / "log.jsonl"
+    types = [json.loads(line)["type"] for line in log.read_text(encoding="utf-8").splitlines()]
+    assert "begin_stream" in types
+    assert "end_stream" in types, "the stream start/end pair in the tracking log is unbalanced"
