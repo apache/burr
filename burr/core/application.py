@@ -1616,24 +1616,45 @@ class Application(Generic[ApplicationStateType]):
                 state: State[ApplicationStateType],
                 exc: Optional[BaseException] = None,
             ):
-                self._adapter_set.call_all_lifecycle_hooks_sync(
-                    "post_run_step",
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                    action=next_action,
-                    state=state,
-                    result=result,
-                    sequence_id=self.sequence_id,
-                    exception=exc,
-                )
-                call_execute_method_wrapper.call_post(self, exc)
-                self._adapter_set.call_all_lifecycle_hooks_sync(
-                    "post_end_stream",
-                    action=next_action.name,
-                    sequence_id=self.sequence_id,
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                )
+                # A failing post_run_step hook must not stop the rest of the step's lifecycle:
+                # post_end_stream and the execute-method post hook still need to run. The first
+                # hook error is re-raised afterwards; the container decides whether it is allowed
+                # to supersede the step's own error.
+                hook_error: Optional[Exception] = None
+                try:
+                    self._adapter_set.call_all_lifecycle_hooks_sync(
+                        "post_run_step",
+                        app_id=self._uid,
+                        partition_key=self._partition_key,
+                        action=next_action,
+                        state=state,
+                        result=result,
+                        sequence_id=self.sequence_id,
+                        exception=exc,
+                    )
+                except Exception as e:
+                    hook_error = e
+                try:
+                    call_execute_method_wrapper.call_post(self, exc)
+                    self._adapter_set.call_all_lifecycle_hooks_sync(
+                        "post_end_stream",
+                        action=next_action.name,
+                        sequence_id=self.sequence_id,
+                        app_id=self._uid,
+                        partition_key=self._partition_key,
+                    )
+                except Exception as e:
+                    if hook_error is None:
+                        raise
+                    logger.warning(
+                        "A lifecycle hook raised %r while reporting a step whose "
+                        "post_run_step hook already failed with %r; keeping the first error",
+                        e,
+                        hook_error,
+                        exc_info=True,
+                    )
+                if hook_error is not None:
+                    raise hook_error
 
             action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
@@ -1872,24 +1893,42 @@ class Application(Generic[ApplicationStateType]):
                 state: State[ApplicationStateType],
                 exc: Optional[BaseException] = None,
             ):
-                await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                    "post_run_step",
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                    action=next_action,
-                    state=state,
-                    result=result,
-                    sequence_id=self.sequence_id,
-                    exception=exc,
-                )
-                await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
-                    "post_end_stream",
-                    action=next_action.name,
-                    sequence_id=self.sequence_id,
-                    app_id=self._uid,
-                    partition_key=self._partition_key,
-                )
-                await call_execute_method_wrapper.acall_post(self, exc)
+                # See the synchronous callback above.
+                hook_error: Optional[Exception] = None
+                try:
+                    await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                        "post_run_step",
+                        app_id=self._uid,
+                        partition_key=self._partition_key,
+                        action=next_action,
+                        state=state,
+                        result=result,
+                        sequence_id=self.sequence_id,
+                        exception=exc,
+                    )
+                except Exception as e:
+                    hook_error = e
+                try:
+                    await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
+                        "post_end_stream",
+                        action=next_action.name,
+                        sequence_id=self.sequence_id,
+                        app_id=self._uid,
+                        partition_key=self._partition_key,
+                    )
+                    await call_execute_method_wrapper.acall_post(self, exc)
+                except Exception as e:
+                    if hook_error is None:
+                        raise
+                    logger.warning(
+                        "A lifecycle hook raised %r while reporting a step whose "
+                        "post_run_step hook already failed with %r; keeping the first error",
+                        e,
+                        hook_error,
+                        exc_info=True,
+                    )
+                if hook_error is not None:
+                    raise hook_error
 
             action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
