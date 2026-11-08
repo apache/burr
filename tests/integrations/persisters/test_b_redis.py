@@ -19,6 +19,7 @@ import os
 import pickle
 
 import pytest
+import redis
 
 from burr.core import state
 from burr.integrations.persisters.b_redis import (
@@ -29,6 +30,20 @@ from burr.integrations.persisters.b_redis import (
 
 if not os.environ.get("BURR_CI_INTEGRATION_TESTS") == "true":
     pytest.skip("Skipping integration tests", allow_module_level=True)
+
+
+@pytest.fixture(autouse=True)
+def delete_keys_written_by_test():
+    """save() rejects a key that already exists, so leftover keys would fail the next run.
+    Only keys the test created are deleted -- db 0 is Redis' default, so it may hold other data."""
+    clients = [redis.Redis(host="localhost", port=6379, db=db) for db in (0, 1)]
+    keys_before = [set(client.scan_iter()) for client in clients]
+    yield
+    for client, before in zip(clients, keys_before):
+        created = set(client.scan_iter()) - before
+        if created:
+            client.delete(*created)
+        client.close()
 
 
 @pytest.fixture
