@@ -15,9 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import json
+
 import pytest
 
 from burr.core import State
+from burr.core.persistence import SQLLitePersister
 from burr.core.serde import KEY, StringDispatch, deserialize, serialize
 
 
@@ -104,3 +107,38 @@ def test_envelope_without_imported_deserializer_still_raises():
 
     assert "some.serde.that.is.not.imported" in str(exc_info.value)
     assert "imported" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        (1, "a", None),
+        (),
+        {1, 2, 3},
+        set(),
+        frozenset({"x", "y"}),
+        [(1, 2), {"pair": ("a", ("b", "c"))}],
+        {(1, 2), frozenset({3})},
+    ],
+)
+def test_tuples_and_sets_round_trip(value):
+    """Tuples and sets keep their type and contents instead of becoming str(value)."""
+    restored = deserialize(json.loads(json.dumps(serialize(value))))
+
+    assert restored == value
+    assert type(restored) is type(value)
+
+
+def test_state_with_tuples_and_sets_round_trips_through_persister():
+    """State saved and loaded by a persister gets its tuples and sets back."""
+    persister = SQLLitePersister(db_path=":memory:", table_name="test_serde")
+    persister.initialize()
+    state = State({"pair": (1, "a"), "tags": {"x"}, "history": [("user", "hi")]})
+
+    persister.save("pk", "app", 0, "action", state, "completed")
+    restored = persister.load("pk", "app")["state"]
+
+    assert restored.get_all() == state.get_all()
+    assert isinstance(restored["pair"], tuple)
+    assert isinstance(restored["tags"], set)
+    assert isinstance(restored["history"][0], tuple)
