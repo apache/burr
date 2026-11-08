@@ -41,6 +41,11 @@ def postgresql_persister():
     )
     persister.initialize()
     yield persister
+    # save() rejects a step that already exists, so leftover rows would fail the next run
+    persister.connection.rollback()
+    with persister.connection.cursor() as cursor:
+        cursor.execute("DELETE FROM testtable")
+    persister.connection.commit()
     persister.cleanup()
 
 
@@ -146,6 +151,8 @@ async def asyncpostgresql_persister():
     )
     await persister.initialize()
     yield persister
+    # save() rejects a step that already exists, so leftover rows would fail the next run
+    await persister.connection.execute("DELETE FROM testtable_async")
     await persister.cleanup()
 
 
