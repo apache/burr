@@ -406,10 +406,10 @@ def _validate_environment_for_command(args) -> None:
     command_requirements = {
         "archive": ["git", "gpg"],
         "sdist": ["git", "gpg", "flit"],
-        "wheel": ["git", "gpg", "flit", "node", "npm", "twine"],
+        "wheel": ["git", "gpg", "flit", "wheel", "node", "npm", "twine"],
         "upload": ["git", "gpg", "svn"],
         "promote": ["svn"],
-        "all": ["git", "gpg", "flit", "node", "npm", "svn", "twine"],
+        "all": ["git", "gpg", "flit", "wheel", "node", "npm", "svn", "twine"],
         "verify": ["git", "gpg", "twine"],
         "vote-email": ["git"],
         "result-email": [],
@@ -449,6 +449,8 @@ def _validate_environment_for_command(args) -> None:
         for tool in missing_tools:
             if tool == "flit":
                 print(f"  • {tool}: Install with 'pip install flit'")
+            elif tool == "wheel":
+                print(f"  • {tool}: Install with 'pip install -e \".[release]\"'")
             elif tool == "twine":
                 print(f"  • {tool}: Install with 'pip install twine'")
             elif tool in ["node", "npm"]:
@@ -985,6 +987,13 @@ def _build_wheel_from_current_dir(
             _fail(f"No wheel found matching: {wheel_pattern}")
 
         wheel_path = wheel_files[0]
+        tagged = _run_command(
+            ["wheel", "tags", "--build", "1incubating", "--remove", wheel_path],
+            description="Adding the incubation build tag...",
+            error_message="Wheel retagging failed",
+            env=_release_build_environment(epoch),
+        )
+        wheel_path = os.path.join("dist", tagged.stdout.strip())
         print(f"    ✓ Wheel created: {os.path.basename(wheel_path)}")
 
         # flit build always writes to dist/. If the caller asked for a
@@ -1075,7 +1084,7 @@ def _collect_all_artifacts(version: str, output_dir: str = "dist") -> list[str]:
 
     artifacts = []
     for filename in os.listdir(output_dir):
-        # Match both incubating artifacts and wheel (which doesn't have -incubating suffix)
+        # Match source archives and wheels, including older untagged wheels.
         version_match = f"{version}-incubating" in filename or f"{version}" in filename
         if version_match:
             if any(filename.endswith(ext) for ext in [".tar.gz", ".whl", ".asc", ".sha512"]):

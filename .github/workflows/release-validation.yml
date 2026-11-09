@@ -106,7 +106,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Cache Apache RAT
         id: cache-rat
@@ -143,7 +143,7 @@ jobs:
         run: |
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-src.tar.gz"
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
-          test -f "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+          test -f "dist/apache_burr-${BURR_VERSION}-1incubating-py3-none-any.whl"
 
       # RAT excludes burr/tracking/server/build/**, so it never inspects the
       # compiled UI -- the only content the wheel adds over the sdist. This
@@ -200,7 +200,7 @@ jobs:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
           python scripts/ci_smoke_server.py \
-            --wheel "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+            --wheel "dist/apache_burr-${BURR_VERSION}-1incubating-py3-none-any.whl"
 
       - name: Upload smoke workspace on failure
         if: failure()
@@ -238,7 +238,7 @@ jobs:
         env:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
-          pip install "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+          pip install "dist/apache_burr-${BURR_VERSION}-1incubating-py3-none-any.whl"
 
       - name: Verify core imports succeed without optional dependencies
         run: |
@@ -282,7 +282,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8
@@ -315,8 +315,8 @@ jobs:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
           python scripts/verify_apache_artifacts.py compare-wheels \
-            "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl" \
-            "/tmp/sdist-wheel/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+            "dist/apache_burr-${BURR_VERSION}-1incubating-py3-none-any.whl" \
+            "/tmp/sdist-wheel/apache_burr-${BURR_VERSION}-1incubating-py3-none-any.whl"
 
   # Single stable required-check name. Always runs (if: always()) so it produces
   # a definite SUCCESS or FAILURE — never SKIPPED. Branch protection in

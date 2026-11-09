@@ -156,15 +156,17 @@ def test_parse_rc_label_rejects_invalid_format():
         release._parse_rc_label("0.42.0")
 
 
-def test_validate_promotion_artifacts_requires_expected_set(tmp_path):
-    _write_artifact_set(tmp_path, "0.42.0")
+@pytest.mark.parametrize("build_tag", ["", "1incubating-"])
+def test_validate_promotion_artifacts_requires_expected_set(tmp_path, build_tag):
+    wheel_name = f"apache_burr-0.42.0-{build_tag}py3-none-any.whl"
+    _write_artifact_set(tmp_path, "0.42.0", wheel_name)
 
     artifacts = release._validate_promotion_artifacts(str(tmp_path), "0.42.0")
 
     assert len(artifacts) == 9
     assert any(path.endswith("apache-burr-0.42.0-incubating-src.tar.gz") for path in artifacts)
     assert any(path.endswith("apache-burr-0.42.0-incubating-sdist.tar.gz") for path in artifacts)
-    assert any(path.endswith("apache_burr-0.42.0-py3-none-any.whl") for path in artifacts)
+    assert any(path.endswith(wheel_name) for path in artifacts)
 
 
 def test_validate_promotion_artifacts_fails_when_companion_missing(tmp_path):
