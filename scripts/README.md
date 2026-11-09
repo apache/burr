@@ -109,6 +109,9 @@ python scripts/apache_release.py announce-email --version 0.41.0
 
 Release wheels use the build tag `1incubating` (for example,
 `apache_burr-0.43.0-1incubating-py3-none-any.whl`), keeping the package version unchanged.
+The wheel build temporarily stages `LICENSE-wheel` as `LICENSE` and updates Flit's
+licence-file setting, restoring the source files afterward. The verifier checks
+the packaged `LICENSE` against `LICENSE-wheel`.
 
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
 

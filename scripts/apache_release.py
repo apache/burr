@@ -971,13 +971,27 @@ def _build_wheel_from_current_dir(
     try:
         epoch = source_date_epoch if source_date_epoch is not None else _wheel_source_date_epoch()
 
-        _run_command(
-            ["flit", "build", "--format", "wheel"],
-            description="",
-            error_message="Wheel build failed",
-            success_message="Wheel built successfully",
-            env=_release_build_environment(epoch),
-        )
+        # Let Flit generate metadata and RECORD for the artifact-specific LICENSE.
+        license_path, config_path = Path("LICENSE"), Path(VERSION_FILE)
+        source_license, source_config = license_path.read_bytes(), config_path.read_bytes()
+        try:
+            license_path.write_bytes(Path("LICENSE-wheel").read_bytes())
+            config_path.write_bytes(
+                source_config.replace(
+                    b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+                    b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
+                )
+            )
+            _run_command(
+                ["flit", "build", "--format", "wheel"],
+                description="",
+                error_message="Wheel build failed",
+                success_message="Wheel built successfully",
+                env=_release_build_environment(epoch),
+            )
+        finally:
+            license_path.write_bytes(source_license)
+            config_path.write_bytes(source_config)
 
         # Find the wheel
         wheel_pattern = f"dist/apache_burr-{version}*.whl"

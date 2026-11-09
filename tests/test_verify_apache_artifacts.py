@@ -24,6 +24,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+import pytest
+
 
 def _load_verify_module():
     module_path = Path(__file__).resolve().parent.parent / "scripts" / "verify_apache_artifacts.py"
@@ -88,9 +90,7 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
                 "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
                 "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
                 "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
-                "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text(
-                    "LICENSE-wheel"
-                ),
+                "apache_burr-0.41.0.dist-info/licenses/LICENSE": _reference_text("LICENSE-wheel"),
             },
         )
 
@@ -99,12 +99,18 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
         assert summary.ok is True
 
 
-def test_verify_artifact_contents_fails_when_wheel_license_file_is_missing():
+@pytest.mark.parametrize("license_name", [None, "LICENSE-wheel", "LICENSE"])
+def test_verify_artifact_contents_rejects_missing_old_or_source_license(license_name):
     with tempfile.TemporaryDirectory() as temp_dir:
         artifacts_dir = Path(temp_dir) / "dist"
         artifacts_dir.mkdir()
 
         wheel_path = artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl"
+        license_files = {}
+        if license_name:
+            license_files[
+                f"apache_burr-0.41.0.dist-info/licenses/{license_name}"
+            ] = _reference_text(license_name)
         _write_wheel(
             wheel_path,
             {
@@ -113,13 +119,14 @@ def test_verify_artifact_contents_fails_when_wheel_license_file_is_missing():
                 "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
                 "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
                 "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
+                **license_files,
             },
         )
 
         summary = verify.VerificationSummary()
         assert verify.verify_artifact_contents(str(artifacts_dir), summary) is False
         assert any(
-            result.name.endswith("contains LICENSE-wheel") and result.status == verify.FAIL
+            result.name.endswith("contains LICENSE") and result.status == verify.FAIL
             for result in summary.results
         )
 

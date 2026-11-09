@@ -60,8 +60,6 @@ from pathlib import Path, PurePosixPath
 # Configuration
 PROJECT_SHORT_NAME = "burr"
 REQUIRED_TEXT_FILES = ("LICENSE", "NOTICE", "DISCLAIMER")
-WHEEL_LICENSE_FILES = ("LICENSE-wheel",)
-WHEEL_REQUIRED_TEXT_FILES = ("NOTICE", "DISCLAIMER") + WHEEL_LICENSE_FILES
 PASS = "PASS"
 FAIL = "FAIL"
 SKIP = "SKIP"
@@ -132,7 +130,7 @@ def _sha512_for_file(path: str) -> str:
 def _read_expected_text_files() -> dict[str, bytes]:
     project_root = Path(__file__).resolve().parent.parent
     expected: dict[str, bytes] = {}
-    for filename in (*REQUIRED_TEXT_FILES, *WHEEL_LICENSE_FILES):
+    for filename in (*REQUIRED_TEXT_FILES, "LICENSE-wheel"):
         expected[filename] = (project_root / filename).read_bytes()
     return expected
 
@@ -451,8 +449,8 @@ def verify_artifact_contents(
             if not _verify_required_text_files(
                 artifact_name,
                 file_bytes,
-                WHEEL_REQUIRED_TEXT_FILES,
-                expected_files,
+                REQUIRED_TEXT_FILES,
+                {**expected_files, "LICENSE": expected_files["LICENSE-wheel"]},
                 summary,
             ):
                 all_valid = False
