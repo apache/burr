@@ -44,7 +44,7 @@ Note we have a few more in [other-examples](other-examples/), but those do not y
 - [conversational-rag](conversational-rag/) - This shows multiple examples on how to use Burr to create a conversational RAG chatbot. This shows how to use state/prior knowledge to augment your LLM call with Burr.
 - [hello-world-counter](hello-world-counter/) - This is an example of a simple state machine, used in the docs.
 - [llm-adventure-game](llm-adventure-game/) - This is an example of a simple text-based adventure game using LLMs -- it shows how to progress through hidden states while reusing components.
-- [ml-training](ml-training/) - This is an example of a simple ML training pipeline. It shows how to use Burr to track the training of a model. This is not complete.
+- [ml-training](ml-training/) - This example trains a scikit-learn model one epoch at a time. It shows checkpoints, a stop rule that is separate from the training code, and a human review that can pause and resume.
 - [multi-agent-collaboration](multi-agent-collaboration/) - This example shows how to use Burr to create a multi-agent collaboration. This is a clone of the following [LangGraph example](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb).
 - [multi-modal-chatbot](multi-modal-chatbot/) - This example shows how to use Burr to create a multi-modal chatbot. This demonstrates how to use a model to delegate to other models conditionally.
 - [streaming-overview](streaming-overview/) - This example shows how we can use the streaming API to respond to return quicker results to the user and build a seamless experience
