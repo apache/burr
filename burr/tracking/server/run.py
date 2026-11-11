@@ -432,6 +432,9 @@ def mount_burr_ui(
 ) -> FastAPI:
     """Mount the Burr UI inside another FastAPI app.
 
+    The Burr UI's startup and shutdown run inside the parent app's lifespan, so this
+    must be called before the parent app starts.
+
     :param parent_app: The parent FastAPI application to mount onto.
     :param path: URL path prefix for the Burr UI. Defaults to "/burr".
     :param name: Name for the mounted sub-application. Defaults to "burr-ui".
@@ -441,6 +444,18 @@ def mount_burr_ui(
     """
     ui_app = create_burr_ui_app(serve_static=serve_static)
     parent_app.mount(path, ui_app, name=name)
+
+    # Starlette does not run the lifespan of a mounted app, so without this the backend
+    # never starts and /ready keeps returning 503.
+    parent_lifespan = parent_app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan_with_burr_ui(app: FastAPI):
+        async with ui_app.router.lifespan_context(ui_app):
+            async with parent_lifespan(app) as state:
+                yield state
+
+    parent_app.router.lifespan_context = lifespan_with_burr_ui
     return ui_app
 
 
