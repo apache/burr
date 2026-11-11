@@ -3863,6 +3863,70 @@ def test_application_builder_unset():
         ApplicationBuilder().build()
 
 
+def _builder_with_unset_read() -> ApplicationBuilder:
+    @action(reads=["count", "never_set"], writes=["count"])
+    def counter(state: State) -> State:
+        return state.update(count=state["count"] + 1)
+
+    return (
+        ApplicationBuilder()
+        .with_actions(counter)
+        .with_transitions(("counter", "counter"))
+        .with_state(count=0)
+        .with_entrypoint("counter")
+    )
+
+
+def test_application_builder_validate_passes_on_valid_graph():
+    app = (
+        ApplicationBuilder()
+        .with_state(count=0)
+        .with_actions(counter=base_counter_action, result=Result("count"))
+        .with_transitions(
+            ("counter", "counter", Condition.expr("count < 10")), ("counter", "result")
+        )
+        .with_entrypoint("counter")
+        .build(validate=True)
+    )
+    assert app.get_next_action().name == "counter"
+
+
+def test_application_builder_validate_raises_on_unset_read():
+    with pytest.raises(ValueError, match="never_set"):
+        _builder_with_unset_read().build(validate=True)
+
+
+def test_application_builder_does_not_validate_by_default():
+    app = _builder_with_unset_read().build()
+    assert app.get_next_action().name == "counter"
+
+
+@pytest.mark.asyncio
+async def test_application_builder_abuild_validate_raises_on_unset_read():
+    with pytest.raises(ValueError, match="never_set"):
+        await _builder_with_unset_read().abuild(validate=True)
+
+
+def test_application_builder_validate_uses_initialize_from_default_state():
+    @action(reads=["count", "limit"], writes=["count"])
+    def counter(state: State) -> State:
+        return state.update(count=state["count"] + 1)
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(counter)
+        .with_transitions(("counter", "counter"))
+        .initialize_from(
+            DevNullPersister(),
+            resume_at_next_action=True,
+            default_state={"count": 0, "limit": 10},
+            default_entrypoint="counter",
+        )
+        .build(validate=True)
+    )
+    assert app.state["limit"] == 10
+
+
 def test_application_run_step_hooks_sync():
     action_tracker = CallCaptureTracker()
     counter_action = base_counter_action.with_name("counter")

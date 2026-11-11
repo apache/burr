@@ -2827,6 +2827,20 @@ class ApplicationBuilder(Generic[StateType]):
             )
         return self.graph_builder.build()
 
+    def _validate_graph(self):
+        """Validates the graph against the state a fresh run starts with. This runs before any
+        persisted state is loaded, so the result does not depend on what has been saved."""
+        initial_state_keys = set(self.state.keys())
+        if self.default_state is not None:
+            initial_state_keys.update(self.default_state.keys())
+        problems = self._get_built_graph().validate(initial_state_keys)
+        if problems:
+            raise ValueError(
+                BASE_ERROR_MESSAGE
+                + "Graph validation failed:\n"
+                + "\n".join(f"  - {problem}" for problem in problems)
+            )
+
     def _build_common(self) -> Application:
         graph = self._get_built_graph()
         _validate_start(self.start, {action.name for action in graph.actions})
@@ -2867,7 +2881,7 @@ class ApplicationBuilder(Generic[StateType]):
             state_initializer=self.state_initializer,
         )
 
-    def build(self) -> Application[StateType]:
+    def build(self, validate: bool = False) -> Application[StateType]:
         """Builds the application for synchronous runs.
 
         We support both synchronous and asynchronous applications. In case you are using state initializers
@@ -2892,11 +2906,15 @@ class ApplicationBuilder(Generic[StateType]):
         app async. However, we strongly encourage to switch to async persisters if you are running
         an async application.
 
+        :param validate: Whether to check the graph for state keys that are read but never written
+            or provided by the initial state. See :py:meth:`Graph.validate <burr.core.graph.Graph.validate>`.
         :return: The application object.
         """
         _validate_app_id(self.app_id)
         if self.state is None:
             self.state = State()
+        if validate:
+            self._validate_graph()
 
         if self.state_persister:
             self._set_sync_state_persister()  # this is used to save the state during application run
@@ -2906,7 +2924,7 @@ class ApplicationBuilder(Generic[StateType]):
 
         return self._build_common()
 
-    async def abuild(self) -> Application[StateType]:
+    async def abuild(self, validate: bool = False) -> Application[StateType]:
         """Builds the application for asynchronous runs.
 
         We support both synchronous and asynchronous applications. To save/load in an asynchronous
@@ -2935,6 +2953,8 @@ class ApplicationBuilder(Generic[StateType]):
             | Async and Async                         |  ✅      |
             +-----------------------------------------+----------+
 
+        :param validate: Whether to check the graph for state keys that are read but never written
+            or provided by the initial state. See :py:meth:`Graph.validate <burr.core.graph.Graph.validate>`.
         :return: The application object.
         """
         self._is_async = True
@@ -2942,6 +2962,8 @@ class ApplicationBuilder(Generic[StateType]):
         _validate_app_id(self.app_id)
         if self.state is None:
             self.state = State()
+        if validate:
+            self._validate_graph()
 
         if self.state_persister:
             await self._set_async_state_persister()  # this is used to save the state during application run
