@@ -173,6 +173,79 @@ def test_graph_builder_get_next_node():
     assert graph.get_next_node(None, State({"count": 0}), entrypoint="counter").name == "counter"
 
 
+def test_graph_validate_valid():
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=base_counter_action, result=Result("count"))
+        .with_transitions(
+            ("counter", "counter", Condition.expr("count < 10")), ("counter", "result")
+        )
+        .build()
+    )
+    assert graph.validate() == []
+
+
+def test_graph_validate_reports_unset_action_read():
+    reads_unset = PassedInAction(
+        reads=["count", "never_set"],
+        writes=["count"],
+        fn=lambda state: {"count": state["count"] + 1},
+        update_fn=lambda result, state: state.update(**result),
+        inputs=[],
+    )
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=reads_unset)
+        .with_transitions(("counter", "counter"))
+        .build()
+    )
+    problems = graph.validate()
+    assert len(problems) == 1
+    assert "`counter`" in problems[0]
+    assert "['never_set']" in problems[0]
+
+
+def test_graph_validate_reports_unset_condition_key():
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=base_counter_action, result=Result("count"))
+        .with_transitions(
+            ("counter", "counter", Condition.expr("limit > count")), ("counter", "result")
+        )
+        .build()
+    )
+    problems = graph.validate()
+    assert len(problems) == 1
+    assert "`counter` -> `counter`" in problems[0]
+    assert "['limit']" in problems[0]
+
+
+def test_graph_validate_accepts_initial_state_keys():
+    graph = (
+        GraphBuilder()
+        .with_actions(counter=base_counter_action, result=Result("count"))
+        .with_transitions(
+            ("counter", "counter", Condition.expr("limit > count")), ("counter", "result")
+        )
+        .build()
+    )
+    assert graph.validate(initial_state_keys=["limit"]) == []
+
+
+def test_graph_validate_skips_internal_keys():
+    reads_internal = PassedInAction(
+        reads=["__PRIOR_STEP"],
+        writes=[],
+        fn=lambda state: {},
+        update_fn=lambda result, state: state,
+        inputs=[],
+    )
+    graph = (
+        GraphBuilder().with_actions(noop=reads_internal).with_transitions(("noop", "noop")).build()
+    )
+    assert graph.validate() == []
+
+
 def test_get_actions_by_tag():
     action_with_tags = PassedInAction(
         reads=["count"],

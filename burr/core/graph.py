@@ -20,7 +20,7 @@ import dataclasses
 import inspect
 import logging
 import pathlib
-from typing import Any, Callable, List, Literal, Optional, Set, Tuple, Union
+from typing import Any, Callable, Iterable, List, Literal, Optional, Set, Tuple, Union
 
 from burr.core.action import Action, Condition, create_action, default
 from burr.core.state import State
@@ -201,6 +201,42 @@ class Graph:
                 f"Tags are: {self._action_tag_map.keys()}."
             )
         return self._action_tag_map.get(tag)
+
+    def validate(self, initial_state_keys: Iterable[str] = ()) -> List[str]:
+        """Checks the graph for state keys that are read but can never be set.
+
+        A key is reported when an action or a transition condition reads it, but no action
+        writes it and it is not in the initial state. This only uses the declared ``reads`` and
+        ``writes``, so it will not catch a key that is written on some paths but not on others.
+        Keys starting with ``__`` are internal to Burr and are skipped.
+
+        :param initial_state_keys: Keys in the state before the first action runs
+        :return: A description of each problem found, empty if there are none
+        """
+        settable = set(initial_state_keys)
+        for action in self.actions:
+            settable.update(action.writes)
+
+        def _unset(keys: List[str]) -> List[str]:
+            return [key for key in keys if not key.startswith("__") and key not in settable]
+
+        problems = []
+        for action in self.actions:
+            missing = _unset(action.reads)
+            if missing:
+                problems.append(
+                    f"Action `{action.name}` reads {missing}, "
+                    "but no action writes them and they are not in the initial state."
+                )
+        for transition in self.transitions:
+            missing = _unset(transition.condition.reads)
+            if missing:
+                problems.append(
+                    f"Condition `{transition.condition.name}` on transition "
+                    f"`{transition.from_.name}` -> `{transition.to.name}` reads {missing}, "
+                    "but no action writes them and they are not in the initial state."
+                )
+        return problems
 
     def visualize(
         self,
