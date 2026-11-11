@@ -19,48 +19,95 @@
 
 # ML Training
 
-This is a WIP! Please contribute back if you have ideas. You can track the associated issue [here](https://github.com/apache/burr/issues/138).
+This example trains a model one epoch at a time. Burr runs the training as a state machine, which is a set of steps with rules for the next step. A person approves the model before the example registers it.
 
-A machine learning training system can easily be modeled as a state machine.
+The example uses scikit-learn and its built-in digits dataset. It needs no API key and no download. One run takes a few seconds.
 
-While often, this is more of a DAG (E.G. `query_data` -> `feature_engineer` -> `train_model` -> `evaluate_model`), there
-are some interesting reasons this as a state machine.
+![State Machine](statemachine.png)
 
-## More granular training routines
+The example has four files:
 
-If, rather than treating `train` as a action, you treat `train_epoch` as an action, you can utilize the abstractions
-burr represents to get the following benefits:
+- [application.py](application.py): The actions, the state machine, and a command-line loop.
+- [notebook.ipynb](notebook.ipynb): The same run, one step at a time.
+- [test_ml_training.py](test_ml_training.py): A test that runs the full flow without a person.
+- [requirements.txt](requirements.txt): The packages that the example needs.
 
-#### Checkpointing
+## Run the example
 
-You can store the current params + best model (or pointers to them). Then go back to the failure point. This allows you
-to recover from failure in a generic way.
+Run these commands from this directory.
 
-#### Decoupling training logic from termination condition
+1. Install the packages:
 
-You can have a condition that checks training completeness based on metric history, which is different from the training logic itself.
-This allows you to easily swap in and out termination conditions (testing them against each other or running different ones in different scenarios),
-as well as easy reuse.
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-#### Visibility into lower-level training
+2. Start a run:
 
-Similar to [hooks](https://lightning.ai/docs/pytorch/stable//extensions/callbacks.html) in pytorch lightning,
-you can use Burr hooks to log metrics, visualize, etc... at each step. This allows you to have a more granular view of training that updates live
-(obviuosly depending on the UI/model-monitoring you're using.)
+   ```bash
+   python application.py
+   ```
 
-## Human in the loop
+   The program prints an `app_id`, which is the identifier of this run. The program trains until the stop rule is true. Then it prints why it stopped, the best score, the last 5 scores, and the learning rate. Then it asks for a decision.
 
-While some models are trained in a single-shot and shipped to production, many require human input.
-Burr can be used to express training, then checkpoint/pause the state while a human is evaluating it,
-and have their input (e.g. go/no-go) passed in as an [input parameter](https://burr.apache.org/concepts/actions/#runtime-inputs).
+3. Type one of the three decisions:
 
-Note that this still requires a scheduling tool (say a task executor that runs until the next human input is needed),
-but that task executor does not need to be complicated (all it needs to do is run a job when prompted, and possibly on a chron schedule).
+   - `approve`: The program copies the best checkpoint to `checkpoints/<app_id>/model.joblib`.
+   - `continue`: The program asks for a learning rate. Press Enter to keep the current value. Then the program trains for a maximum of 5 more epochs and asks again.
+   - `reject`: The program stops and registers no model.
 
-## Hyperparameter training
+To see each step in the Burr UI, run `burr` in a second terminal. The run is in the project `demo_ml_training`.
 
-Similar to epoch training, hyperparameter training can be modeled as a state machine. The system makes a decision about what
-to look for next based on the prior results. Furthermore, one can model a step that handles multiple jobs, keeping them alive/
-launching new ones as they complete (based on state).
+## Stop a run and resume it
 
-For a sketch of the latter see [application.py](./application.py) & ![diagram](./statemachine.png).
+Burr saves the state after each step in `ml_training.db`, which is a SQLite file in this directory. If you stop the program at the question, you do not lose the run.
+
+To resume the run, give its `app_id` to the program:
+
+```bash
+python application.py <app_id>
+```
+
+The program does not train again. It continues at the review and asks for the decision. If the program fails during training, the same command continues at the next epoch.
+
+A real review works the same way. The process exits at the review. When the person replies, a scheduler or a web request starts the process again with the `app_id` and the decision.
+
+## How it works
+
+### One epoch is one action
+
+`train_epoch` trains the model for one epoch and saves it to a checkpoint file. `evaluate` scores that checkpoint on the validation data and records the best checkpoint. Because each epoch is a separate step, Burr saves the state and tracks the metrics after each epoch.
+
+### The state holds paths, not models
+
+The state holds the metrics, the counters, and the paths of the checkpoint files. The models stay on disk. As a result, the state is small and Burr can save it as JSON.
+
+Each run writes to its own directory, `checkpoints/<app_id>/`. The example does not delete old checkpoints.
+
+### The stop rule is a transition
+
+The training code does not decide when to stop. One transition holds the stop rule:
+
+```python
+("evaluate", "human_review", expr("epochs_since_best >= patience or epoch >= max_epochs")),
+```
+
+To use a different stop rule, change this line. The actions stay the same. The default values are `patience=3` and `max_epochs=20`, and you can set them in `application()`.
+
+### The review is an input
+
+The application halts before the `human_review` action. That action needs an input named `decision`, so it cannot run until a person gives one.
+
+When the decision is `continue`, the action raises `max_epochs` by `extra_epochs` and sets `epochs_since_best` to 0. Training then continues with the same stop rule.
+
+## Hyperparameter tuning
+
+The reviewer can change one hyperparameter at the review: the learning rate. The `human_review` action has an optional input named `learning_rate`. When the decision is `continue`, the action writes the new value to the state, and `train_epoch` uses it from the next epoch.
+
+```python
+app.run(halt_before=["human_review"], inputs={"decision": "continue", "learning_rate": 0.01})
+```
+
+The default learning rate is 0.001, and the accuracy rises slowly with it. To see the effect, continue a run with 0.01. The accuracy rises faster in the next epochs.
+
+This example does not include an automatic hyperparameter search. You can model one in the same way. An action takes the place of the reviewer. It reads the earlier results from the state and selects the next parameters to try.
