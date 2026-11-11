@@ -50,7 +50,7 @@ def build_model(state: State) -> Tuple[dict, State]:
 
 @action(
     reads=["simulation_start", "simulation_end", "model", "data", "current_timestep"],
-    writes=["data"],
+    writes=["data", "current_timestep"],
 )
 def forecast(state: State) -> Tuple[dict, State]:
     """This action forecasts the next timestep in the simulation and appends it to data."""

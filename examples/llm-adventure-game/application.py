@@ -113,7 +113,7 @@ def maybe_progress(state: State) -> Tuple[dict, State]:
     return result, state.update(**result)
 
 
-@action(reads=["challenges"], writes=[])
+@action(reads=[], writes=[])
 def win(state: State) -> Tuple[dict, State]:
     # get summary of actions taken from openai
     print("you won")
