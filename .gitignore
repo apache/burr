@@ -205,3 +205,4 @@ examples/deployment/aws/terraform/*.tfplan
 
 # Claude Code session data
 .claude/
+burr-fork/
