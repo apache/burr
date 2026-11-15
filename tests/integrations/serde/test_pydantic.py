@@ -15,6 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import datetime
+import decimal
+import json
+import uuid
+
 import pytest
 from pydantic import BaseModel
 
@@ -52,6 +57,26 @@ def test_serde_of_pydantic_model():
     assert isinstance(ng["user"], User)
     assert ng["user"].name == "John Doe"
     assert ng["user"].email == "john.doe@example.com"
+
+
+class Order(BaseModel):
+    order_id: uuid.UUID
+    placed_at: datetime.datetime
+    total: decimal.Decimal
+
+
+def test_serde_of_pydantic_model_with_non_json_native_fields():
+    order = Order(
+        order_id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        placed_at=datetime.datetime(2026, 1, 2, 3, 4, 5),
+        total=decimal.Decimal("9.99"),
+    )
+    og = state.State({"order": order})
+    # persisters store the serialized state as JSON, so it has to survive json.dumps
+    serialized = json.loads(json.dumps(og.serialize()))
+    ng = state.State.deserialize(serialized)
+    assert isinstance(ng["order"], Order)
+    assert ng["order"] == order
 
 
 def test_deserialize_pydantic_without_allowlist_warns():
