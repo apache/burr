@@ -270,6 +270,7 @@ name = "burr"
 
 [tool.flit.sdist]
 include = [
+  ".rat-excludes",
   "LICENSE",
   "NOTICE",
   "DISCLAIMER",
