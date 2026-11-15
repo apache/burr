@@ -106,7 +106,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Cache Apache RAT
         id: cache-rat
@@ -282,7 +282,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8

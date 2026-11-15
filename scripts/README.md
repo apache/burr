@@ -33,7 +33,7 @@ Specifically, we set the following guidelines:
 |---|---|---|---|---|
 | Build Scripts | ✓ | ✓ | ✗ | Included in tar.gz and sdist as they are needed to reproduce the build, but not in the whl. These are only meant to be consumed by developers/pod members. |
 | Library Source code | ✓ | ✓ | ✓ | Core library source code is included in all three distributions: tar.gz, sdist, and whl. |
-| Tests (integration and unit) | ✓ | ✓ | ✗ | We expect users/PMC to download the source distribution, build from source, run the tests, and validate. Thus we include in the tar.gz and sdist, but not in the whl. |
+| Tests (integration and unit) | ✓ | ✗ | ✗ | Tests ship in the full source archive (`-src.tar.gz`) for voters to build, test, and validate the release. They are not included in the sdist or wheel. |
 | READMEs | ✓ | ✓ | ✓ | Standard project metadata files (README.md, LICENSE, NOTICE, DISCLAIMER) are included in all three distributions: tar.gz, sdist, and whl. |
 | Documentation | ✓ | ✗ | ✗ | Documentation source is included in the tar.gz for voters to review, but not in the sdist or whl as it is not needed for building or using the package. |
 | Deployment templates | ✓ | ✓ | ✓ | Convenience deployment templates are included in tar.gz, sdist, and whl as they are referred to by specific utility commands for deploying that are included in source. |
@@ -41,8 +41,27 @@ Specifically, we set the following guidelines:
 | Examples (by default required for demo server) | ✓ | ✓ | ✓ | We have four examples (see pyproject.toml) required by the demo server which can be run by a single command. These are included in tar.gz, sdist, and whl as they are needed for the demo functionality. |
 | Other examples | ✓ | ✗ | ✗ | These are included in the tar.gz for voters to review but not included in the sdist or whl as they are not needed to build or run the package. They serve more as documentation. |
 
+## Artifact naming and licence decisions
 
-
+- **Keep wheel filenames without `incubating`.** Wheels use names such as
+  `apache_burr-0.43.0-py3-none-any.whl`, without the proposed `1incubating` build tag.
+  They are convenience binaries; the source archive is the voting artifact.
+  We retain the exact wheel in Apache dist for provenance and verification against
+  the package published to PyPI. This is the project's chosen approach from the
+  [dev-list discussion](https://lists.apache.org/thread/7t31297fhwqp9sqo6nvopgf0qw10zy4y);
+  it does not clear the Clutch filename warning.
+- **Keep `LICENSE-wheel` in the sdist.** Rebuilding a wheel from the sdist builds
+  the tracking UI and bundles its JavaScript dependencies. `LICENSE-wheel` supplies
+  the acknowledgements for those dependencies and is packaged in the rebuilt wheel
+  as `LICENSE`. The sdist's own `LICENSE` describes the source files it ships;
+  retaining `LICENSE-wheel` supports the subsequent wheel build.
+- **Keep `incubating` in the Apache sdist filename.** The release helper continues
+  to produce names such as `apache-burr-0.43.0-incubating-sdist.tar.gz`. This naming
+  can interfere with pip inferring the package name and version when installing
+  directly from an archive URL. We accept that limitation during incubation rather
+  than introduce a temporary naming change, and will revisit it on graduation.
+  Install the wheel or the package from PyPI for normal use; extract the source
+  archive for the build and verification workflow below.
 
 # Release Process
 
@@ -53,15 +72,14 @@ Specifically, we set the following guidelines:
 
 Prerequisites:
 - Python 3.10+
-- `flit` for building (`pip install flit`)
-- `twine` for package validation (`pip install twine`)
+- Release tools (`pip install -e ".[release]"`): Flit for building and Twine for validation.
 - GPG key configured for signing
 - Node.js + npm for UI builds
 - Apache RAT jar for license checking (optional)
 
 ```bash
 # Install build dependencies
-pip install flit
+pip install -e ".[release]"
 pip install -e ".[cli]"  # Installs burr-admin-build-ui command
 
 # Verify GPG setup
@@ -108,6 +126,12 @@ python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-
 python scripts/apache_release.py announce-email --version 0.41.0
 ```
 
+Release wheel filenames follow the [artifact naming decisions](#artifact-naming-and-licence-decisions)
+above (for example, `apache_burr-0.43.0-py3-none-any.whl`).
+The wheel build temporarily stages `LICENSE-wheel` as `LICENSE` and updates Flit's
+licence-file setting, restoring the source files afterward. The verifier checks
+the packaged `LICENSE` against `LICENSE-wheel`.
+
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
 
 ## Promoting a voted RC
@@ -141,6 +165,37 @@ python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id \
   --dev-svn-root https://dist.apache.org/repos/dist/dev/burr \
   --release-svn-root https://dist.apache.org/repos/dist/release/burr
 ```
+
+## Cleaning up superseded releases
+
+After publishing a new release, remove superseded versions from the active
+`dist/release` area. Keep the latest release for each maintained branch and the
+shared `KEYS` file. This is separate from promoting an approved RC out of `dist/dev`.
+
+Before removing a version, check its directory at
+`https://archive.apache.org/dist/incubator/burr/<version>/` and confirm that all
+release artifacts and their `.asc` and `.sha512` files are present. Apache archives
+releases automatically, generally within a day of publication; wait until the
+archive is complete before proceeding. See the
+[Apache release distribution policy](https://infra.apache.org/release-distribution.html#releases-are-archived).
+
+Remove only the superseded version directory using SVN (no checkout required):
+
+```bash
+# Replace with the superseded version whose archive you have checked.
+OLD_VERSION="<superseded-version>"
+svn delete \
+  "https://dist.apache.org/repos/dist/release/incubator/burr/${OLD_VERSION}" \
+  --username your_apache_id \
+  -m "Remove superseded Burr ${OLD_VERSION}; retained in archive.apache.org"
+
+# Verify the current releases and KEYS remain.
+svn ls https://dist.apache.org/repos/dist/release/incubator/burr/
+```
+
+The URL-based `svn delete` commits immediately. It removes the version from active
+distribution while preserving its archived copy; it does not remove the PyPI release.
+Update any website links for the retired version to point to its archive location.
 
 ## For Voters: Verifying a Release
 
@@ -180,13 +235,19 @@ tar -xzf apache-burr-${VERSION}-incubating-src.tar.gz
 cd apache-burr-${VERSION}-incubating-src/
 
 # 5. Install build dependencies
-pip install flit
+pip install -e ".[release]"
 
 # 6. Build the wheel from source (this also builds the UI)
 python scripts/apache_release.py wheel ${VERSION} ${RC}
 
-# 7. Install and test the wheel you just built -- play with the UI
-pip install "dist/apache_burr-${VERSION}-py3-none-any.whl[learn]"
+# 7. Install and test the wheel in a fresh environment outside the source tree.
+# This ensures the editable build-tools installation cannot mask wheel defects.
+WHEEL_PATH="$PWD/dist/apache_burr-${VERSION}-py3-none-any.whl"
+WHEEL_TEST_DIR=$(mktemp -d)
+python -m venv "$WHEEL_TEST_DIR/venv"
+source "$WHEEL_TEST_DIR/venv/bin/activate"
+cd "$WHEEL_TEST_DIR"
+python -m pip install "${WHEEL_PATH}[learn]"
 burr
 
 ```

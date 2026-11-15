@@ -969,22 +969,31 @@ def _build_wheel_from_current_dir(
     try:
         epoch = source_date_epoch if source_date_epoch is not None else _wheel_source_date_epoch()
 
-        _run_command(
-            ["flit", "build", "--format", "wheel"],
-            description="",
-            error_message="Wheel build failed",
-            success_message="Wheel built successfully",
-            env=_release_build_environment(epoch),
-        )
+        # Let Flit generate metadata and RECORD for the artifact-specific LICENSE.
+        license_path, config_path = Path("LICENSE"), Path(VERSION_FILE)
+        source_license, source_config = license_path.read_bytes(), config_path.read_bytes()
+        try:
+            license_path.write_bytes(Path("LICENSE-wheel").read_bytes())
+            config_path.write_bytes(
+                source_config.replace(
+                    b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+                    b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
+                )
+            )
+            _run_command(
+                ["flit", "build", "--format", "wheel"],
+                description="",
+                error_message="Wheel build failed",
+                success_message="Wheel built successfully",
+                env=_release_build_environment(epoch),
+            )
+        finally:
+            license_path.write_bytes(source_license)
+            config_path.write_bytes(source_config)
 
-        # Find the wheel
-        wheel_pattern = f"dist/apache_burr-{version}*.whl"
-        wheel_files = glob.glob(wheel_pattern)
-
-        if not wheel_files:
-            _fail(f"No wheel found matching: {wheel_pattern}")
-
-        wheel_path = wheel_files[0]
+        wheel_path = f"dist/apache_burr-{version}-py3-none-any.whl"
+        if not os.path.isfile(wheel_path):
+            _fail(f"No wheel found at: {wheel_path}")
         print(f"    ✓ Wheel created: {os.path.basename(wheel_path)}")
 
         # flit build always writes to dist/. If the caller asked for a
@@ -1075,7 +1084,6 @@ def _collect_all_artifacts(version: str, output_dir: str = "dist") -> list[str]:
 
     artifacts = []
     for filename in os.listdir(output_dir):
-        # Match both incubating artifacts and wheel (which doesn't have -incubating suffix)
         version_match = f"{version}-incubating" in filename or f"{version}" in filename
         if version_match:
             if any(filename.endswith(ext) for ext in [".tar.gz", ".whl", ".asc", ".sha512"]):

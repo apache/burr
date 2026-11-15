@@ -40,6 +40,31 @@ def _load_release_module():
 release = _load_release_module()
 
 
+def test_wheel_build_stages_license_and_restores_source_on_failure(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    source_license = b"source archive license\n"
+    source_config = b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]\n'
+    Path("LICENSE").write_bytes(source_license)
+    Path("LICENSE-wheel").write_bytes(b"wheel license\n")
+    Path("pyproject.toml").write_bytes(source_config)
+    monkeypatch.setattr(release, "_build_ui_artifacts", lambda: None)
+    monkeypatch.setattr(release, "_prepare_wheel_contents", lambda: (False, False, None, []))
+
+    def fail_build(command, **kwargs):
+        assert command == ["flit", "build", "--format", "wheel"]
+        assert Path("LICENSE").read_bytes() == b"wheel license\n"
+        assert Path("pyproject.toml").read_bytes() == (
+            b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]\n'
+        )
+        raise SystemExit(1)
+
+    monkeypatch.setattr(release, "_run_command", fail_build)
+    with pytest.raises(SystemExit):
+        release._build_wheel_from_current_dir("0.43.0", source_date_epoch=1700000000)
+    assert Path("LICENSE").read_bytes() == source_license
+    assert Path("pyproject.toml").read_bytes() == source_config
+
+
 def test_build_sdist_uses_artifact_specific_license(monkeypatch, tmp_path):
     project_files = {
         "LICENSE": "full source license\nwebsite/src/components/ui/\n",
@@ -157,14 +182,15 @@ def test_parse_rc_label_rejects_invalid_format():
 
 
 def test_validate_promotion_artifacts_requires_expected_set(tmp_path):
-    _write_artifact_set(tmp_path, "0.42.0")
+    wheel_name = "apache_burr-0.42.0-py3-none-any.whl"
+    _write_artifact_set(tmp_path, "0.42.0", wheel_name)
 
     artifacts = release._validate_promotion_artifacts(str(tmp_path), "0.42.0")
 
     assert len(artifacts) == 9
     assert any(path.endswith("apache-burr-0.42.0-incubating-src.tar.gz") for path in artifacts)
     assert any(path.endswith("apache-burr-0.42.0-incubating-sdist.tar.gz") for path in artifacts)
-    assert any(path.endswith("apache_burr-0.42.0-py3-none-any.whl") for path in artifacts)
+    assert any(path.endswith(wheel_name) for path in artifacts)
 
 
 def test_validate_promotion_artifacts_fails_when_companion_missing(tmp_path):
