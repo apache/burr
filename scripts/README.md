@@ -53,7 +53,7 @@ Specifically, we set the following guidelines:
 
 Prerequisites:
 - Python 3.10+
-- Release tools (`pip install -e ".[release]"`): Flit for building, wheel for the incubation build tag, and Twine for validation.
+- Release tools (`pip install -e ".[release]"`): Flit for building and Twine for validation.
 - GPG key configured for signing
 - Node.js + npm for UI builds
 - Apache RAT jar for license checking (optional)
@@ -107,8 +107,8 @@ python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-
 python scripts/apache_release.py announce-email --version 0.41.0
 ```
 
-Release wheels use the build tag `1incubating` (for example,
-`apache_burr-0.43.0-1incubating-py3-none-any.whl`), keeping the package version unchanged.
+Due to limitations of PyPi naming semantics, release wheels do not include `incubating` (for example,
+`apache_burr-0.43.0-py3-none-any.whl`) in their package name. Wheels are convenience packages.
 The wheel build temporarily stages `LICENSE-wheel` as `LICENSE` and updates Flit's
 licence-file setting, restoring the source files afterward. The verifier checks
 the packaged `LICENSE` against `LICENSE-wheel`.
@@ -173,12 +173,12 @@ gpg --verify apache-burr-${VERSION}-incubating-src.tar.gz.asc apache-burr-${VERS
 gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VERSION}-incubating-sdist.tar.gz
 
 # Verify wheel signature
-gpg --verify apache_burr-${VERSION}-1incubating-py3-none-any.whl.asc apache_burr-${VERSION}-1incubating-py3-none-any.whl
+gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
 
 # 3. Verify all SHA512 checksums
 sha512sum -c apache-burr-${VERSION}-incubating-src.tar.gz.sha512
 sha512sum -c apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512
-sha512sum -c apache_burr-${VERSION}-1incubating-py3-none-any.whl.sha512
+sha512sum -c apache_burr-${VERSION}-py3-none-any.whl.sha512
 
 # 4. Extract the source archive
 tar -xzf apache-burr-${VERSION}-incubating-src.tar.gz
@@ -191,7 +191,7 @@ pip install -e ".[release]"
 python scripts/apache_release.py wheel ${VERSION} ${RC}
 
 # 7. Install and test the wheel you just built -- play with the UI
-pip install "dist/apache_burr-${VERSION}-1incubating-py3-none-any.whl[learn]"
+pip install "dist/apache_burr-${VERSION}-py3-none-any.whl[learn]"
 burr
 
 ```
@@ -264,7 +264,7 @@ python scripts/verify_apache_artifacts.py all --rat-jar apache-rat-0.15.jar
 
 # Inspect artifact contents
 python scripts/verify_apache_artifacts.py list-contents dist/apache-burr-0.41.0-incubating-src.tar.gz
-python scripts/verify_apache_artifacts.py list-contents dist/apache_burr-0.41.0-1incubating-py3-none-any.whl
+python scripts/verify_apache_artifacts.py list-contents dist/apache_burr-0.41.0-py3-none-any.whl
 ```
 
 ## Local Development
