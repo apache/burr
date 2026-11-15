@@ -240,8 +240,14 @@ pip install -e ".[release]"
 # 6. Build the wheel from source (this also builds the UI)
 python scripts/apache_release.py wheel ${VERSION} ${RC}
 
-# 7. Install and test the wheel you just built -- play with the UI
-pip install "dist/apache_burr-${VERSION}-py3-none-any.whl[learn]"
+# 7. Install and test the wheel in a fresh environment outside the source tree.
+# This ensures the editable build-tools installation cannot mask wheel defects.
+WHEEL_PATH="$PWD/dist/apache_burr-${VERSION}-py3-none-any.whl"
+WHEEL_TEST_DIR=$(mktemp -d)
+python -m venv "$WHEEL_TEST_DIR/venv"
+source "$WHEEL_TEST_DIR/venv/bin/activate"
+cd "$WHEEL_TEST_DIR"
+python -m pip install "${WHEEL_PATH}[learn]"
 burr
 
 ```
