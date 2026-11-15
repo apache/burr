@@ -136,15 +136,15 @@ def _read_expected_text_files() -> dict[str, bytes]:
 
 
 def _artifact_files(artifacts_dir: str) -> list[str]:
-    all_files = [
-        name
-        for name in os.listdir(artifacts_dir)
-        if os.path.isfile(os.path.join(artifacts_dir, name))
-    ]
+    """Select Burr release packages, ignoring keys, reports, and companion files."""
+    artifact_pattern = re.compile(
+        r"(?:apache-burr-[^-]+-incubating-(?:src|sdist)\.tar\.gz"
+        r"|apache_burr-[^-]+-py3-none-any\.whl)"
+    )
     return sorted(
         name
-        for name in all_files
-        if not name.endswith((".asc", ".sha512")) and not name.startswith("rat-report-")
+        for name in os.listdir(artifacts_dir)
+        if artifact_pattern.fullmatch(name) and os.path.isfile(os.path.join(artifacts_dir, name))
     )
 
 

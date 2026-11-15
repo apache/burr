@@ -264,16 +264,47 @@ def test_rat_scan_target_prefers_single_extracted_project_dir():
         assert rat_target == "apache-burr-0.41.0-incubating-src"
 
 
-def test_artifact_files_ignores_rat_reports():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        artifacts_dir = Path(temp_dir)
-        (artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl").write_bytes(b"wheel")
-        (artifacts_dir / "rat-report-sample.xml").write_text("report", encoding="utf-8")
-        (artifacts_dir / "rat-report-sample.txt").write_text("report", encoding="utf-8")
+def test_artifact_files_ignores_unrelated_files(tmp_path):
+    artifacts = [
+        "apache-burr-0.43.0-incubating-src.tar.gz",
+        "apache-burr-0.43.0-incubating-sdist.tar.gz",
+        "apache_burr-0.43.0-py3-none-any.whl",
+    ]
+    unrelated = [
+        "KEYS",
+        "README.md",
+        "rat-report-sample.xml",
+        "rat-report-sample.txt",
+        "apache-rat-0.18.tar.gz",
+        "other_package-1.0-py3-none-any.whl",
+    ]
+    for name in artifacts + unrelated:
+        (tmp_path / name).write_bytes(b"content")
+    for name in artifacts:
+        for suffix in (".asc", ".sha512"):
+            (tmp_path / (name + suffix)).write_bytes(b"companion")
+    (tmp_path / "apache_burr-0.42.0-py3-none-any.whl").mkdir()
 
-        artifact_files = verify._artifact_files(str(artifacts_dir))
+    assert verify._artifact_files(str(tmp_path)) == sorted(artifacts)
 
-        assert artifact_files == ["apache_burr-0.41.0-py3-none-any.whl"]
+
+def test_verify_signatures_still_requires_artifact_companions(tmp_path):
+    wheel_path = tmp_path / "apache_burr-0.43.0-py3-none-any.whl"
+    _write_wheel(
+        wheel_path,
+        {
+            "burr/__init__.py": b"# example\n" * 200,
+            "apache_burr-0.43.0.dist-info/METADATA": b"Metadata-Version: 2.1\n",
+            "apache_burr-0.43.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
+        },
+    )
+    (tmp_path / "KEYS").write_text("key file", encoding="utf-8")
+
+    summary = verify.VerificationSummary()
+    assert verify.verify_signatures(str(tmp_path), summary) is False
+    failures = [result for result in summary.results if result.status == verify.FAIL]
+    assert {result.details for result in failures} == {"missing .asc", "missing .sha512"}
+    assert all(wheel_path.name in result.name for result in failures)
 
 
 def test_wheel_content_hashes_returns_sha256_per_file(tmp_path):
