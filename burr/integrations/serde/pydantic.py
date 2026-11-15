@@ -58,8 +58,12 @@ def _is_module_allowed(module_name: str, allowlist: Optional[List[str]]) -> bool
 
 @serde.serialize.register(pydantic.BaseModel)
 def serialize_pydantic(value: pydantic.BaseModel, **kwargs) -> dict:
-    """Uses pydantic to dump the model to a dictionary and then adds the __pydantic_class to the dictionary."""
-    _dict = value.model_dump()
+    """Uses pydantic to dump the model to a dictionary and then adds the __pydantic_class to the dictionary.
+
+    The model is dumped in JSON mode, so fields such as datetimes, UUIDs and Decimals come out as
+    JSON-compatible values that persisters can store and that pydantic validates back on load.
+    """
+    _dict = value.model_dump(mode="json")
     _dict[serde.KEY] = "pydantic"
     # get qualified name of pydantic class. The module name should be fully qualified.
     _dict["__pydantic_class"] = f"{value.__class__.__module__}.{value.__class__.__name__}"
