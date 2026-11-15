@@ -285,7 +285,8 @@ include = [
   "examples/hello-world-counter/**",
 ]
 exclude = [
-  # burr-redirect: non-ASF PyPI redirect package, not part of the ASF source release.
+  # Redirect-package sources ship in the full source archive, but are not needed
+  # to build apache-burr and are excluded from its sdist.
   "burr-redirect/**",
   "telemetry/ui/node_modules/**",
   "telemetry/ui/build/**",
