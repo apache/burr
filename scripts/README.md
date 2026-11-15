@@ -166,6 +166,37 @@ python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id \
   --release-svn-root https://dist.apache.org/repos/dist/release/burr
 ```
 
+## Cleaning up superseded releases
+
+After publishing a new release, remove superseded versions from the active
+`dist/release` area. Keep the latest release for each maintained branch and the
+shared `KEYS` file. This is separate from promoting an approved RC out of `dist/dev`.
+
+Before removing a version, check its directory at
+`https://archive.apache.org/dist/incubator/burr/<version>/` and confirm that all
+release artifacts and their `.asc` and `.sha512` files are present. Apache archives
+releases automatically, generally within a day of publication; wait until the
+archive is complete before proceeding. See the
+[Apache release distribution policy](https://infra.apache.org/release-distribution.html#releases-are-archived).
+
+Remove only the superseded version directory using SVN (no checkout required):
+
+```bash
+# Replace with the superseded version whose archive you have checked.
+OLD_VERSION="<superseded-version>"
+svn delete \
+  "https://dist.apache.org/repos/dist/release/incubator/burr/${OLD_VERSION}" \
+  --username your_apache_id \
+  -m "Remove superseded Burr ${OLD_VERSION}; retained in archive.apache.org"
+
+# Verify the current releases and KEYS remain.
+svn ls https://dist.apache.org/repos/dist/release/incubator/burr/
+```
+
+The URL-based `svn delete` commits immediately. It removes the version from active
+distribution while preserving its archived copy; it does not remove the PyPI release.
+Update any website links for the retired version to point to its archive location.
+
 ## For Voters: Verifying a Release
 
 If you're voting on a release, follow these steps to verify the release candidate:
