@@ -4315,6 +4315,28 @@ def test_remap_context_variable_uses_the_defining_class_for_inherited_methods():
     assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == expected
 
 
+class ___(ActionWithoutContext):
+    """A class name made only of underscores. CPython skips mangling entirely in that case, so
+    ``__context`` stays literal and ``___context`` is an ordinary user input, not its mangled form.
+    The name is deliberately degenerate: it is the only shape for which the derived candidate would
+    collapse onto the dunder itself."""
+
+    def run(self, ___context):
+        pass
+
+    def inputs(self) -> Union[list[str], tuple[list[str], list[str]]]:
+        return ["__context", "___context"]
+
+
+def test_remap_context_variable_leaves_all_underscore_class_names_alone():
+    """Without a guard the derived candidate is ``___context``, which is a parameter a user may
+    legitimately declare -- the injected context would silently overwrite their input."""
+    _action = ___()
+
+    inputs = {"__context": "context_value", "___context": "user_value"}
+    assert _remap_dunder_parameters(_action.run, inputs, ["__context", "__tracer"]) == inputs
+
+
 def test_remap_context_variable_injected_value_wins_for_its_own_parameter():
     """A caller passing the mangled name directly is using an undocumented back door; the injected
     value is what the declared ``__context`` binds to. Pinned so the precedence is not implicit."""
@@ -4626,6 +4648,45 @@ class AsyncSingleStepStreamingActionWithContext(SingleStepStreamingAction):
         yield {"app_id": __context.app_id}, state.update(app_id=__context.app_id)
 
 
+class StreamingActionWithOverriddenAdapter(SingleStepStreamingActionWithContext):
+    """Overrides only the step() adapter; the dunder on stream_run_and_update is still defined by
+    the base class and must keep the base class' mangled name."""
+
+    def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id + "-adapter")
+
+
+class AsyncStreamingActionWithOverriddenAdapter(AsyncSingleStepStreamingActionWithContext):
+    async def run_and_update(self, state: State, __context: ApplicationContext) -> State:
+        return state.update(app_id=__context.app_id + "-adapter")
+
+
+def test_step_streaming_action_with_overridden_adapter_uses_adapter_context():
+    app = _build_context_app(StreamingActionWithOverriddenAdapter())
+    _, result, state = app.step()
+    assert state["app_id"] == "context-app-id-adapter"
+
+
+async def test_astep_async_streaming_action_with_overridden_adapter_uses_adapter_context():
+    app = _build_context_app(AsyncStreamingActionWithOverriddenAdapter())
+    _, result, state = await app.astep()
+    assert state["app_id"] == "context-app-id-adapter"
+
+
+def test_stream_result_uses_stream_method_not_overridden_adapter():
+    app = _build_context_app(StreamingActionWithOverriddenAdapter())
+    _, container = app.stream_result(halt_after=["ctx_action"])
+    result, state = container.get()
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astream_result_uses_stream_method_not_overridden_adapter():
+    app = _build_context_app(AsyncStreamingActionWithOverriddenAdapter())
+    _, container = await app.astream_result(halt_after=["ctx_action"])
+    result, state = await container.get()
+    assert state["app_id"] == "context-app-id"
+
+
 def test_step_class_based_multi_step_action_receives_context():
     app = _build_context_app(SyncActionWithContext())
     _, result, state = app.step()
@@ -4659,6 +4720,24 @@ async def test_astream_result_class_based_single_step_async_streaming_action_rec
     app = _build_context_app(AsyncSingleStepStreamingActionWithContext())
     _, container = await app.astream_result(halt_after=["ctx_action"])
     result, state = await container.get()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+def test_step_class_based_single_step_streaming_action_receives_context():
+    """``step()`` on a streaming single-step action calls ``run_and_update``, which is the base-class
+    adapter forwarding ``**run_kwargs`` to ``stream_run_and_update``. The dunder parameter -- and so
+    the mangled name -- is declared on the latter, not on the adapter."""
+    app = _build_context_app(SingleStepStreamingActionWithContext())
+    _, result, state = app.step()
+    assert result == {"app_id": "context-app-id"}
+    assert state["app_id"] == "context-app-id"
+
+
+async def test_astep_class_based_single_step_async_streaming_action_receives_context():
+    """Async counterpart of the test above: ``astep()`` goes through the same adapter."""
+    app = _build_context_app(AsyncSingleStepStreamingActionWithContext())
+    _, result, state = await app.astep()
     assert result == {"app_id": "context-app-id"}
     assert state["app_id"] == "context-app-id"
 

@@ -136,7 +136,8 @@ def _mangled_parameter_for_class(
     underscores into ``_ClassName__identifier``, where ``ClassName`` is the name of the class whose
     *body defines the method* with any leading underscores stripped -- not the runtime class, so an
     inherited ``run`` keeps the base class' name. ``__qualname__`` records exactly that defining
-    class, which is why it is used here instead of ``type(self).__name__``.
+    class, which is why it is used here instead of ``type(self).__name__``. A class whose name is
+    only underscores is not mangled at all, so there is no candidate to derive.
 
     Deriving the one candidate name, rather than scanning the signature for anything ending with the
     dunder, is what keeps a regular user input (``user__context``, ``_user__context``, or a name that
@@ -153,7 +154,13 @@ def _mangled_parameter_for_class(
     parts = (getattr(run_method, "__qualname__", "") or "").split(".")
     if len(parts) < 2:
         return None  # module-level function or lambda: nothing was ever mangled
-    candidate = "_{}{}".format(parts[-2].lstrip("_"), dunder_param)
+    class_name = parts[-2].lstrip("_")
+    if not class_name:
+        # CPython skips mangling entirely when the class name is only underscores, so no mangled
+        # name exists. Deriving one anyway would collapse onto the dunder itself (``___context``),
+        # which is a name a user is free to declare -- and it would be overwritten silently.
+        return None
+    candidate = "_{}{}".format(class_name, dunder_param)
     return candidate if candidate in params else None
 
 
@@ -196,6 +203,30 @@ def _remap_injected_inputs(method: Callable, inputs: Dict[str, Any]) -> Dict[str
     parameter names a class-based action's method may use. See ``_remap_dunder_parameters``."""
     if "__context" in inputs or "__tracer" in inputs:
         return _remap_dunder_parameters(method, inputs, ["__context", "__tracer"])
+    return inputs
+
+
+def _remap_single_step_inputs(
+    action: Action, inputs: Dict[str, Any], stream_runner: bool = False
+) -> Dict[str, Any]:
+    """Remaps injected inputs to the method that the caller is about to invoke.
+
+    ``step()``/``astep()`` invoke ``run_and_update``. For a streaming action that method may be the
+    base-class adapter forwarding ``**run_kwargs`` to ``stream_run_and_update``, so the latter must
+    be inspected as a fallback. ``stream_result()``/``astream_result()`` invoke
+    ``stream_run_and_update`` directly; inspecting ``run_and_update`` first could bind to a mangled
+    name from a different defining class and corrupt that call.
+
+    :param action: the single-step action that is about to run
+    :param inputs: the processed inputs, including the injected dunders
+    :param stream_runner: True when ``stream_run_and_update`` is the method being called
+    :return: potentially new dict with the injected values under their mangled names
+    """
+    if stream_runner:
+        return _remap_injected_inputs(action.stream_run_and_update, inputs)
+    inputs = _remap_injected_inputs(action.run_and_update, inputs)
+    if action.streaming:
+        inputs = _remap_injected_inputs(action.stream_run_and_update, inputs)
     return inputs
 
 
@@ -351,7 +382,7 @@ def _run_single_step_action(
     """
     # TODO -- guard all reads/writes with a subset of the state
     action.validate_inputs(inputs)
-    inputs = _remap_injected_inputs(action.run_and_update, inputs)
+    inputs = _remap_single_step_inputs(action, inputs)
     result, new_state = _adjust_single_step_output(
         action.run_and_update(state, **inputs), action.name, action.schema
     )
@@ -375,7 +406,7 @@ def _run_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
-    inputs = _remap_injected_inputs(action.stream_run_and_update, inputs)
+    inputs = _remap_single_step_inputs(action, inputs, stream_runner=True)
     generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
@@ -444,7 +475,7 @@ async def _arun_single_step_streaming_action(
     action.validate_inputs(inputs)
     stream_initialize_time = system.now()
     first_stream_start_time = None
-    inputs = _remap_injected_inputs(action.stream_run_and_update, inputs)
+    inputs = _remap_single_step_inputs(action, inputs, stream_runner=True)
     generator = action.stream_run_and_update(state, **inputs)
     result = None
     state_update = None
@@ -630,7 +661,7 @@ async def _arun_single_step_action(
     """Runs a single step action in async. See the synchronous version for more details."""
     state_to_use = state
     action.validate_inputs(inputs)
-    inputs = _remap_injected_inputs(action.run_and_update, inputs)
+    inputs = _remap_single_step_inputs(action, inputs)
     result, new_state = _adjust_single_step_output(
         await action.run_and_update(state_to_use, **inputs), action.name, action.schema
     )
