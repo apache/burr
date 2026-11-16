@@ -166,7 +166,9 @@ class S3TrackingClient(SyncTrackingClient):
                 key=attribute_name,
                 action_sequence_id=action_sequence_id,
                 span_id=span.uid if span is not None else None,
-                value=serde.serialize(attribute, **self.serde_kwargs),
+                value=serde.serialize(
+                    attribute, **serde.with_serialization_context(self.serde_kwargs)
+                ),
                 tags=tags,
                 time_logged=system.now(),
             )
@@ -365,7 +367,9 @@ class S3TrackingClient(SyncTrackingClient):
         pre_run_entry = BeginEntryModel(
             start_time=datetime.datetime.now(),
             action=action.name,
-            inputs=serde.serialize(_filtered_inputs, **self.serde_kwargs),
+            inputs=serde.serialize(
+                _filtered_inputs, **serde.with_serialization_context(self.serde_kwargs)
+            ),
             sequence_id=sequence_id,
         )
         self.submit_log_event(pre_run_entry, app_id, partition_key)
@@ -385,10 +389,10 @@ class S3TrackingClient(SyncTrackingClient):
         post_run_entry = EndEntryModel(
             end_time=datetime.datetime.now(),
             action=action.name,
-            result=serde.serialize(result, **self.serde_kwargs),
+            result=serde.serialize(result, **serde.with_serialization_context(self.serde_kwargs)),
             sequence_id=sequence_id,
             exception=_format_exception(exception),
-            state=state.serialize(),
+            state=state.serialize(**self.serde_kwargs),
         )
         self.submit_log_event(post_run_entry, app_id, partition_key)
 
