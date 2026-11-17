@@ -19,6 +19,7 @@ import asyncio
 import concurrent.futures
 import dataclasses
 import datetime
+import tempfile
 from random import random
 from typing import Any, AsyncGenerator, Callable, Dict, Generator, List, Literal, Optional, Union
 
@@ -34,6 +35,8 @@ from burr.core import (
     action,
 )
 from burr.core.action import Input, Result
+from burr.core.application import ApplicationIdentifiers
+from burr.core.artifacts import AsyncArtifactStore, LocalFileSystemArtifactStore
 from burr.core.graph import GraphBuilder
 from burr.core.parallelism import (
     MapActions,
@@ -80,6 +83,21 @@ async def simple_single_fn_subgraph_async(
         + state["number_to_add"]
         + additional_number
         + identifying_number
+    )
+
+
+# Single action/callable subgraph that reads/writes an artifact through the
+# (async) object store exposed on the sub-application's context.
+@action(reads=["input_number", "number_to_add"], writes=["output_number"])
+async def simple_single_fn_subgraph_async_object_store(
+    state: State, __context: ApplicationContext, additional_number: int = 1
+) -> State:
+    assert __context.object_store is not None
+    ref = await __context.object_store.put_artifact(b"hello from subtask")
+    data = await ref.aread(__context.object_store)
+    assert data == b"hello from subtask"
+    return state.update(
+        output_number=state["input_number"] + state["number_to_add"] + additional_number
     )
 
 
@@ -1217,6 +1235,7 @@ def test_map_actions_and_states_uses_same_persister_as_loader():
             tracker=tracker,
             state_persister=persister,
             state_initializer=persister,
+            object_store=None,
             parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
             action_name=action.name,
         ),
@@ -1227,3 +1246,127 @@ def test_map_actions_and_states_uses_same_persister_as_loader():
     assert task.state_initializer is not None
     assert task.tracker is not None
     assert task.state_persister is task.state_initializer  # This ensures they're the same
+
+
+def test_map_actions_and_states_cascades_object_store():
+    """Tests that the object_store on the parent ApplicationContext is cascaded to the
+    SubGraphTask created for each sub-application, so actions running inside a parallel
+    task can still access it through __context.object_store."""
+
+    class SimpleMapStates(MapActionsAndStates):
+        def actions(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[Union[Action, Callable, RunnableGraph], None, None]:
+            for graph_ in [
+                simple_single_fn_subgraph.bind(identifying_number=1000),
+            ]:
+                yield graph_
+
+        def states(
+            self, state: State, context: ApplicationContext, inputs: Dict[str, Any]
+        ) -> Generator[State, None, None]:
+            yield state.update(input_number=0, number_to_add=0)
+
+        def reduce(self, state: State, states: Generator[State, None, None]) -> State:
+            new_state = state
+            for output_state in states:
+                new_state = new_state.append(output_numbers_in_state=output_state["output_number"])
+            return new_state
+
+        @property
+        def writes(self) -> list[str]:
+            return ["output_numbers_in_state"]
+
+        @property
+        def reads(self) -> list[str]:
+            return ["input_numbers_in_state"]
+
+    action = SimpleMapStates()
+    object_store = LocalFileSystemArtifactStore(tempfile.mkdtemp())
+
+    task_generator = action.tasks(
+        state=State(),
+        context=ApplicationContext(
+            app_id="app_id",
+            partition_key="partition_key",
+            sequence_id=0,
+            tracker=None,
+            state_persister=None,
+            state_initializer=None,
+            object_store=object_store,
+            parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
+            action_name=action.name,
+        ),
+        inputs={},
+    )
+    (task,) = task_generator  # one task
+    assert task.object_store is object_store
+
+    # And ensure it's actually threaded into the built sub-application's context
+    builder = task._create_app_builder(
+        ApplicationIdentifiers(app_id="app_id", partition_key="partition_key", sequence_id=0)
+    )
+    assert builder.object_store is object_store
+
+
+class InMemoryAsyncArtifactStore(AsyncArtifactStore):
+    """Minimal async object store test double -- used to exercise SubGraphTask.arun() with
+    an async object store, independent of any real backend."""
+
+    def __init__(self):
+        self._data: Dict[str, bytes] = {}
+
+    async def put(self, data: bytes, key: str) -> None:
+        self._data[key] = data
+
+    async def get(self, key: str) -> bytes:
+        return self._data[key]
+
+    async def exists(self, key: str) -> bool:
+        return key in self._data
+
+
+@pytest.mark.asyncio
+async def test_sub_graph_task_arun_with_async_object_store_and_sync_persister():
+    """Regression test: SubGraphTask.arun() must succeed when the cascaded object_store is
+    async even though the state_persister/state_initializer are sync (a supported, documented
+    combination). Previously this crashed because the sync persister forced `.build()` to be
+    used internally, which unconditionally rejects an async object_store.
+    """
+    object_store = InMemoryAsyncArtifactStore()
+    persister = DummyPersister()
+
+    task = SubGraphTask(
+        graph=RunnableGraph(
+            graph=GraphBuilder()
+            .with_actions(
+                subgraph=simple_single_fn_subgraph_async_object_store,
+                terminal=Result("output_number"),
+            )
+            .with_transitions(("subgraph", "terminal"))
+            .build(),
+            entrypoint="subgraph",
+            halt_after=["terminal"],
+        ),
+        inputs={},
+        state=State({"input_number": 1, "number_to_add": 2}),
+        application_id="sub-app-object-store-test",
+        state_persister=persister,
+        state_initializer=None,
+        object_store=object_store,
+    )
+
+    parent_context = ApplicationContext(
+        app_id="parent",
+        partition_key="partition_key",
+        sequence_id=0,
+        tracker=None,
+        state_persister=None,
+        state_initializer=None,
+        object_store=object_store,
+        parallel_executor_factory=lambda: concurrent.futures.ThreadPoolExecutor(),
+        action_name="parent_action",
+    )
+
+    state = await task.arun(parent_context)
+    assert state["output_number"] == 1 + 2 + 1  # input + number_to_add + additional_number default

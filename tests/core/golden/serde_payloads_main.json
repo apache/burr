@@ -1,0 +1,48 @@
+{
+  "frame": {
+    "frame": {
+      "__burr_serde__": "pandas.DataFrame",
+      "path": "burr_golden_blobs/df_<sha256>.parquet"
+    }
+  },
+  "state": {
+    "bool": true,
+    "bytes": "b'raw-bytes'",
+    "datetime": "2020-01-02 03:04:05",
+    "enum": "Color.RED",
+    "escaped_dict": {
+      "__burr_serde__": "burr.dict",
+      "value": {
+        "__burr_serde__": "hello",
+        "n": 1
+      }
+    },
+    "float": 3.5,
+    "int": 42,
+    "nested": {
+      "a": [
+        1,
+        {
+          "b": {
+            "c": 2
+          }
+        }
+      ]
+    },
+    "none": null,
+    "pydantic": {
+      "__burr_serde__": "pydantic",
+      "__pydantic_class": "User",
+      "age": 36,
+      "name": "ada",
+      "tags": []
+    },
+    "report": {
+      "kind": "report",
+      "value": "the report body"
+    },
+    "set": "{1, 2, 3}",
+    "str": "text",
+    "tuple": "(1, 2)"
+  }
+}

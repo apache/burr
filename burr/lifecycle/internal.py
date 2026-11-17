@@ -19,8 +19,9 @@
 hamilton implementation, but significantly simplified."""
 import asyncio
 import collections
+import contextlib
 import inspect
-from typing import TYPE_CHECKING, Callable, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Callable, ContextManager, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     # type-checking-only for a circular import
@@ -113,12 +114,19 @@ class LifecycleAdapterSet:
     does increase the stack trace in an error, it should be pretty easy to figure out what's going on.
     """
 
-    def __init__(self, *adapters: "LifecycleAdapter"):
+    def __init__(
+        self,
+        *adapters: "LifecycleAdapter",
+        hook_context: Optional[Callable[[], ContextManager]] = None,
+    ):
         """Initializes the adapter set.
 
         :param adapters: Adapters to group together
+        :param hook_context: Optional factory for a context manager entered around every hook
+            dispatch (e.g. to set the serialization context).
         """
         self._adapters = list(adapters)
+        self._hook_context = hook_context
         self.sync_hooks, self.async_hooks = self._get_lifecycle_hooks()
 
     def with_new_adapters(self, *adapters: "LifecycleAdapter") -> "LifecycleAdapterSet":
@@ -127,7 +135,51 @@ class LifecycleAdapterSet:
         :param adapters: Adapters to add
         :return: A new adapter set with the new adapters
         """
-        return LifecycleAdapterSet(*self.adapters, *adapters)
+        return LifecycleAdapterSet(*self.adapters, *adapters, hook_context=self._hook_context)
+
+    def with_hook_context(
+        self, hook_context: Optional[Callable[[], ContextManager]]
+    ) -> "LifecycleAdapterSet":
+        """Returns a new adapter set that enters ``hook_context()`` around every hook dispatch.
+
+        :param hook_context: Factory for the context manager to enter.
+        :return: A new adapter set with the same adapters
+        """
+        return LifecycleAdapterSet(*self.adapters, hook_context=hook_context)
+
+    def _enter_hook_context(self) -> ContextManager:
+        return self._hook_context() if self._hook_context is not None else contextlib.nullcontext()
+
+    @contextlib.contextmanager
+    def action_scope(self, **kwargs):
+        """Enters every adapter's optional ``action_scope`` around the action body.
+
+        This is the *integration boundary* that ``pre_run_step`` cannot be. Lifecycle hooks are
+        dispatched into their own tasks when the asynchronous family is gathered, and a
+        :py:class:`contextvars.Context` write made in one task is invisible to the task that runs
+        the action. An adapter that needs its state to be visible *while the action runs* -- the
+        OpenTelemetry tracker making the step span current is the motivating case -- therefore
+        cannot express that from a hook. It exposes ``action_scope`` instead: ``Application``
+        enters it in the action's own task, immediately after ``pre_run_step`` and immediately
+        before the action, and exits it before ``post_run_step``.
+
+        Scopes are entered in adapter registration order and exited in reverse order, so nesting
+        behaves like nested ``with`` statements. Adapters without an ``action_scope`` attribute
+        are skipped, which keeps this purely additive: an adapter that does not opt in sees no
+        difference, and neither does a dispatch strategy that keeps hooks in the caller's task.
+
+        :param kwargs: Passed through to each adapter's ``action_scope``; the same keyword
+            arguments a step hook receives.
+        """
+        with contextlib.ExitStack() as stack:
+            for adapter in self._adapters:
+                enter_scope = getattr(adapter, "action_scope", None)
+                if enter_scope is None:
+                    continue
+                scope = enter_scope(**kwargs)
+                if scope is not None:
+                    stack.enter_context(scope)
+            yield
 
     def _get_lifecycle_hooks(
         self,
@@ -179,8 +231,17 @@ class LifecycleAdapterSet:
         """
         if not self._does_hook(hook_name, False):
             return
-        for adapter in self.sync_hooks[hook_name]:
-            getattr(adapter, hook_name)(**kwargs)
+        first_error: Optional[BaseException] = None
+        with self._enter_hook_context():
+            for adapter in self.sync_hooks[hook_name]:
+                try:
+                    getattr(adapter, hook_name)(**kwargs)
+                except Exception as e:  # noqa: BLE001 - re-raised once every hook has run
+                    # Mirror the asynchronous path: one failing hook (e.g. a tracker that
+                    # cannot write its log) must not starve the ones registered after it.
+                    first_error = first_error or e
+        if first_error is not None:
+            raise first_error
 
     async def call_all_lifecycle_hooks_async(self, hook_name: str, **kwargs):
         """Calls all the lifecycle hooks in this group, by hook name (stage).
@@ -190,20 +251,69 @@ class LifecycleAdapterSet:
         """
         if not self._does_hook(hook_name, True):
             return
-        futures = []
-        for adapter in self.async_hooks[hook_name]:
-            futures.append(getattr(adapter, hook_name)(**kwargs))
-        if len(futures) == 0:
-            return  # No async hooks to call
-        await asyncio.gather(*futures)
+        with self._enter_hook_context():
+            futures = []
+            for adapter in self.async_hooks[hook_name]:
+                futures.append(getattr(adapter, hook_name)(**kwargs))
+            if len(futures) == 0:
+                return  # No async hooks to call
+            await asyncio.gather(*futures)
 
     async def call_all_lifecycle_hooks_sync_and_async(self, hook_name: str, **kwargs):
-        """Calls all the lifecycle hooks in this group, by hook name (stage).
+        """Calls both the synchronous and the asynchronous hooks, by hook name (stage).
+
+        Asynchronous hooks are awaited **in the calling task**, not gathered into child tasks.
+        ``asyncio.gather`` wraps each coroutine in a :py:class:`asyncio.Task`, and a Task starts
+        with a *copy* of the current :py:class:`contextvars.Context`. Writes made by a ``pre``
+        hook (for example attaching an OpenTelemetry span, or setting the serialization context)
+        therefore never reach the task that runs the action or the matching ``post`` hook; worse,
+        a ``contextvars.Token`` created in that short-lived task cannot be reset from anywhere
+        else. Awaiting in the caller's context keeps the ``pre`` hook, the action, and the ``post``
+        hook in one context, which is what makes trace parenting and context restoration correct.
+        It also isolates concurrent applications for free, since each already runs in its own task.
 
         :param hook_name: Name of the hook
         """
-        self.call_all_lifecycle_hooks_sync(hook_name, **kwargs)
-        await self.call_all_lifecycle_hooks_async(hook_name, **kwargs)
+        first_error: Optional[BaseException] = None
+        # The two families live in separate tables and are always dispatched in this order
+        # (synchronous first, then asynchronous), so the ordering cannot be fixed by changing
+        # registration order. A failing synchronous hook -- a sync tracker whose post hook
+        # cannot write its log, say -- must therefore not abort the asynchronous phase, or an
+        # async persister registered alongside it would never save the step.
+        try:
+            self.call_all_lifecycle_hooks_sync(hook_name, **kwargs)
+        except asyncio.CancelledError:
+            # Cancellation always propagates immediately; it is not an ordinary failure.
+            raise
+        except Exception as e:  # noqa: BLE001 - re-raised once both phases have run
+            first_error = e
+
+        if not self._does_hook(hook_name, True):
+            if first_error is not None:
+                raise first_error
+            return
+
+        with self._enter_hook_context():
+            futures = [
+                getattr(adapter, hook_name)(**kwargs)
+                for adapter in self.async_hooks.get(hook_name, ())
+            ]
+            if len(futures) == 0:
+                if first_error is not None:
+                    raise first_error
+                return
+            # ``return_exceptions=True`` keeps the failure isolation the serial dispatcher
+            # provides: one hook raising must not stop the others from running, and the first
+            # failure is re-raised once every hook has finished.
+            results = await asyncio.gather(*futures, return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                if isinstance(result, asyncio.CancelledError):
+                    # Cancellation is not an ordinary failure: it propagates as cancellation.
+                    raise result
+                first_error = first_error or result
+        if first_error is not None:
+            raise first_error
 
     @property
     def adapters(self) -> List["LifecycleAdapter"]:
