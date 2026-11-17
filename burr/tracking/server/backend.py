@@ -19,6 +19,7 @@ import abc
 import collections
 import importlib
 import json
+import logging
 import os.path
 import sys
 from datetime import datetime
@@ -32,6 +33,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from burr.tracking.common import models
 from burr.tracking.common.models import ChildApplicationModel
+from burr.tracking.common.partition_paths import (
+    application_directory,
+    join_path,
+    log_has_end_entry,
+    metadata_partition_key,
+    partition_directories,
+    partition_matches,
+    partition_segment,
+    read_metadata,
+)
 from burr.tracking.server import schema
 from burr.tracking.server.schema import (
     AnnotationCreate,
@@ -43,6 +54,8 @@ from burr.tracking.server.schema import (
 )
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 # The following is a backend for the server.
 # Note this is not a fixed API yet, and thus not documented (in Burr's documentation)
@@ -293,6 +306,74 @@ def get_uri(project_id: str) -> str:
 DEFAULT_PATH = os.path.expanduser("~/.burr")
 
 
+def _metadata_at(app_dir: str) -> Optional[dict]:
+    return read_metadata(join_path(app_dir, "metadata.json"))
+
+
+def _resolve_app_directory(
+    storage_path: str, project_id: str, app_id: str, partition_key: Optional[str]
+) -> str:
+    """Locate the tracking directory for one (project, app_id, partition_key) triple.
+
+    Only metadata that confirms the requested partition may authorize a legacy read.
+
+    Status policy: 404 means no data exists for the requested identifiers; 400 means data
+    exists but cannot be attributed to them (mismatched/missing partition metadata,
+    ambiguity, or an invalid path).
+    """
+    app_root = join_path(storage_path, project_id, app_id)
+    context = f"{project_id}/{app_id}"
+    legacy_log = join_path(app_root, "log.jsonl")
+    if partition_key is not None:
+        nested = application_directory(app_root, partition_key)
+        nested_log = join_path(nested, "log.jsonl")
+        if log_has_end_entry(nested_log):
+            if not partition_matches(_metadata_at(nested), partition_key):
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Partition directory metadata for {context} does not confirm {partition_key!r}.",
+                )
+            return nested
+        if os.path.exists(legacy_log):
+            metadata = _metadata_at(app_root)
+            if partition_matches(metadata, partition_key):
+                return app_root
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=(
+                    f"Legacy data for {context} belongs to partition "
+                    f"{metadata_partition_key(metadata)!r}, not {partition_key!r}."
+                ),
+            )
+        if os.path.exists(nested_log):
+            if not partition_matches(_metadata_at(nested), partition_key):
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Partition directory metadata for {context} does not confirm {partition_key!r}.",
+                )
+            return nested
+        raise fastapi.HTTPException(status_code=404, detail=f"App: {context} not found")
+
+    if os.path.exists(legacy_log):
+        metadata = _metadata_at(app_root)
+        if partition_matches(metadata, None):
+            return app_root
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Data for {context} belongs to partition {metadata_partition_key(metadata)!r}; partition_key is required.",
+        )
+    nested_dirs = [
+        directory
+        for directory in partition_directories(app_root)
+        if log_has_end_entry(join_path(directory, "log.jsonl"))
+    ]
+    if nested_dirs:
+        raise fastapi.HTTPException(
+            status_code=400, detail=f"Partition tracking data exists for {context}; select one."
+        )
+    raise fastapi.HTTPException(status_code=404, detail=f"App: {context} not found")
+
+
 class LocalBackend(BackendBase, AnnotationsBackendMixin):
     """Quick implementation of a local backend for testing purposes. This is not a production backend.
 
@@ -303,7 +384,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         self.path = path
 
     def _get_annotation_path(self, project_id: str) -> str:
-        return os.path.join(self.path, project_id, "annotations.jsonl")
+        return join_path(self.path, project_id, "annotations.jsonl")
 
     async def _load_project_annotations(self, project_id: str):
         annotations_path = self._get_annotation_path(project_id)
@@ -423,7 +504,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         if not os.path.exists(self.path):
             return out
         for entry in await aiofilesos.listdir(self.path):
-            full_path = os.path.join(self.path, entry)
+            full_path = join_path(self.path, entry)
             if os.path.isdir(full_path):
                 out.append(
                     schema.Project(
@@ -464,34 +545,64 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[Sequence[ApplicationSummary], int]:
-        project_filepath = os.path.join(self.path, project_id)
+        project_filepath = join_path(self.path, project_id)
         if not os.path.exists(project_filepath):
             return [], 0
-            # raise fastapi.HTTPException(status_code=404, detail=f"Project: {project_id} not found")
         out = []
         for entry in await aiofilesos.listdir(project_filepath):
             if entry.startswith("."):
                 # skip hidden files/directories
                 continue
-            full_path = os.path.join(project_filepath, entry)
-            metadata_path = os.path.join(full_path, "metadata.json")
-            log_path = os.path.join(full_path, "log.jsonl")
-            if os.path.isdir(full_path):
-                metadata = await self._load_metadata(metadata_path)
-                app_partition_key = metadata.partition_key
-                # quick, hacky way to do it -- we should really have this be part of the path
-                # But we load it up anyway. TODO -- add partition key to the path
-                # If this is slow you'll want to use the s3-based storage system
-                # Which has an actual index
+            app_root = join_path(project_filepath, entry)
+            if not os.path.isdir(app_root):
+                continue
+
+            # A run is either the legacy root files or one partition subdirectory.
+            runs = []
+            legacy_log = join_path(app_root, "log.jsonl")
+            if os.path.exists(legacy_log):
+                legacy_metadata = _metadata_at(app_root)
+                runs.append(
+                    (
+                        app_root,
+                        metadata_partition_key(legacy_metadata),
+                        entry,
+                        log_has_end_entry(legacy_log),
+                    )
+                )
+            for partition_dir in partition_directories(app_root):
+                log_path = join_path(partition_dir, "log.jsonl")
+                if not os.path.exists(log_path):
+                    continue
+                metadata = _metadata_at(partition_dir)
+                run_partition = metadata_partition_key(metadata)
+                if run_partition is None or partition_segment(run_partition) != os.path.basename(
+                    partition_dir
+                ):
+                    logger.warning(
+                        "Skipping %s: partition metadata does not match its directory",
+                        partition_dir,
+                    )
+                    continue
+                has_data = log_has_end_entry(log_path)
+                if not has_data and any(run[1] == run_partition and run[3] for run in runs):
+                    # An empty partitioned log must not hide completed legacy data during resume.
+                    continue
+                if has_data:
+                    runs = [run for run in runs if run[1] != run_partition]
+                runs.append((partition_dir, run_partition, entry, has_data))
+
+            for run_dir, app_partition_key, app_id, _ in runs:
                 if partition_key is not None and partition_key != app_partition_key:
                     continue
+                metadata = await self._load_metadata(join_path(run_dir, "metadata.json"))
                 out.append(
                     schema.ApplicationSummary(
-                        app_id=entry,
-                        partition_key=metadata.partition_key,
-                        first_written=await aiofilesos.path.getctime(full_path),
-                        last_written=await aiofilesos.path.getmtime(full_path),
-                        num_steps=await self.get_number_of_steps(log_path),
+                        app_id=app_id,
+                        partition_key=app_partition_key,
+                        first_written=await aiofilesos.path.getctime(run_dir),
+                        last_written=await aiofilesos.path.getmtime(run_dir),
+                        num_steps=await self.get_number_of_steps(join_path(run_dir, "log.jsonl")),
                         tags={},
                         parent_pointer=metadata.parent_pointer,
                         spawning_parent_pointer=metadata.spawning_parent_pointer,
@@ -504,17 +615,11 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
     async def get_application_logs(
         self, request: fastapi.Request, project_id: str, app_id: str, partition_key: Optional[str]
     ) -> ApplicationLogs:
-        # TODO -- handle partition key here
-        # This currently assumes uniqueness
-        app_filepath = os.path.join(self.path, project_id, app_id)
-        if not os.path.exists(app_filepath):
-            raise fastapi.HTTPException(
-                status_code=404, detail=f"App: {app_id} from project: {project_id} not found"
-            )
-        log_file = os.path.join(app_filepath, "log.jsonl")
-        graph_file = os.path.join(app_filepath, "graph.json")
-        metadata_file = os.path.join(app_filepath, "metadata.json")
-        children_file = os.path.join(app_filepath, "children.jsonl")
+        app_filepath = _resolve_app_directory(self.path, project_id, app_id, partition_key)
+        log_file = join_path(app_filepath, "log.jsonl")
+        graph_file = join_path(app_filepath, "graph.json")
+        metadata_file = join_path(app_filepath, "metadata.json")
+        children_file = join_path(app_filepath, "children.jsonl")
         metadata = await self._load_metadata(metadata_file)
         if not os.path.exists(graph_file):
             raise fastapi.HTTPException(
@@ -524,6 +629,7 @@ class LocalBackend(BackendBase, AnnotationsBackendMixin):
         async with aiofiles.open(graph_file, encoding="utf-8") as f:
             str_graph = await f.read()
         collections.defaultdict(list)
+        steps = []
         if os.path.exists(log_file):
             async with aiofiles.open(log_file, "rb") as f:
                 lines = await f.readlines()
