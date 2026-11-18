@@ -2021,7 +2021,7 @@ async def test_cancelled_action_persists_failure_and_is_retried(execute_method, 
     task = asyncio.create_task(operation)
     await started.wait()
     task.cancel()
-    with pytest.raises(asyncio.CancelledError) as cancelled:
+    with pytest.raises(asyncio.CancelledError):
         await task
 
     # A cancelled action must be retried, not skipped as though it had completed.
@@ -2030,7 +2030,8 @@ async def test_cancelled_action_persists_failure_and_is_retried(execute_method, 
     saved = await persister.load("test", "cancelled-action")
     assert saved["status"] == "failed"
     assert saved["state"]["count"] == app.state["count"] == 0
-    assert tracker.post_called[0][1]["exception"] is cancelled.value
+    # Python 3.10 can raise a fresh CancelledError when the caller awaits the task.
+    assert isinstance(tracker.post_called[0][1]["exception"], asyncio.CancelledError)
     assert tracker.post_called[0][1]["result"] is None
 
     release.set()
