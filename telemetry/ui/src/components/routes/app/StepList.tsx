@@ -44,6 +44,11 @@ import { Chip } from '../../common/chip';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { TbGrillFork } from 'react-icons/tb';
 import {
+  appDetailPath,
+  applicationIdentityKey,
+  partitionQueryArgs
+} from '../../../partitionIdentity';
+import {
   FiArrowDown,
   FiArrowUp,
   FiChevronDown,
@@ -390,12 +395,15 @@ const SelfLoadingSubApplicationContainer = (props: {
 }) => {
   const { data } = useQuery(
     ['steps', props.projectID, props.appID, props.partitionKey],
-    () =>
-      DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
+    () => {
+      const args = partitionQueryArgs(props.partitionKey);
+      return DefaultService.getApplicationLogsByPartitionQuery(
         props.projectId as string,
         props.appID as string,
-        props.partitionKey !== null ? props.partitionKey : '__none__'
-      ),
+        args.partitionKey,
+        args.nonePartition
+      );
+    },
     {
       // TODO -- decide how we want to auto-refresh with lots of nested stuff?
       // Really, we'll want a bulk API but this is OK for now...
@@ -406,12 +414,16 @@ const SelfLoadingSubApplicationContainer = (props: {
   // TODO -- use a skiptoken to bypass annotation loading if we don't need them
   const { data: annotationsData } = useQuery(
     ['annotations', props.projectID, props.appID, props.partitionKey],
-    () =>
-      DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
+    () => {
+      const args = partitionQueryArgs(props.partitionKey);
+      return DefaultService.getAnnotationsByPartitionQuery(
         props.projectId as string,
         props.appID as string,
-        props.partitionKey !== null ? props.partitionKey : '__none__'
-      )
+        args.partitionKey,
+        undefined,
+        args.nonePartition
+      );
+    }
   );
   const [traceExpandedActions, setTraceExpandedActions] = useState<number[]>([]);
   const [linksExpandedActions, setLinksExpandedActions] = useState<number[]>([]);
@@ -531,7 +543,7 @@ const LinkSubTable = (props: {
             <CommonTableRow
               appID={props.appID}
               partitionKey={props.partitionKey}
-              key={`${subApp.child.app_id}-link-table-row`}
+              key={applicationIdentityKey(subApp.child.app_id, subApp.child.partition_key)}
               sequenceID={sequenceID}
               isHovered={isHovered}
               shouldBeHighlighted={shouldBeHighlighted}
@@ -553,7 +565,11 @@ const LinkSubTable = (props: {
                   className="z-50 truncate"
                   onClick={(e) => {
                     navigate(
-                      `/project/${props.projectId}/${subApp.child.partition_key || 'null'}/${subApp.child.app_id}`
+                      appDetailPath(
+                        props.projectId,
+                        subApp.child.app_id,
+                        subApp.child.partition_key
+                      )
                     );
                     e.stopPropagation();
                   }}

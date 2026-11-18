@@ -74,8 +74,7 @@ export const ChatbotAppSelector = (props: {
   const { projectId, setApp } = props;
   const { data, refetch } = useQuery(
     ['apps', projectId],
-    // TODO - use the right partition key
-    () => DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(projectId as string, '__none__'),
+    () => DefaultService.listAppsByPartitionQuery(projectId as string),
     { enabled: projectId !== undefined }
   );
   const createAndUpdateMutation = useMutation(

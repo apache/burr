@@ -18,6 +18,8 @@
  */
 
 import { Navigate } from 'react-router';
+import { useParams } from 'react-router-dom';
+import { decodeLegacyPartitionSegment, partitionQueryArgs } from '../../../partitionIdentity';
 import {
   AnnotationCreate,
   AnnotationOut,
@@ -31,7 +33,7 @@ import { ApplicationTable } from './StepList';
 import { TwoColumnLayout, TwoRowLayout } from '../../common/layout';
 import { AppStateView } from './StateMachine';
 import { createContext, useEffect, useState } from 'react';
-import { Status, useLocationParams } from '../../../utils';
+import { Status } from '../../../utils';
 import { GraphView } from './GraphView';
 import type { HoveredAction } from './hoverHighlight';
 import { useSearchParams } from 'react-router-dom';
@@ -277,12 +279,15 @@ export const AppView = (props: {
   );
   const { data, error } = useQuery(
     ['steps', appID, partitionKey],
-    () =>
-      DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
+    () => {
+      const args = partitionQueryArgs(props.partitionKey);
+      return DefaultService.getApplicationLogsByPartitionQuery(
         projectId as string,
         appID as string,
-        props.partitionKey !== null ? props.partitionKey : '__none__'
-      ),
+        args.partitionKey,
+        args.nonePartition
+      );
+    },
     {
       refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
       enabled: shouldQuery
@@ -291,12 +296,15 @@ export const AppView = (props: {
 
   const { data: currentFocusStepsData } = useQuery(
     ['steps', currentFocusAppID, currentFocusPartitionKey],
-    () =>
-      DefaultService.getApplicationLogsApiV0ProjectIdAppIdPartitionKeyAppsGet(
+    () => {
+      const args = partitionQueryArgs(currentFocusPartitionKey);
+      return DefaultService.getApplicationLogsByPartitionQuery(
         projectId as string,
         currentFocusAppID as string,
-        currentFocusPartitionKey !== null ? currentFocusPartitionKey : '__none__'
-      ),
+        args.partitionKey,
+        args.nonePartition
+      );
+    },
     {
       refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
       enabled: currentFocusAppID !== appID && currentFocusAppID !== undefined
@@ -305,12 +313,16 @@ export const AppView = (props: {
   // TODO -- use a skiptoken to bypass annotation loading if we don't need them
   const { data: annotationsData, refetch: refetchAnnotationsData } = useQuery(
     ['annotations', appID, partitionKey],
-    () =>
-      DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
+    () => {
+      const args = partitionQueryArgs(partitionKey);
+      return DefaultService.getAnnotationsByPartitionQuery(
         projectId as string,
         appID as string,
-        partitionKey !== null ? partitionKey : '__none__'
-      ),
+        args.partitionKey,
+        undefined,
+        args.nonePartition
+      );
+    },
     {
       refetchInterval: autoRefresh ? REFRESH_INTERVAL : false,
       enabled: shouldQuery && props.allowAnnotations && backendSpec?.supports_annotations
@@ -319,12 +331,16 @@ export const AppView = (props: {
 
   const { data: currentFocusAnnotationsData } = useQuery(
     ['annotations', currentFocusAppID, currentFocusPartitionKey],
-    () =>
-      DefaultService.getAnnotationsApiV0ProjectIdAnnotationsGet(
+    () => {
+      const args = partitionQueryArgs(currentFocusPartitionKey);
+      return DefaultService.getAnnotationsByPartitionQuery(
         projectId as string,
         currentFocusAppID as string,
-        currentFocusPartitionKey !== null ? partitionKey : '__none__'
-      ),
+        args.partitionKey,
+        undefined,
+        args.nonePartition
+      );
+    },
     {
       enabled:
         shouldQuery &&
@@ -342,14 +358,17 @@ export const AppView = (props: {
       appID: string;
       partitionKey: string | null;
       sequenceID: number;
-    }) =>
-      DefaultService.createAnnotationApiV0ProjectIdAppIdPartitionKeySequenceIdAnnotationsPost(
+    }) => {
+      const args = partitionQueryArgs(data.partitionKey);
+      return DefaultService.createAnnotationByPartitionQuery(
         projectId,
         appID,
-        data.partitionKey !== null ? data.partitionKey : '__none__',
         data.sequenceID,
-        data.annotationData
-      )
+        data.annotationData,
+        args.partitionKey,
+        args.nonePartition
+      );
+    }
   );
 
   const updateAnnotationMutation = useMutation(
@@ -603,12 +622,18 @@ export const AppView = (props: {
 };
 
 export const AppViewContainer = () => {
-  const { projectId, appId, partitionKey } = useLocationParams();
+  const { projectId, appId, partitionKey: legacyPartitionKey } = useParams();
+  const [searchParams] = useSearchParams();
+  const partitionKey = searchParams.has('partition_key')
+    ? (searchParams.get('partition_key') as string)
+    : searchParams.get('none_partition') === 'true'
+      ? null
+      : decodeLegacyPartitionSegment(legacyPartitionKey);
   return (
     <AppView
-      projectId={projectId}
-      appId={appId}
-      partitionKey={partitionKey}
+      projectId={projectId as string}
+      appId={appId as string}
+      partitionKey={partitionKey === undefined ? null : partitionKey}
       orientation={'stacked_horizontal'}
       enableFullScreenStepView={true}
       enableMinimizedStepView={true}

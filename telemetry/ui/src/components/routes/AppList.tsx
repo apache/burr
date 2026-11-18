@@ -30,6 +30,14 @@ import { MdForkRight } from 'react-icons/md';
 import { RiCornerDownRightLine } from 'react-icons/ri';
 import React from 'react';
 import { Paginator } from '../common/pagination';
+import {
+  applicationIdentityKey,
+  appDetailPath,
+  appListPath,
+  decodeLegacyAppListPartitionSegment,
+  partitionIdentityTag,
+  partitionQueryArgs
+} from '../../partitionIdentity';
 
 const StepCountHeader = (props: {
   displayZeroCount: boolean;
@@ -50,9 +58,7 @@ const StepCountHeader = (props: {
   );
 };
 
-const isNullPartitionKey = (partitionKey: string | null) => {
-  return partitionKey === null || partitionKey === '__none__';
-};
+const isNullPartitionKey = (partitionKey: string | null) => partitionKey === null;
 
 const getForkID = (app: ApplicationSummary) => {
   if (app.parent_pointer) {
@@ -68,6 +74,11 @@ const getParentPartitionKey = (app: ApplicationSummary) => {
   } else {
     return null;
   }
+};
+
+const parentIdentityKey = (app: ApplicationSummary): string => {
+  const pointer = app.spawning_parent_pointer;
+  return pointer ? `${pointer.app_id}\u0000${partitionIdentityTag(pointer.partition_key)}` : '';
 };
 
 /**
@@ -104,10 +115,10 @@ const AppSubList = (props: {
         onMouseLeave={() => {
           setIsHovered(false);
         }}
-        key={props.app.app_id}
+        key={applicationIdentityKey(props.app.app_id, props.app.partition_key)}
         className={`cursor-pointer ${isHighlighted ? 'bg-gray-50' : ''}`}
         onClick={() => {
-          props.navigate(`/project/${props.projectId}/${app.partition_key}/${app.app_id}`);
+          props.navigate(appDetailPath(props.projectId, app.app_id, app.partition_key));
         }}
       >
         {props.displayPartitionKey && (
@@ -116,10 +127,10 @@ const AppSubList = (props: {
               <></>
             ) : (
               <Link
-                to={`/project/${props.projectId}/${app.partition_key}`}
+                to={appListPath(props.projectId, app.partition_key)}
                 className="hover:underline"
                 onClick={(e) => {
-                  props.navigate(`/project/${props.projectId}/${app.partition_key}`);
+                  props.navigate(appListPath(props.projectId, app.partition_key));
                   e.stopPropagation();
                 }}
               >
@@ -147,9 +158,7 @@ const AppSubList = (props: {
             <MdForkRight
               className=" hover:scale-125 h-5 w-5 text-gray-600 "
               onClick={(e) => {
-                props.navigate(
-                  `/project/${props.projectId}/${getParentPartitionKey(app) || 'null'}/${forkID}`
-                );
+                props.navigate(appDetailPath(props.projectId, forkID, getParentPartitionKey(app)));
                 e.stopPropagation();
               }}
             />
@@ -158,7 +167,9 @@ const AppSubList = (props: {
           )}
         </TableCell>
         <TableCell>
-          {props.spawningParentMap.has(props.app.app_id) ? (
+          {props.spawningParentMap.has(
+            applicationIdentityKey(props.app.app_id, props.app.partition_key)
+          ) ? (
             <div className="flex flex-row items-center gap-1">
               <ExpandIcon
                 className="h-4 w-4 text-gray-600 hover:scale-110 cursor-pointer"
@@ -168,7 +179,13 @@ const AppSubList = (props: {
                 }}
               />
               <span className="text-gray-600">
-                ({props.spawningParentMap.get(props.app.app_id)?.length})
+                (
+                {
+                  props.spawningParentMap.get(
+                    applicationIdentityKey(props.app.app_id, props.app.partition_key)
+                  )?.length
+                }
+                )
               </span>
             </div>
           ) : (
@@ -177,21 +194,25 @@ const AppSubList = (props: {
         </TableCell>
         <TableCell className="text-gray-600">{app.num_steps}</TableCell>
       </TableRow>
-      {props.spawningParentMap.has(props.app.app_id) && subAppsExpanded
-        ? props.spawningParentMap.get(props.app.app_id)?.map((subApp) => {
-            return (
-              <AppSubList
-                key={subApp.app_id}
-                displayPartitionKey={props.displayPartitionKey}
-                app={subApp}
-                navigate={props.navigate}
-                projectId={props.projectId}
-                spawningParentMap={props.spawningParentMap}
-                parentHovered={isHighlighted}
-                depth={depth + 1}
-              />
-            );
-          })
+      {props.spawningParentMap.has(
+        applicationIdentityKey(props.app.app_id, props.app.partition_key)
+      ) && subAppsExpanded
+        ? props.spawningParentMap
+            .get(applicationIdentityKey(props.app.app_id, props.app.partition_key))
+            ?.map((subApp) => {
+              return (
+                <AppSubList
+                  key={applicationIdentityKey(subApp.app_id, subApp.partition_key)}
+                  displayPartitionKey={props.displayPartitionKey}
+                  app={subApp}
+                  navigate={props.navigate}
+                  projectId={props.projectId}
+                  spawningParentMap={props.spawningParentMap}
+                  parentHovered={isHighlighted}
+                  depth={depth + 1}
+                />
+              );
+            })
         : null}
     </>
   );
@@ -214,10 +235,11 @@ export const AppListTable = (props: { apps: ApplicationSummary[]; projectId: str
   // Maps from parents -> children
   const spawningParentMap = appsToDisplay.reduce((acc, app) => {
     if (app.spawning_parent_pointer) {
-      if (acc.has(app.spawning_parent_pointer.app_id)) {
-        acc.get(app.spawning_parent_pointer.app_id)!.push(app);
+      const key = parentIdentityKey(app);
+      if (acc.has(key)) {
+        acc.get(key)!.push(app);
       } else {
-        acc.set(app.spawning_parent_pointer.app_id, [app]);
+        acc.set(key, [app]);
       }
     }
     return acc;
@@ -284,7 +306,7 @@ export const AppListTable = (props: { apps: ApplicationSummary[]; projectId: str
           {appsToDisplay.map((app) => {
             return (
               <AppSubList
-                key={app.app_id}
+                key={applicationIdentityKey(app.app_id, app.partition_key)}
                 app={app}
                 projectId={props.projectId}
                 navigate={navigate}
@@ -309,12 +331,20 @@ export const AppList = () => {
   const [searchParams] = useSearchParams();
   const currentOffset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
   const pageSize = DEFAULT_LIMIT;
+  const nonePartition = searchParams.get('none_partition') === 'true';
+  const identity: string | null | undefined = searchParams.has('partition_key')
+    ? (searchParams.get('partition_key') as string)
+    : nonePartition
+      ? null
+      : decodeLegacyAppListPartitionSegment(partitionKey);
+  const queryArgs = identity === undefined ? {} : partitionQueryArgs(identity);
   const { data, error } = useQuery(
-    ['apps', projectId, partitionKey, pageSize, currentOffset],
+    ['apps', projectId, identity, pageSize, currentOffset],
     () =>
-      DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(
+      DefaultService.listAppsByPartitionQuery(
         projectId as string,
-        partitionKey ? partitionKey : '__none__',
+        queryArgs.partitionKey,
+        queryArgs.nonePartition,
         pageSize,
         currentOffset
       ),
@@ -347,8 +377,8 @@ export const AppList = () => {
           <Paginator
             currentPage={currentOffset / pageSize + 1}
             getPageURL={(page) => {
-              // TODO -- make this more robust to URL changes
-              return `/project/${projectId}/${partitionKey || '__none__'}?offset=${(page - 1) * pageSize}`;
+              const base = appListPath(projectId as string, identity);
+              return `${base}${base.includes('?') ? '&' : '?'}offset=${(page - 1) * pageSize}`;
             }}
             totalPages={queriedData ? Math.ceil(queriedData?.total / pageSize) : undefined}
             // TODO -- add query result back

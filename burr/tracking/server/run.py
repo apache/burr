@@ -223,6 +223,81 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
         """
         return await backend.list_projects(request)
 
+    @ui_app.get(
+        "/api/v0/apps/{project_id}/list",
+        response_model=ApplicationPage,
+        operation_id="list_apps_by_partition_query",
+    )
+    async def list_apps_by_partition_query(
+        request: Request,
+        project_id: str,
+        partition_key: Optional[str] = None,
+        none_partition: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ApplicationPage:
+        """List applications with an unambiguous partition identity.
+
+        Passing neither parameter keeps the historical behaviour (no partition filter).
+        `none_partition=true` selects only the `None` partition. `partition_key` selects the
+        exact string, including `""` and `"__none__"`.
+        """
+        if none_partition and partition_key is not None:
+            raise HTTPException(
+                status_code=400, detail="partition_key and none_partition are mutually exclusive."
+            )
+        if not none_partition:
+            applications, total_count = await backend.list_apps(
+                request, project_id, partition_key=partition_key, limit=limit, offset=offset
+            )
+            return ApplicationPage(
+                applications=list(applications),
+                total=total_count,
+                has_another_page=total_count > offset + limit,
+            )
+
+        # The backend represents partition_key=None as "no filter", so filter explicitly.
+        matching = []
+        page_offset = 0
+        while True:
+            page, total_count = await backend.list_apps(
+                request, project_id, partition_key=None, limit=100, offset=page_offset
+            )
+            matching.extend(app for app in page if app.partition_key is None)
+            page_offset += len(page)
+            if not page or page_offset >= total_count:
+                break
+        return ApplicationPage(
+            applications=matching[offset : offset + limit],
+            total=len(matching),
+            has_another_page=len(matching) > offset + limit,
+        )
+
+    @ui_app.get(
+        "/api/v0/apps/{project_id}/{app_id}/detail",
+        operation_id="get_application_logs_by_partition_query",
+    )
+    async def get_application_logs_by_partition_query(
+        request: Request,
+        project_id: str,
+        app_id: str,
+        partition_key: Optional[str] = None,
+        none_partition: bool = False,
+    ) -> ApplicationLogs:
+        """Get steps for an application with an unambiguous partition identity."""
+        if none_partition and partition_key is not None:
+            raise HTTPException(
+                status_code=400, detail="partition_key and none_partition are mutually exclusive."
+            )
+        if not none_partition and partition_key is None:
+            raise HTTPException(
+                status_code=400, detail="partition_key or none_partition must be supplied."
+            )
+        effective = None if none_partition else partition_key
+        return await backend.get_application_logs(
+            request, project_id=project_id, app_id=app_id, partition_key=effective
+        )
+
     @ui_app.get("/api/v0/{project_id}/{partition_key}/apps", response_model=ApplicationPage)
     async def get_apps(
         request: Request,
@@ -268,6 +343,37 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
         )
 
     @ui_app.post(
+        "/api/v0/apps/{project_id}/{app_id}/annotations/{sequence_id}",
+        response_model=AnnotationOut,
+        operation_id="create_annotation_by_partition_query",
+    )
+    async def create_annotation_by_partition_query(
+        request: Request,
+        project_id: str,
+        app_id: str,
+        sequence_id: int,
+        annotation: AnnotationCreate,
+        partition_key: Optional[str] = None,
+        none_partition: bool = False,
+    ):
+        """Create an annotation with an unambiguous partition identity."""
+        if none_partition and partition_key is not None:
+            raise HTTPException(
+                status_code=400, detail="partition_key and none_partition are mutually exclusive."
+            )
+        if not none_partition and partition_key is None:
+            raise HTTPException(
+                status_code=400, detail="partition_key or none_partition must be supplied."
+            )
+        spec = _get_app_spec()
+        if not spec.supports_annotations:
+            return []  # empty default -- the case that we don't support annotations
+        effective = None if none_partition else partition_key
+        return await backend.create_annotation(
+            annotation, project_id, effective, app_id, sequence_id
+        )
+
+    @ui_app.post(
         "/api/v0/{project_id}/{app_id}/{partition_key}/{sequence_id}/annotations",
         response_model=AnnotationOut,
     )
@@ -304,6 +410,43 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
             annotation_id=annotation_id, annotation=annotation, project_id=project_id
         )
 
+    @ui_app.get(
+        "/api/v0/apps/{project_id}/annotations",
+        response_model=Sequence[AnnotationOut],
+        operation_id="get_annotations_by_partition_query",
+    )
+    async def get_annotations_by_partition_query(
+        request: Request,
+        project_id: str,
+        app_id: Optional[str] = None,
+        partition_key: Optional[str] = None,
+        step_sequence_id: Optional[int] = None,
+        none_partition: bool = False,
+    ):
+        """Get annotations with an unambiguous partition identity.
+
+        Unlike the legacy route, this endpoint never interprets a literal ``"__none__"``
+        as Python ``None``. An explicit identity is required.
+        """
+        if none_partition and partition_key is not None:
+            raise HTTPException(
+                status_code=400, detail="partition_key and none_partition are mutually exclusive."
+            )
+        if not none_partition and partition_key is None:
+            raise HTTPException(
+                status_code=400, detail="partition_key or none_partition must be supplied."
+            )
+        spec = _get_app_spec()
+        if not spec.supports_annotations:
+            return []
+        effective = None if none_partition else partition_key
+        annotations = await backend.get_annotations(
+            project_id, effective, app_id, step_sequence_id
+        )
+        if none_partition:
+            return [annotation for annotation in annotations if annotation.partition_key is None]
+        return [annotation for annotation in annotations if annotation.partition_key == partition_key]
+
     @ui_app.get("/api/v0/{project_id}/annotations", response_model=Sequence[AnnotationOut])
     async def get_annotations(
         request: Request,
@@ -311,10 +454,15 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
         app_id: Optional[str] = None,
         partition_key: Optional[str] = None,
         step_sequence_id: Optional[int] = None,
+        none_partition: bool = False,
     ):
         # Handle the sentinel value for partition_key
         if partition_key == SENTINEL_PARTITION_KEY:
             partition_key = None
+        if none_partition and partition_key is not None:
+            raise HTTPException(
+                status_code=400, detail="partition_key and none_partition are mutually exclusive."
+            )
         backend_spec = _get_app_spec()
 
         if not backend_spec.supports_annotations:
@@ -322,7 +470,12 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
             return []
 
         # Logic to retrieve the annotations
-        return await backend.get_annotations(project_id, partition_key, app_id, step_sequence_id)
+        annotations = await backend.get_annotations(
+            project_id, partition_key, app_id, step_sequence_id
+        )
+        if none_partition:
+            return [annotation for annotation in annotations if annotation.partition_key is None]
+        return annotations
 
     @ui_app.get("/api/v0/ready")
     async def ready() -> bool:
