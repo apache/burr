@@ -41,6 +41,9 @@ and not the ``Application`` class directly.
 .. autoclass:: burr.core.application.ApplicationContext
    :members:
 
+.. autoclass:: burr.core.application.ApplicationExecutionLimitError
+   :members:
+
 ==========
 Graph APIs
 ==========
