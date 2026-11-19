@@ -70,6 +70,15 @@ and add instances to the application builder to customize your state machines's 
 
 These hooks are available for you to use:
 
+.. autoclass:: burr.lifecycle.default.InMemoryExecutionRecorder
+   :members:
+
+.. autoclass:: burr.lifecycle.default.ExecutionRecord
+   :members:
+
+.. autoclass:: burr.lifecycle.default.StateChange
+   :members:
+
 .. autoclass:: burr.lifecycle.default.StateAndResultsFullLogger
 
    .. automethod:: __init__

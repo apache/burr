@@ -74,6 +74,32 @@ To include this in the application, you pass it into the :py:meth:`with_hooks <b
         ...
         .build())
 
+Recording executions in tests
+-----------------------------
+
+``InMemoryExecutionRecorder`` captures action inputs, results, exceptions, and
+business-state changes without configuring a tracking backend. This is useful for
+asserting an agent's route or inspecting a local execution loop:
+
+.. code-block:: python
+
+    from burr.lifecycle import InMemoryExecutionRecorder
+
+    recorder = InMemoryExecutionRecorder()
+    app = ApplicationBuilder().with_hooks(recorder).build()
+
+    app.run(halt_after=["final_answer"])
+    assert [record.action for record in recorder.records] == [
+        "plan",
+        "call_tool",
+        "final_answer",
+    ]
+
+Each record is immutable and includes ``app_id``, ``partition_key``,
+``sequence_id``, inputs, result, exception, and a tuple of ``StateChange`` values.
+Private Burr state keys prefixed with ``__`` are excluded. Call ``clear()`` to
+reuse the recorder between tests.
+
 .. note::
 
     There are synchronous and asynchronous hooks. Synchronous hooks will be called with both synchronous and asynchronous run methods

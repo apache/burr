@@ -15,10 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import copy
+import dataclasses
 import datetime
 import json
 import time
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional
 
 if TYPE_CHECKING:
     from burr.core import State, Action
@@ -28,6 +30,139 @@ from burr.lifecycle.base import PostRunStepHook, PreRunStepHook
 
 def safe_json(obj: Any) -> str:
     return json.dumps(obj, default=str)
+
+
+def _values_equal(left: Any, right: Any) -> bool:
+    if left is right:
+        return True
+    try:
+        comparison = left == right
+    except Exception:
+        return False
+    return comparison if isinstance(comparison, bool) else False
+
+
+def _copy_for_recording(value: Any) -> Any:
+    try:
+        return copy.deepcopy(value)
+    except Exception:
+        return value
+
+
+def _copy_mapping_for_recording(values: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if values is None:
+        return None
+    return {key: _copy_for_recording(value) for key, value in values.items()}
+
+
+@dataclasses.dataclass(frozen=True)
+class StateChange:
+    """A single state field change captured around an action execution."""
+
+    key: str
+    before_exists: bool
+    before: Any
+    after_exists: bool
+    after: Any
+
+
+@dataclasses.dataclass(frozen=True)
+class ExecutionRecord:
+    """An immutable record of one Burr action execution."""
+
+    app_id: str
+    partition_key: Optional[str]
+    sequence_id: int
+    action: str
+    inputs: Dict[str, Any]
+    result: Optional[Dict[str, Any]]
+    exception: Optional[Exception]
+    state_changes: tuple[StateChange, ...]
+
+
+class InMemoryExecutionRecorder(PreRunStepHook, PostRunStepHook):
+    """Capture action executions in memory for tests and local debugging.
+
+    The recorder stores inputs, results, exceptions, and business-state changes.
+    Burr's private ``__`` state fields are excluded from the change list.
+    """
+
+    def __init__(self):
+        self._records: list[ExecutionRecord] = []
+        self._pending: dict[tuple[str, Optional[str], int], tuple[dict, dict]] = {}
+
+    @property
+    def records(self) -> tuple[ExecutionRecord, ...]:
+        """Return an immutable snapshot of captured execution records."""
+        return tuple(self._records)
+
+    def clear(self) -> None:
+        """Remove all completed and pending records."""
+        self._records.clear()
+        self._pending.clear()
+
+    def pre_run_step(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        sequence_id: int,
+        state: "State",
+        inputs: Dict[str, Any],
+        **future_kwargs: Any,
+    ) -> None:
+        key = (app_id, partition_key, sequence_id)
+        self._pending[key] = (
+            _copy_mapping_for_recording(state.get_all()),
+            _copy_mapping_for_recording(inputs),
+        )
+
+    def post_run_step(
+        self,
+        *,
+        app_id: str,
+        partition_key: Optional[str],
+        sequence_id: int,
+        state: "State",
+        action: "Action",
+        result: Optional[Dict[str, Any]],
+        exception: Optional[Exception],
+        **future_kwargs: Any,
+    ) -> None:
+        key = (app_id, partition_key, sequence_id)
+        before, inputs = self._pending.pop(key)
+        after = state.get_all()
+        changed_keys = sorted(
+            key
+            for key in before.keys() | after.keys()
+            if not key.startswith("__")
+            and (
+                (key in before) != (key in after)
+                or not _values_equal(before.get(key), after.get(key))
+            )
+        )
+        changes = tuple(
+            StateChange(
+                key=state_key,
+                before_exists=state_key in before,
+                before=_copy_for_recording(before.get(state_key)),
+                after_exists=state_key in after,
+                after=_copy_for_recording(after.get(state_key)),
+            )
+            for state_key in changed_keys
+        )
+        self._records.append(
+            ExecutionRecord(
+                app_id=app_id,
+                partition_key=partition_key,
+                sequence_id=sequence_id,
+                action=action.name,
+                inputs=inputs,
+                result=_copy_mapping_for_recording(result),
+                exception=exception,
+                state_changes=changes,
+            )
+        )
 
 
 class StateAndResultsFullLogger(PostRunStepHook, PreRunStepHook):
