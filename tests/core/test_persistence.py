@@ -137,8 +137,17 @@ def test_sqlite_list_app_ids_breaks_timestamp_ties(tmp_path, partition_key, late
             ["2026-01-02 00:00:00", "2026-01-02 00:00:00", "2026-01-01 00:00:00"],
             ["z-app", "a-app"],
         ),
+        ([None, None, None], ["a-app", "z-app"]),
+        ([None, "2026-01-02 00:00:00", None], ["z-app", "a-app"]),
+        (["2026-01-02 00:00:00", "2026-01-02 00:00:00", None], ["z-app", "a-app"]),
     ],
-    ids=["timestamp-before-insertion-order", "tie-break-uses-latest-timestamp-row"],
+    ids=[
+        "timestamp-before-insertion-order",
+        "tie-break-uses-latest-timestamp-row",
+        "all-timestamps-null",
+        "null-only-app-sorts-last",
+        "null-row-does-not-break-timestamp-tie",
+    ],
 )
 def test_sqlite_list_app_ids_prioritizes_latest_timestamp_rows(timestamps, expected):
     with SQLLitePersister(db_path=":memory:", table_name="test_table") as persister:
