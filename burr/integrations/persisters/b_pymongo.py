@@ -112,7 +112,7 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.connection.close()
+        self.client.close()
         return False
 
     def set_serde_kwargs(self, serde_kwargs: dict):
@@ -202,7 +202,7 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
 
     def cleanup(self):
         """Closes the connection to the database."""
-        self.connection.close()
+        self.client.close()
 
     def __del__(self):
         # This should be deprecated -- using __del__ is unreliable for closing connections to db's;
