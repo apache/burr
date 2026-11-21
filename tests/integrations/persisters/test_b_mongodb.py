@@ -19,6 +19,7 @@ import os
 import pickle
 
 import pytest
+from pymongo.errors import InvalidOperation
 
 from burr.core import state
 from burr.integrations.persisters.b_mongodb import MongoDBPersister
@@ -101,3 +102,21 @@ def test_partition_key_is_optional(mongodb_persister):
     loaded_data2 = mongodb_persister.load(None, "app_id_none2", 2)
     assert loaded_data2 is not None
     assert loaded_data2["state"].get_all() == {"hello": "world"}
+
+
+def test_cleanup_closes_client():
+    persister = MongoDBBasePersister.from_values(
+        uri="mongodb://localhost:27017", db_name="testdb", collection_name="cleanup"
+    )
+    persister.cleanup()
+    with pytest.raises(InvalidOperation):
+        persister.load("pk", "app_id")
+
+
+def test_context_manager_closes_client():
+    with MongoDBBasePersister.from_values(
+        uri="mongodb://localhost:27017", db_name="testdb", collection_name="context_manager"
+    ) as persister:
+        assert persister.load("pk", "app_id") is None
+    with pytest.raises(InvalidOperation):
+        persister.load("pk", "app_id")
