@@ -45,8 +45,8 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@types/dagre": "^0.7.52",
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.73.0",
+    "@typescript-eslint/parser": "^8.73.0",
     "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.5.0",
     "eslint": "^8.56.0",
