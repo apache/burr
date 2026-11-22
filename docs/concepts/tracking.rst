@@ -156,3 +156,80 @@ Example:
 
 This allows you to run the Burr tracking UI alongside your own FastAPI
 application in the same server process.
+
+.. _tracking-mcp:
+
+------------
+MCP endpoint
+------------
+
+The tracking server can also serve its data to coding assistants (Claude Code, Cursor, ...) and
+scripts over the `Model Context Protocol <https://modelcontextprotocol.io>`_. Install the ``mcp``
+extra and start the server as usual:
+
+.. code-block:: bash
+
+    pip install "apache-burr[mcp]"
+    burr   # UI at http://localhost:7241, MCP at http://localhost:7241/mcp
+    claude mcp add --transport http burr http://localhost:7241/mcp
+
+For Cursor, add ``{"mcpServers": {"burr": {"url": "http://localhost:7241/mcp"}}}`` to its MCP
+settings. To serve only the API and MCP, without the browser UI, run
+``BURR_SERVE_STATIC=false burr --no-open``.
+
+The tools read from the same backend as the UI:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Group
+     - Tool
+     - What it returns
+   * - ``inspect`` (default)
+     - ``list_projects``, ``list_apps``
+     - Projects and apps (runs), most recently written first
+   * -
+     - ``get_app``
+     - The graph and one line per step (the last 50 by default), no state
+   * -
+     - ``get_step``
+     - A step's inputs, result, exception and the state after it
+   * -
+     - ``diff_state``, ``key_history``
+     - What changed between two steps, and the steps where one state key changed
+   * -
+     - ``export_test_case``
+     - A ``burr-test-case`` fixture for a step, which ``burr.testing`` loads
+   * - ``annotate`` (opt-in)
+     - ``annotate_step``, ``list_annotations``
+     - Notes on steps, shown in the UI. Needs a backend with annotations (the local one).
+
+By default the tools return small results, so a large app does not flood the assistant's
+context. Nothing is out of reach: step lists and key histories take ``start``/``limit``, and
+values longer than 2,000 characters come back as a preview plus their size unless the caller
+passes ``max_chars=None``.
+
+The endpoint is configured with environment variables:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Variable
+     - Effect
+   * - ``BURR_MCP_ENABLED``
+     - ``auto`` (default) serves ``/mcp`` when ``mcp>=2`` is installed. ``true`` fails at startup
+       if it is not, and ``false`` never serves it.
+   * - ``BURR_MCP_GROUPS``
+     - Comma-separated tool groups, ``inspect`` (default) and/or ``annotate``.
+   * - ``BURR_MCP_MAX_CHARS``
+     - The most characters of any one value a tool returns. Callers cannot raise it. Unset
+       (default) means no limit.
+
+Things to know before turning it on:
+
+- Tracked state often holds end-user text, which can contain prompt injection. The server tells
+  the assistant to treat state, inputs and results as data, but an assistant can still be misled
+  by what it reads. Write tools (``annotate``) are off unless you enable them.
+- ``burr`` binds to ``127.0.0.1``, and ``/mcp`` answers only requests whose ``Host`` header is
+  localhost (421 otherwise), so a web page cannot reach it through DNS rebinding.
+- The UI server has no authentication. Anyone who can reach the REST API can reach ``/mcp``.

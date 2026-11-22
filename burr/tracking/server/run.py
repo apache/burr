@@ -17,6 +17,7 @@
 
 import asyncio
 import importlib
+import importlib.metadata
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -187,6 +188,52 @@ if app_spec.snapshotting:
         wait_first=True,
         logger=logger,
     )(save_snapshot)
+
+
+def _mount_mcp(ui_app: FastAPI) -> None:
+    """Serves the MCP endpoint at /mcp, depending on these environment variables:
+
+    - ``BURR_MCP_ENABLED``: ``auto`` (default) serves it when mcp>=2 is installed, ``true``
+      fails at startup if it isn't, ``false`` never serves it.
+    - ``BURR_MCP_GROUPS``: comma-separated tool groups, ``inspect`` (default) and/or ``annotate``.
+    - ``BURR_MCP_MAX_CHARS``: the most characters of any one value a tool returns, which callers
+      cannot raise. Unset (default) means no limit.
+    """
+    setting = os.getenv("BURR_MCP_ENABLED", "auto").lower()
+    if setting not in ("auto", "true", "false"):
+        raise ValueError(f"BURR_MCP_ENABLED must be auto, true or false, not {setting!r}")
+    if setting == "false":
+        return
+    try:
+        found = importlib.metadata.version("mcp")
+    except importlib.metadata.PackageNotFoundError:
+        found = None
+    if found is None or int(found.split(".")[0]) < 2:
+        hint = "Burr's MCP endpoint needs mcp>=2: pip install 'apache-burr[mcp]'"
+        if setting == "true":
+            raise RuntimeError(hint if found is None else f"{hint} (found mcp {found})")
+        if found is not None:
+            # Installed at an older major by something else: keep the UI working, but say why
+            logger.warning("Not serving /mcp: %s (found mcp %s)", hint, found)
+        return
+
+    from burr.tracking.server.mcp_endpoint import mount_mcp
+
+    groups = [g.strip() for g in os.getenv("BURR_MCP_GROUPS", "inspect").split(",") if g.strip()]
+    if not groups:
+        raise ValueError("BURR_MCP_GROUPS is empty; to turn MCP off, set BURR_MCP_ENABLED=false")
+    max_chars = os.getenv("BURR_MCP_MAX_CHARS")
+    if max_chars is not None and (not max_chars.isdigit() or int(max_chars) < 1):
+        raise ValueError(f"BURR_MCP_MAX_CHARS must be a positive integer, not {max_chars!r}")
+    if "annotate" in groups and not isinstance(backend, AnnotationsBackendMixin):
+        logger.warning(
+            "Not serving the annotate tools: %s has no annotations", type(backend).__name__
+        )
+        groups.remove("annotate")
+        if not groups:
+            return
+    mount_mcp(ui_app, backend, groups, max_chars_limit=int(max_chars) if max_chars else None)
+    logger.info("Serving MCP at /mcp (tool groups: %s)", ", ".join(groups))
 
 
 def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
@@ -365,6 +412,9 @@ def create_burr_ui_app(serve_static: bool = SERVE_STATIC) -> FastAPI:
     ui_app.include_router(streaming_chatbot.router, prefix="/api/v0/streaming_chatbot")
     ui_app.include_router(deep_researcher.router, prefix="/api/v0/deep_researcher")
     ui_app.include_router(counter.router, prefix="/api/v0/counter")
+
+    # Before the React catch-all route below
+    _mount_mcp(ui_app)
 
     if serve_static:
         base_asset_directory = str(files("burr").joinpath("tracking/server/build"))
