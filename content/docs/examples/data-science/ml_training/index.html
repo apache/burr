@@ -27,7 +27,7 @@
         <link rel="prefetch" href="../../../_static/burr_logo.svg" as="image">
 
     <link rel="shortcut icon" href="../../../_static/favicon.ico"><!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>Hyperparameter tuning - Apache Burr</title>
+        <title>ML training - Apache Burr</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
@@ -295,7 +295,7 @@ s=d.getElementsByTagName('script')[0];
 </ul>
 </li>
 <li class="toctree-l2 current has-children"><a class="reference internal" href="../">🧪 Data science</a><input aria-label="Toggle navigation of 🧪 Data science" checked="" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">Hyperparameter tuning</a></li>
+<li class="toctree-l3 current current-page"><a class="current reference internal" href="#">ML training</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../simulation/">Simulations</a></li>
 </ul>
 </li>
@@ -431,202 +431,87 @@ s=d.getElementsByTagName('script')[0];
      specific language governing permissions and limitations
      under the License.
 -->
-<section id="hyperparameter-tuning">
-<h1>Hyperparameter tuning<a class="headerlink" href="#hyperparameter-tuning" title="Link to this heading">¶</a></h1>
-<p>Hyperparameter tuning is a key part of training machine learning models. For use-cases ranging from grid-search
-to gaussian processes, <code class="docutils literal notranslate"><span class="pre">burr</span></code> is a simple way to implement robust, failure-resistant hyperparameter optimization. This involves keeping
-track of hyperparameters and metrics and feeding these into a decision function to determine where to look next.
-<code class="docutils literal notranslate"><span class="pre">burr</span></code>’s state machine can help you write and manage that process.</p>
-<p>This is a WIP! Please see the placeholder/example sketch in the <a class="reference external" href="https://github.com/apache/burr/tree/main/examples/ml-training">repository</a> and contribute back if you have ideas via associated issue <a class="reference external" href="https://github.com/apache/burr/issues/138">here</a>.</p>
-<section id="high-level-view">
-<h2>High-level view<a class="headerlink" href="#high-level-view" title="Link to this heading">¶</a></h2>
-<p>A machine learning training system can easily be modeled as a state machine.</p>
-<p>While often, this is more of a DAG (E.G. <code class="docutils literal notranslate"><span class="pre">query_data</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">feature_engineer</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">train_model</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">evaluate_model</span></code>), there
-are some interesting reasons this as a state machine.</p>
+<section id="ml-training">
+<h1>ML training<a class="headerlink" href="#ml-training" title="Link to this heading">¶</a></h1>
+<p>This example trains a model one epoch at a time. Burr runs the training as a state machine. A person approves the model before the example registers it.</p>
+<p>The example uses scikit-learn and its built-in digits dataset, so it needs no API key and no download. The full code, a notebook, and a test are in the <a class="reference external" href="https://github.com/apache/burr/tree/main/examples/ml-training">repository</a>.</p>
+<p><img alt="diagram" src="../../../_images/_ml_training.png" /></p>
+<section id="why-a-state-machine">
+<h2>Why a state machine<a class="headerlink" href="#why-a-state-machine" title="Link to this heading">¶</a></h2>
+<p>A training pipeline is frequently a DAG, for example <code class="docutils literal notranslate"><span class="pre">query_data</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">feature_engineer</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">train_model</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">evaluate_model</span></code>. A state machine gives you more when you make each epoch an action:</p>
+<ul class="simple">
+<li><p>Checkpoints: Burr saves the state after each epoch, so a failed run continues at the next epoch.</p></li>
+<li><p>A separate stop rule: A transition condition decides when the training stops. The training code does not change when the stop rule changes.</p></li>
+<li><p>Visibility: Burr tracks each epoch, so you can see the metrics in the Burr UI during the training.</p></li>
+<li><p>Human review: The application halts before the review and continues when a person gives a decision.</p></li>
+</ul>
 </section>
-<section id="more-granular-training-routines">
-<h2>More granular training routines<a class="headerlink" href="#more-granular-training-routines" title="Link to this heading">¶</a></h2>
-<p>If, rather than treating <code class="docutils literal notranslate"><span class="pre">train</span></code> as a action, you treat <code class="docutils literal notranslate"><span class="pre">train_epoch</span></code> as an action, you can utilize the abstractions
-burr represents to get the following benefits:</p>
-<section id="checkpointing">
-<h3>Checkpointing<a class="headerlink" href="#checkpointing" title="Link to this heading">¶</a></h3>
-<p>You can store the current params + best model (or pointers to them). Then go back to the failure point. This allows you
-to recover from failure in a generic way.</p>
+<section id="the-actions">
+<h2>The actions<a class="headerlink" href="#the-actions" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">train_epoch</span></code> trains for one epoch and saves a checkpoint file. <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> scores that checkpoint and records the best one. The state holds the metrics and the paths of the checkpoint files. The models stay on disk, so the state is small and Burr can save it as JSON.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"epoch"</span><span class="p">,</span> <span class="s2">"learning_rate"</span><span class="p">,</span> <span class="s2">"checkpoint_dir"</span><span class="p">,</span> <span class="s2">"latest_checkpoint"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"epoch"</span><span class="p">,</span> <span class="s2">"latest_checkpoint"</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">train_epoch</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Runs one epoch, starting from the latest checkpoint, and saves a new checkpoint."""</span>
+    <span class="n">X_train</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">y_train</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">state</span><span class="p">[</span><span class="s2">"latest_checkpoint"</span><span class="p">]:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"latest_checkpoint"</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">SGDClassifier</span><span class="p">(</span><span class="n">loss</span><span class="o">=</span><span class="s2">"log_loss"</span><span class="p">,</span> <span class="n">learning_rate</span><span class="o">=</span><span class="s2">"constant"</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="c1"># set every epoch, because the reviewer can change it</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="n">eta0</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="s2">"learning_rate"</span><span class="p">])</span>
+    <span class="n">epoch</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"epoch"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">epoch</span><span class="p">)</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X_train</span><span class="p">))</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">partial_fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">y_train</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">classes</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">y_train</span><span class="p">))</span>
+
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"checkpoint_dir"</span><span class="p">],</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">checkpoint</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">"checkpoint_dir"</span><span class="p">],</span> <span class="sa">f</span><span class="s2">"epoch_</span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s2">.joblib"</span><span class="p">)</span>
+    <span class="n">joblib</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">epoch</span><span class="o">=</span><span class="n">epoch</span><span class="p">,</span> <span class="n">latest_checkpoint</span><span class="o">=</span><span class="n">checkpoint</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
-<section id="decoupling-training-logic-from-termination-condition">
-<h3>Decoupling training logic from termination condition<a class="headerlink" href="#decoupling-training-logic-from-termination-condition" title="Link to this heading">¶</a></h3>
-<p>You can have a condition that checks training completeness based on metric history, which is different from the training logic itself.
-This allows you to easily swap in and out termination conditions (testing them against each other or running different ones in different scenarios),
-as well as easy reuse.</p>
-</section>
-<section id="visibility-into-lower-level-training">
-<h3>Visibility into lower-level training<a class="headerlink" href="#visibility-into-lower-level-training" title="Link to this heading">¶</a></h3>
-<p>Similar to <a class="reference external" href="https://lightning.ai/docs/pytorch/stable//extensions/callbacks.html">hooks</a> in pytorch lightning,
-you can use Burr hooks to log metrics, visualize, etc… at each step. This allows you to have a more granular view of training that updates live
-(obviuosly depending on the UI/model-monitoring you’re using.)</p>
-</section>
+<section id="the-stop-rule">
+<h2>The stop rule<a class="headerlink" href="#the-stop-rule" title="Link to this heading">¶</a></h2>
+<p>The stop rule is the condition on the transition from <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> to <code class="docutils literal notranslate"><span class="pre">human_review</span></code>. To use a different rule, change that one line.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"train_epoch"</span><span class="p">,</span> <span class="s2">"evaluate"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"evaluate"</span><span class="p">,</span> <span class="s2">"human_review"</span><span class="p">,</span> <span class="n">expr</span><span class="p">(</span><span class="s2">"epochs_since_best &gt;= patience or epoch &gt;= max_epochs"</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s2">"evaluate"</span><span class="p">,</span> <span class="s2">"train_epoch"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"human_review"</span><span class="p">,</span> <span class="s2">"train_epoch"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">decision</span><span class="o">=</span><span class="s2">"continue"</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s2">"human_review"</span><span class="p">,</span> <span class="s2">"register_model"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">decision</span><span class="o">=</span><span class="s2">"approve"</span><span class="p">)),</span>
+    <span class="p">(</span><span class="s2">"human_review"</span><span class="p">,</span> <span class="s2">"reject_model"</span><span class="p">,</span> <span class="n">when</span><span class="p">(</span><span class="n">decision</span><span class="o">=</span><span class="s2">"reject"</span><span class="p">)),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 <section id="human-in-the-loop">
 <h2>Human in the loop<a class="headerlink" href="#human-in-the-loop" title="Link to this heading">¶</a></h2>
-<p>While some models are trained in a single-shot and shipped to production, many require human input.
-Burr can be used to express training, then checkpoint/pause the state while a human is evaluating it,
-and have their input (e.g. go/no-go) passed in as an <a class="reference external" href="https://burr.apache.org/concepts/actions/#runtime-inputs">input parameter</a>.</p>
-<p>Note that this still requires a scheduling tool (say a task executor that runs until the next human input is needed),
-but that task executor does not need to be complicated (all it needs to do is run a job when prompted, and possibly on a chron schedule).</p>
-</section>
-<section id="hyperparameter-training">
-<h2>Hyperparameter training<a class="headerlink" href="#hyperparameter-training" title="Link to this heading">¶</a></h2>
-<p>Similar to epoch training, hyperparameter training can be modeled as a state machine. The system makes a decision about what
-to look for next based on the prior results. Furthermore, one can model a step that handles multiple jobs, keeping them alive/
-launching new ones as they complete (based on state).</p>
-<p><img alt="diagram" src="../../../_images/_ml_training.png" />.</p>
-</section>
-<section id="code-example">
-<h2>Code example<a class="headerlink" href="#code-example" title="Link to this heading">¶</a></h2>
-<p>This uses the class-based API for defining an <code class="docutils literal notranslate"><span class="pre">action</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""</span>
-<span class="sd">This is a sketch of an example of a machine learning training pipeline using Burr where you</span>
-<span class="sd">want to do something dynamic like train a model for a variable number of iterations and then</span>
-<span class="sd">pick the best model from each of the iterations based on some validation metric. E.g. hyperparameter search.</span>
+<p>The decision of the reviewer is an <a class="reference external" href="https://burr.apache.org/concepts/actions/#runtime-inputs">input</a> of the <code class="docutils literal notranslate"><span class="pre">human_review</span></code> action. The action cannot run until a person gives a decision.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@action</span><span class="p">(</span>
+    <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"epoch"</span><span class="p">,</span> <span class="s2">"learning_rate"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"decision"</span><span class="p">,</span> <span class="s2">"max_epochs"</span><span class="p">,</span> <span class="s2">"epochs_since_best"</span><span class="p">,</span> <span class="s2">"learning_rate"</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">human_review</span><span class="p">(</span>
+    <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="n">decision</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">extra_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">learning_rate</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+    <span class="o">...</span>
 
-<span class="sd">You could adjust this example to continue training a model until you reach a certain validation metric,</span>
-<span class="sd">or hit a max number of iterations (or epochs), etc.</span>
-
-<span class="sd">Note: this example uses the class based API to define the actions. You could also use the function+decorator API.</span>
-<span class="sd">"""</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">burr.core.application</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">burr.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Action</span><span class="p">,</span> <span class="n">Condition</span><span class="p">,</span> <span class="n">State</span><span class="p">,</span> <span class="n">default</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">ProcessDataAction</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"data_path"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""This is where you would load and process your data.</span>
-<span class="sd">        You can take in state and reference object fields.</span>
-
-<span class="sd">        You need to return a dictionary of the results that `update()` will then use to update the state.</span>
-<span class="sd">        """</span>
-        <span class="c1"># load data, and run some feature engineering -- create the data sets</span>
-        <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">"training_data"</span><span class="p">:</span> <span class="s2">"SOME_OBJECT/PATH"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">:</span> <span class="s2">"SOME_OBJECT/PATH"</span><span class="p">}</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"training_data"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-            <span class="n">training_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"training_data"</span><span class="p">],</span> <span class="n">evaluation_data</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"evaluation_data"</span><span class="p">]</span>
-        <span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">TrainModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"training_data"</span><span class="p">,</span> <span class="s2">"iterations"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""This is where you'd build the model and on each iteration do something different.</span>
-<span class="sd">        E.g. hyperparameter search.</span>
-<span class="sd">        """</span>
-        <span class="c1"># train the model, i.e. run one "iteration" whatever that means for you.</span>
-        <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"SOME_MODEL"</span><span class="p">,</span>
-            <span class="s2">"iterations"</span><span class="p">:</span> <span class="n">state</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
-            <span class="s2">"metrics"</span><span class="p">:</span> <span class="s2">"SOME_METRICS"</span><span class="p">,</span>
-        <span class="p">}</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"models"</span><span class="p">,</span> <span class="s2">"training_metrics"</span><span class="p">,</span> <span class="s2">"iterations"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-            <span class="n">iterations</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">],</span>  <span class="c1"># set current iteration value</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">models</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"model"</span><span class="p">],</span>  <span class="c1"># append -- note this can get big if your model is big</span>
-            <span class="c1"># so you'll want to overwrite but store the conditions, or log somewhere</span>
-            <span class="n">metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"metrics"</span><span class="p">],</span>  <span class="c1"># append the metrics</span>
-        <span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">ValidateModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"models"</span><span class="p">,</span> <span class="s2">"evaluation_data"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Compute validation metrics using the model and evaluation data."""</span>
-        <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">"validation_metrics"</span><span class="p">:</span> <span class="s2">"SOME_METRICS"</span><span class="p">}</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">validation_metrics</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">])</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">BestModel</span><span class="p">(</span><span class="n">Action</span><span class="p">):</span>
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">reads</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"validation_metrics"</span><span class="p">,</span> <span class="s2">"models"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">**</span><span class="n">run_kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Select the best model based on the validation metrics."""</span>
-        <span class="c1"># TODO: fill in</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">"best_model"</span><span class="p">:</span> <span class="s2">"SOME_MODEL"</span><span class="p">}</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">"best_model"</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">best_model</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">"best_model"</span><span class="p">])</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">application</span><span class="p">(</span><span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">application</span><span class="o">.</span><span class="n">Application</span><span class="p">:</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">burr</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">ApplicationBuilder</span><span class="p">()</span>
-        <span class="o">.</span><span class="n">with_state</span><span class="p">(</span>
-            <span class="n">data_path</span><span class="o">=</span><span class="s2">"data.csv"</span><span class="p">,</span>
-            <span class="n">iterations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-            <span class="n">training_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">evaluation_data</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">models</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">training_metrics</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">validation_metrics</span><span class="o">=</span><span class="p">[],</span>
-            <span class="n">best_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span>
-            <span class="n">process_data</span><span class="o">=</span><span class="n">ProcessDataAction</span><span class="p">(),</span>
-            <span class="n">train_model</span><span class="o">=</span><span class="n">TrainModel</span><span class="p">(),</span>
-            <span class="n">validate_model</span><span class="o">=</span><span class="n">ValidateModel</span><span class="p">(),</span>
-            <span class="n">best_model</span><span class="o">=</span><span class="n">BestModel</span><span class="p">(),</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">"process_data"</span><span class="p">,</span> <span class="s2">"train_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">"train_model"</span><span class="p">,</span> <span class="s2">"validate_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">"validate_model"</span><span class="p">,</span> <span class="s2">"best_model"</span><span class="p">,</span> <span class="n">Condition</span><span class="o">.</span><span class="n">expr</span><span class="p">(</span><span class="sa">f</span><span class="s2">"iterations&gt;</span><span class="si">{</span><span class="n">iterations</span><span class="si">}</span><span class="s2">"</span><span class="p">)),</span>
-            <span class="p">(</span><span class="s2">"validate_model"</span><span class="p">,</span> <span class="s2">"train_model"</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"process_data"</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">build</span><span class="p">()</span>
-    <span class="p">)</span>
-
-
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
-    <span class="n">app</span> <span class="o">=</span> <span class="n">application</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># doing good data science is up to you...</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">output_file_path</span><span class="o">=</span><span class="s2">"statemachine"</span><span class="p">,</span> <span class="n">include_conditions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">view</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"png"</span><span class="p">)</span>
-    <span class="c1"># you could run things like this:</span>
-    <span class="c1"># last_action, result, state = app.run(halt_after=["best_model"])</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_review"</span><span class="p">])</span>  <span class="c1"># trains, then stops before the review</span>
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_after</span><span class="o">=</span><span class="p">[</span><span class="s2">"register_model"</span><span class="p">,</span> <span class="s2">"reject_model"</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"decision"</span><span class="p">:</span> <span class="s2">"approve"</span><span class="p">})</span>
 </pre></div>
 </div>
+<p>A persister saves the state after each step. As a result, the process can exit at the review. When the person replies, a scheduler or a web request builds the application again with the same <code class="docutils literal notranslate"><span class="pre">app_id</span></code>, and the run continues at the review.</p>
+</section>
+<section id="hyperparameter-tuning">
+<h2>Hyperparameter tuning<a class="headerlink" href="#hyperparameter-tuning" title="Link to this heading">¶</a></h2>
+<p>The reviewer can change one hyperparameter at the review: the learning rate. When the decision is <code class="docutils literal notranslate"><span class="pre">continue</span></code>, an optional input named <code class="docutils literal notranslate"><span class="pre">learning_rate</span></code> gives the new value. The action writes it to the state, and <code class="docutils literal notranslate"><span class="pre">train_epoch</span></code> uses it from the next epoch.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">halt_before</span><span class="o">=</span><span class="p">[</span><span class="s2">"human_review"</span><span class="p">],</span> <span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"decision"</span><span class="p">:</span> <span class="s2">"continue"</span><span class="p">,</span> <span class="s2">"learning_rate"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>This example does not include an automatic hyperparameter search. You can model one in the same way. An action takes the place of the reviewer. It reads the earlier results from the state and selects the next parameters to try.</p>
 </section>
 </section>
 
@@ -698,17 +583,12 @@ launching new ones as they complete (based on state).</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Hyperparameter tuning</a><ul>
-<li><a class="reference internal" href="#high-level-view">High-level view</a></li>
-<li><a class="reference internal" href="#more-granular-training-routines">More granular training routines</a><ul>
-<li><a class="reference internal" href="#checkpointing">Checkpointing</a></li>
-<li><a class="reference internal" href="#decoupling-training-logic-from-termination-condition">Decoupling training logic from termination condition</a></li>
-<li><a class="reference internal" href="#visibility-into-lower-level-training">Visibility into lower-level training</a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#">ML training</a><ul>
+<li><a class="reference internal" href="#why-a-state-machine">Why a state machine</a></li>
+<li><a class="reference internal" href="#the-actions">The actions</a></li>
+<li><a class="reference internal" href="#the-stop-rule">The stop rule</a></li>
 <li><a class="reference internal" href="#human-in-the-loop">Human in the loop</a></li>
-<li><a class="reference internal" href="#hyperparameter-training">Hyperparameter training</a></li>
-<li><a class="reference internal" href="#code-example">Code example</a></li>
+<li><a class="reference internal" href="#hyperparameter-tuning">Hyperparameter tuning</a></li>
 </ul>
 </li>
 </ul>
