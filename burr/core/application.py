@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import dataclasses
 import functools
@@ -32,6 +33,7 @@ from typing import (
     Any,
     AsyncGenerator,
     Callable,
+    ContextManager,
     Dict,
     Generator,
     Generic,
@@ -47,7 +49,7 @@ from typing import (
 
 from burr import system, visibility
 from burr.common import types as burr_types
-from burr.core import persistence, validation
+from burr.core import persistence, serde, validation
 from burr.core.action import (
     DEFAULT_SCHEMA,
     Action,
@@ -61,6 +63,7 @@ from burr.core.action import (
     StreamingAction,
     StreamingResultContainer,
 )
+from burr.core.artifacts import ArtifactStore, AsyncArtifactStore
 from burr.core.graph import Graph, GraphBuilder
 from burr.core.persistence import (
     AsyncBaseStateLoader,
@@ -700,6 +703,9 @@ class ApplicationContext(AbstractContextManager, ApplicationIdentifiers):
     state_initializer: Optional[BaseStateLoader]
     state_persister: Optional[BaseStateSaver]
     action_name: Optional[str]  # Store just the action name
+    # Trailing field with a `None` default so directly constructing this public dataclass the
+    # pre-existing way (without `object_store`) keeps working -- see with_object_store.
+    object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None
 
     @staticmethod
     def get() -> Optional["ApplicationContext"]:
@@ -890,6 +896,25 @@ def _create_default_executor() -> Executor:
     return ThreadPoolExecutor()
 
 
+def _serialization_context_factory(
+    object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]],
+) -> Callable[[], ContextManager]:
+    """Returns a factory for a context manager that makes ``object_store`` available to serializers.
+
+    Each call creates a new :py:class:`~burr.core.serde.SerializationContext`, so each call site
+    gets its own ``memo``. Use :py:meth:`ApplicationBuilder._serialization_hook_context` to build one
+    context for a whole application instead of calling this repeatedly -- the initializer load and the
+    application's hooks must share a context for anything the deserializer seeds on resume to be
+    visible to the next persist.
+    """
+    context = (
+        serde.SerializationContext(object_store=object_store) if object_store is not None else None
+    )
+    return lambda: (
+        serde.serialization_context(context) if context is not None else contextlib.nullcontext()
+    )
+
+
 class Application(Generic[ApplicationStateType]):
     def __init__(
         self,
@@ -907,6 +932,8 @@ class Application(Generic[ApplicationStateType]):
         parallel_executor_factory: Optional[Executor] = None,
         state_persister: Union[BaseStateSaver, LifecycleAdapter, None] = None,
         state_initializer: Union[BaseStateLoader, LifecycleAdapter, None] = None,
+        object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None,
+        hook_context: Optional[Callable[[], ContextManager]] = None,
     ):
         """Instantiates an Application. This is an internal API -- use the builder!
 
@@ -920,6 +947,10 @@ class Application(Generic[ApplicationStateType]):
             So if this starts at 0, the first one you will see will be 1.
         :param adapter_set: Set of lifecycle adapters
         :param builder: Builder that created this application
+        :param hook_context: Factory for the serialization-context manager the builder already
+            created, so that the application's hooks resume/serialize with the *same*
+            :py:class:`~burr.core.serde.SerializationContext` the initializer load used. Built here
+            from ``object_store`` when not supplied.
         """
         self._partition_key = partition_key
         self._uid = uid
@@ -933,6 +964,11 @@ class Application(Generic[ApplicationStateType]):
         )
         self._state = state
         adapter_set = adapter_set if adapter_set is not None else LifecycleAdapterSet()
+        if object_store is not None:
+            # persisters/trackers serialize state inside hooks -- this hands them the object store
+            adapter_set = adapter_set.with_hook_context(
+                hook_context or _serialization_context_factory(object_store)
+            )
         self._adapter_set = adapter_set.with_new_adapters(TracerFactoryContextHook(adapter_set))
         # TODO -- consider adding global inputs + global input factories to the builder
         self._tracker = tracker
@@ -958,6 +994,7 @@ class Application(Generic[ApplicationStateType]):
         self._spawning_parent_pointer = spawning_parent_pointer
         self._state_initializer = state_initializer
         self._state_persister = state_persister
+        self._object_store = object_store
         self._adapter_set.call_all_lifecycle_hooks_sync(
             "post_application_create",
             state=self._state,
@@ -1001,6 +1038,7 @@ class Application(Generic[ApplicationStateType]):
             parallel_executor_factory=self._parallel_executor_factory,
             state_initializer=self._state_initializer,
             state_persister=self._state_persister,
+            object_store=self._object_store,
             action_name=action.name if action else None,  # Pass just the action name
         )
 
@@ -1166,35 +1204,49 @@ class Application(Generic[ApplicationStateType]):
             result = None
             new_state = self._state
             try:
-                if not next_action.is_async():
-                    # we can just delegate to the synchronous version, it will block the event loop,
-                    # but that's safer than assuming its OK to launch a thread
-                    # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
-                    # which this is supposed to be its OK).
-                    # In this case we allow the self._step to do input processing
-                    # Execute the synchronous step without hooks here. Async hooks still run
-                    # afterward so async persisters can save the completed state of synchronous steps.
-                    output = self._step(inputs=inputs, _run_hooks=False)
-                    if output is None:
-                        return None
-                    next_action, result, new_state = output
-                # In this case we want to process inputs because we run the function directly
-                else:
-                    action_inputs = self._process_inputs(inputs, next_action)
-                    if next_action.single_step:
-                        result, new_state = await _arun_single_step_action(
-                            next_action, self._state, inputs=action_inputs
-                        )
+                # Enter the adapters' action scopes in this task, so anything they make
+                # "current" -- an OpenTelemetry span, a serialization context -- is visible to
+                # the action. Doing it here rather than in a lifecycle hook is what keeps
+                # asynchronous hook dispatch free to use its own tasks.
+                with self._adapter_set.action_scope(
+                    action=next_action,
+                    state=self._state,
+                    inputs=inputs,
+                    sequence_id=self.sequence_id,
+                    app_id=self._uid,
+                    partition_key=self._partition_key,
+                ):
+                    if not next_action.is_async():
+                        # we can just delegate to the synchronous version, it will block the event loop,
+                        # but that's safer than assuming its OK to launch a thread
+                        # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
+                        # which this is supposed to be its OK).
+                        # In this case we allow the self._step to do input processing
+                        # Execute the synchronous step without hooks here. Async hooks still run
+                        # afterward so async persisters can save the completed state of synchronous steps.
+                        output = self._step(inputs=inputs, _run_hooks=False)
+                        if output is None:
+                            return None
+                        next_action, result, new_state = output
+                    # In this case we want to process inputs because we run the function directly
                     else:
-                        result = await _arun_function(
-                            next_action,
-                            self._state,
-                            inputs=action_inputs,
-                            name=next_action.name,
-                        )
-                        new_state = _run_reducer(next_action, self._state, result, next_action.name)
-                    new_state = self._update_internal_state_value(new_state, next_action)
-                    self._set_state(new_state)
+                        action_inputs = self._process_inputs(inputs, next_action)
+                        if next_action.single_step:
+                            result, new_state = await _arun_single_step_action(
+                                next_action, self._state, inputs=action_inputs
+                            )
+                        else:
+                            result = await _arun_function(
+                                next_action,
+                                self._state,
+                                inputs=action_inputs,
+                                name=next_action.name,
+                            )
+                            new_state = _run_reducer(
+                                next_action, self._state, result, next_action.name
+                            )
+                        new_state = self._update_internal_state_value(new_state, next_action)
+                        self._set_state(new_state)
             except Exception as e:
                 exc = e
                 logger.exception(_format_BASE_ERROR_MESSAGE(next_action, self._state, inputs))
@@ -1888,6 +1940,7 @@ class Application(Generic[ApplicationStateType]):
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
+                    exception=exc,
                 )
                 await call_execute_method_wrapper.acall_post(self, exc)
 
@@ -1979,6 +2032,7 @@ class Application(Generic[ApplicationStateType]):
                 sequence_id=self.sequence_id,
                 app_id=self._uid,
                 partition_key=self._partition_key,
+                exception=e,
             )
             raise
         return next_action, AsyncStreamingResultContainer(
@@ -2261,6 +2315,19 @@ class Application(Generic[ApplicationStateType]):
                 "Please use the async run methods to run the application."
             )
 
+        # An AsyncArtifactStore can be attached via build() (e.g. when a sync persister/
+        # initializer forces build() even though the object store is async -- see
+        # SubGraphTask.arun()), but it can only be used from async execution methods, since
+        # awaiting it here would require an event loop. Validate at the execution-method layer,
+        # not at build()-time, so that combination stays supported.
+        if self._object_store is not None and self._object_store.is_async():
+            raise ValueError(
+                "This application has an async object store (AsyncArtifactStore) attached, "
+                "but you are calling a synchronous execution method. Please use the async "
+                "execution methods (arun(), astep(), aiterate(), etc.) instead, or use a "
+                "sync object store (ArtifactStore)."
+            )
+
 
 def _validate_app_id(app_id: Optional[str]):
     if app_id is None:
@@ -2277,6 +2344,23 @@ def _validate_start(start: Optional[str], actions: Set[str]):
             f"Entrypoint: {start} not found in actions. Please add "
             f"using with_actions({start}=...)"
         )
+
+
+@dataclasses.dataclass
+class _LocalTrackerConfig:
+    """A string-specified local tracker, pending instantiation at build time.
+
+    The builder cannot instantiate it in :py:meth:`ApplicationBuilder.with_tracker`, because the
+    choice between :py:class:`~burr.tracking.client.LocalTrackingClient` and
+    :py:class:`~burr.tracking.client.AsyncLocalTrackingClient` depends on the object store, which
+    may be configured before *or* after the tracker. Recording the configuration here and
+    resolving it in :py:meth:`ApplicationBuilder._resolve_tracker` makes the selection
+    independent of builder call order.
+    """
+
+    project: str
+    params: Dict[str, Any]
+    use_otel_tracing: bool
 
 
 class ApplicationBuilder(Generic[StateType]):
@@ -2298,10 +2382,24 @@ class ApplicationBuilder(Generic[StateType]):
         self.spawn_from_sequence_id: Optional[int] = None
         self.loaded_from_fork: bool = False
         self.tracker = None
+        # Set by with_tracker("local", ...): the pending local tracker configuration, resolved
+        # into a concrete sync/async client by _resolve_tracker at build time.
+        self._local_tracker_config: Optional[_LocalTrackerConfig] = None
+        # The client _resolve_tracker created, so repeated builds reuse it instead of appending
+        # a duplicate lifecycle adapter.
+        self._resolved_tracker: Optional[TrackingClient] = None
+        # The adapter this builder appended to ``lifecycle_adapters``. Remembered by identity so
+        # that reconfiguring the tracker (or swapping the object store) can remove exactly that
+        # one adapter without touching any adapter the user supplied through ``with_hooks``.
+        self._appended_tracker: Optional[Any] = None
+        # True when the appended tracker came from ``with_tracker("local", ...)`` rather than from
+        # an explicitly supplied instance. Only auto-created trackers may be discarded/recreated.
+        self._tracker_is_auto: bool = False
         self.graph_builder = None
         self.typing_system = None
         self.parallel_executor_factory = None
         self.state_persister = None
+        self.object_store = None
         self._is_async: bool = False
 
     def with_identifiers(
@@ -2514,8 +2612,23 @@ class ApplicationBuilder(Generic[StateType]):
         1. A string (the only supported one right now is "local"), and a set of parameters for a set of supported trackers.
         2. A lifecycle adapter object that does tracking (up to you how to implement it).
 
-        (1) internally creates a :py:class:`LocalTrackingClient <burr.tracking.client.LocalTrackingClient>` object, and adds it to the lifecycle adapters.
+        (1) internally creates a local tracking client and adds it to the lifecycle adapters.
         (2) adds the lifecycle adapter to the lifecycle adapters.
+
+        With ``use_otel_tracing=True``, an explicitly supplied tracker is wrapped in the OpenTelemetry
+        adapter matching its step hooks: an :py:class:`~burr.tracking.base.AsyncTrackingClient` gets
+        :py:class:`~burr.integrations.opentelemetry.AsyncOpenTelemetryTracker`, a synchronous one
+        gets :py:class:`~burr.integrations.opentelemetry.OpenTelemetryTracker`. The underlying
+        instance is never replaced.
+
+        For (1), the concrete client is selected when the application is built, not here -- see
+        :py:meth:`_resolve_tracker`. An application that has to serialize through ``async def``
+        serializers (typically because it has an :py:class:`~burr.core.artifacts.AsyncArtifactStore`)
+        gets :py:class:`~burr.tracking.client.AsyncLocalTrackingClient`; everything else keeps
+        :py:class:`~burr.tracking.client.LocalTrackingClient`. Deferring the choice is what makes
+        the selection independent of whether ``with_tracker`` or ``with_object_store`` is called
+        first. ``self.tracker`` holds the instance passed in, or ``None`` when a string was given.
+        An instance passed in under (2) is never replaced.
 
         :param tracker: Tracker to use. ``local`` creates one, else pass one in.
         :param project: Project name -- used if the tracker is string-specified (local).
@@ -2524,31 +2637,135 @@ class ApplicationBuilder(Generic[StateType]):
             full support shortly. This requires burr[opentelemetry] installed. Note you can also log burr to OpenTelemetry using the OpenTelemetry adapter
         :return: The application builder for future chaining.
         """
-        # if it's a lifecycle adapter, just add it
-        instantiated_tracker = tracker
         if isinstance(tracker, str):
             if params is None:
                 params = {}
-            if tracker == "local":
-                from burr.tracking.client import LocalTrackingClient
-
-                kwargs = {"project": project}
-                kwargs.update(params)
-                instantiated_tracker = LocalTrackingClient(**kwargs)
-            else:
+            if tracker != "local":
                 raise ValueError(f"Tracker {tracker}:{project} not supported")
-        else:
-            if params is not None:
-                raise ValueError(
-                    "Params are not supported for object-specified trackers, these are already initialized!"
-                )
+            self._forget_appended_tracker()
+            self._local_tracker_config = _LocalTrackerConfig(
+                project=project, params=params, use_otel_tracing=use_otel_tracing
+            )
+            # Instantiated at build time, once the full configuration is known.
+            self.tracker = None
+            return self
+        if params is not None:
+            raise ValueError(
+                "Params are not supported for object-specified trackers, these are already initialized!"
+            )
+        # An explicitly supplied instance is used as-is -- it is never silently replaced by a
+        # sync/async variant, only wrapped when OpenTelemetry tracing is requested.
+        self._forget_appended_tracker()
+        self._local_tracker_config = None
+        instantiated_tracker = tracker
         if use_otel_tracing:
-            from burr.integrations.opentelemetry import OpenTelemetryTracker
-
-            instantiated_tracker = OpenTelemetryTracker(burr_tracker=instantiated_tracker)
+            instantiated_tracker = self._wrap_tracker_for_otel(instantiated_tracker)
         self.lifecycle_adapters.append(instantiated_tracker)
+        self._appended_tracker = instantiated_tracker
         self.tracker = instantiated_tracker
         return self
+
+    @staticmethod
+    def _wrap_tracker_for_otel(tracker):
+        """Wraps a tracker in the OpenTelemetry adapter matching its step hooks.
+
+        An asynchronous tracker's ``pre_run_step``/``post_run_step`` are coroutines and must be
+        awaited; wrapping one in the synchronous ``OpenTelemetryTracker`` would call them without
+        awaiting, producing un-awaited coroutines and an empty tracking log. Unknown, duck-typed
+        trackers are classified by inspecting the step hooks rather than by their class, so a
+        custom async tracker is never mistaken for a synchronous one.
+
+        :param tracker: The (explicit or string-resolved) tracker to wrap.
+        :return: The matching OpenTelemetry adapter wrapping that same object.
+        """
+        from burr.integrations.opentelemetry import AsyncOpenTelemetryTracker, OpenTelemetryTracker
+        from burr.tracking.base import AsyncTrackingClient, SyncTrackingClient
+
+        if isinstance(tracker, AsyncTrackingClient):
+            return AsyncOpenTelemetryTracker(burr_tracker=tracker)
+        if isinstance(tracker, SyncTrackingClient):
+            return OpenTelemetryTracker(burr_tracker=tracker)
+        # Preserve the historical behavior for custom trackers that do not use the marker
+        # classes, while still refusing to call ``async def`` hooks synchronously.
+        if inspect.iscoroutinefunction(getattr(tracker, "pre_run_step", None)) or (
+            inspect.iscoroutinefunction(getattr(tracker, "post_run_step", None))
+        ):
+            return AsyncOpenTelemetryTracker(burr_tracker=tracker)
+        return OpenTelemetryTracker(burr_tracker=tracker)
+
+    def _forget_appended_tracker(self):
+        """Drops the tracker adapter this builder appended, so a later build registers one only.
+
+        Reconfiguring the tracker after a build (different ``project``, different ``use_otel_tracing``,
+        or switching the object store between sync and async) must not leave the stale adapter in
+        ``lifecycle_adapters``. Only the adapter this builder added is removed -- adapters supplied
+        through ``with_hooks`` are untouched, and applications already built keep their own
+        ``LifecycleAdapterSet`` snapshot, so their open resources are never closed here.
+        """
+        if self._appended_tracker is not None:
+            self.lifecycle_adapters = [
+                adapter
+                for adapter in self.lifecycle_adapters
+                if adapter is not self._appended_tracker
+            ]
+            self._appended_tracker = None
+        self._resolved_tracker = None
+        if self._tracker_is_auto:
+            self.tracker = None
+            self._tracker_is_auto = False
+
+    def _needs_async_serialization(self) -> bool:
+        """Whether this application has to serialize through ``async def`` serializers.
+
+        That is the case when an :py:class:`~burr.core.artifacts.AsyncArtifactStore` is attached:
+        the store is reachable from serializers through the
+        :py:class:`~burr.core.serde.SerializationContext`, and its I/O has to be awaited.
+
+        This is a property of the configuration, not of how the application was built. An async
+        store can be attached through :py:meth:`build` and then run through
+        :py:meth:`Application.arun` (synchronous execution methods reject the store at execution
+        time), so the async variant is selected for both build paths.
+
+        :return: True if the async tracking client should be used.
+        """
+        return self.object_store is not None and self.object_store.is_async()
+
+    def _resolve_tracker(self) -> Optional["TrackingClient"]:
+        """Instantiates the string-specified tracker, now that the full builder configuration --
+        notably :py:attr:`object_store` -- is known.
+
+        Called once per :py:meth:`build`/:py:meth:`abuild`. The client is created and registered
+        only on the first call; a second build of the same builder reuses it rather than appending
+        a duplicate adapter. Reuse is safe and matches the historical behavior, where
+        ``with_tracker`` created a single instance per builder: the client re-opens its log file in
+        ``post_application_create``, so each application still gets its own handle.
+
+        :return: The tracker to expose as ``Application.tracker``, or ``None``.
+        """
+        if self._resolved_tracker is not None:
+            return self._resolved_tracker
+        config = self._local_tracker_config
+        if config is None:
+            return self.tracker
+        from burr.tracking.client import AsyncLocalTrackingClient, LocalTrackingClient
+
+        # Any adapter appended by an earlier build with different settings is stale now.
+        self._forget_appended_tracker()
+        kwargs = {"project": config.project}
+        kwargs.update(config.params)
+        instantiated_tracker: TrackingClient
+        if self._needs_async_serialization():
+            instantiated_tracker = AsyncLocalTrackingClient(**kwargs)
+        else:
+            instantiated_tracker = LocalTrackingClient(**kwargs)
+        if config.use_otel_tracing:
+            instantiated_tracker = self._wrap_tracker_for_otel(instantiated_tracker)
+        self.lifecycle_adapters.append(instantiated_tracker)
+        self._appended_tracker = instantiated_tracker
+        self._tracker_is_auto = True
+        self.tracker = instantiated_tracker
+        self._resolved_tracker = instantiated_tracker
+        return instantiated_tracker
 
     def initialize_from(
         self,
@@ -2621,6 +2838,67 @@ class ApplicationBuilder(Generic[StateType]):
 
         self.state_persister = persister  # tracks for later; validates in build / abuild
         return self
+
+    def with_object_store(
+        self, object_store: Union[ArtifactStore, AsyncArtifactStore]
+    ) -> "ApplicationBuilder[StateType]":
+        """Adds an object/blob store to the application, for storing large values (files,
+        dataframes, images, etc...) outside of ``State`` -- see :py:mod:`burr.core.artifacts`.
+
+        The store is used only by actions, through :py:class:`ApplicationContext`
+        (``__context.object_store``), and by registered serializers, through
+        :py:class:`~burr.core.serde.SerializationContext` wherever this application serializes
+        state -- so it can be configured (and swapped, e.g. local disk in dev, S3 in prod) in one
+        place.
+
+        .. code-block:: python
+
+            from burr.core import action, State, ApplicationContext
+            from burr.core.artifacts import ArtifactStore
+
+            @action(reads=[], writes=["pdf_doc"])
+            def ingest_pdf(state: State, pdf_bytes: bytes, __context: ApplicationContext) -> State:
+                ref = __context.object_store.put_artifact(pdf_bytes, media_type="application/pdf")
+                return state.update(pdf_doc=ref)
+
+            app = (
+                ApplicationBuilder()
+                .with_actions(ingest_pdf, ...)
+                .with_object_store(LocalFileSystemArtifactStore(root_dir="./blobs"))
+                .build()
+            )
+
+        An :py:class:`AsyncArtifactStore` (e.g. an ``aiobotocore``-backed S3 store) may be passed
+        too, for use from async actions without blocking the event loop. It can be attached via
+        either :py:meth:`build` or :py:meth:`abuild`, but the application must then be run with
+        the async execution methods (:py:meth:`~Application.arun`, :py:meth:`~Application.astep`,
+        ...) -- synchronous ones reject it.
+
+        :param object_store: The artifact store to make available to actions.
+        :return: The application builder for future chaining.
+        """
+        self.object_store = object_store
+        # The object store determines whether the auto-selected tracker is sync or async. If a
+        # previous build already resolved one, drop it so the next build selects again. Explicitly
+        # supplied tracker instances are left alone (``_resolved_tracker`` stays None for them).
+        if self._resolved_tracker is not None:
+            self._forget_appended_tracker()
+        return self
+
+    def _serialization_hook_context(self) -> Optional[Callable[[], ContextManager]]:
+        """Creates the one :py:class:`~burr.core.serde.SerializationContext` for a single build.
+
+        Called once per :py:meth:`build` / :py:meth:`abuild`, and the result is handed to both the
+        initializer load and the resulting :py:class:`Application`, so that a value the deserializer
+        seeds on resume is visible to the application's first persist. A new build gets a new
+        context (and therefore a new ``memo``), even when the same builder is reused.
+
+        :return: A factory for the context manager, or ``None`` when no object store is configured.
+        """
+        if self.object_store is None:
+            return None
+        context = serde.SerializationContext(object_store=self.object_store)
+        return lambda: serde.serialization_context(context)
 
     def with_spawning_parent(
         self, app_id: str, sequence_id: int, partition_key: Optional[str] = None
@@ -2771,7 +3049,7 @@ class ApplicationBuilder(Generic[StateType]):
                 # self.start is already set to the default. We don't need to do anything.
                 pass
 
-    def _load_from_sync_persister(self):
+    def _load_from_sync_persister(self, hook_context=None):
         """Loads from the set sync persister and into this current object.
 
         Mutates:
@@ -2779,6 +3057,9 @@ class ApplicationBuilder(Generic[StateType]):
          - self.sequence_id
          - maybe self.start
 
+        :param hook_context: The application's serialization-context factory, so deserializers
+            seeding anything on resume write to the context the built application will use.
+            Defaults to a throwaway one when not given.
         """
         if self.state_initializer.is_async():
             raise ValueError(
@@ -2790,10 +3071,11 @@ class ApplicationBuilder(Generic[StateType]):
         _partition_key, _app_id, _sequence_id = self._identify_state_to_load()
 
         # load state from persister
-        load_result = self.state_initializer.load(_partition_key, _app_id, _sequence_id)
+        with (hook_context or _serialization_context_factory(self.object_store))():
+            load_result = self.state_initializer.load(_partition_key, _app_id, _sequence_id)
         self._init_state_from_persister(load_result, _partition_key, _app_id, _sequence_id)
 
-    async def _load_from_async_persister(self):
+    async def _load_from_async_persister(self, hook_context=None):
         """Loads from the set async persister and into this current object.
 
         Mutates:
@@ -2801,6 +3083,8 @@ class ApplicationBuilder(Generic[StateType]):
          - self.sequence_id
          - maybe self.start
 
+        :param hook_context: The application's serialization-context factory -- see
+            :py:meth:`_load_from_sync_persister`.
         """
         if not self.state_initializer.is_async():
             raise ValueError(
@@ -2812,7 +3096,8 @@ class ApplicationBuilder(Generic[StateType]):
         _partition_key, _app_id, _sequence_id = self._identify_state_to_load()
 
         # load state from persister
-        load_result = await self.state_initializer.load(_partition_key, _app_id, _sequence_id)
+        with (hook_context or _serialization_context_factory(self.object_store))():
+            load_result = await self.state_initializer.load(_partition_key, _app_id, _sequence_id)
         self._init_state_from_persister(load_result, _partition_key, _app_id, _sequence_id)
 
     def reset_to_entrypoint(self):
@@ -2827,13 +3112,17 @@ class ApplicationBuilder(Generic[StateType]):
             )
         return self.graph_builder.build()
 
-    def _build_common(self) -> Application:
+    def _build_common(self, hook_context=None) -> Application:
         graph = self._get_built_graph()
         _validate_start(self.start, {action.name for action in graph.actions})
         typing_system: TypingSystem[StateType] = (
             self.typing_system if self.typing_system is not None else DictBasedTypingSystem()
         )  # type: ignore
         self.state = self.state.with_typing_system(typing_system=typing_system)
+        # Resolve the string-specified tracker now: this is the first point at which the whole
+        # configuration (notably object_store) is known, which is what makes the sync/async
+        # selection independent of builder call order.
+        resolved_tracker = self._resolve_tracker()
         return Application(
             graph=graph,
             state=self.state,
@@ -2852,7 +3141,7 @@ class ApplicationBuilder(Generic[StateType]):
                 if self.loaded_from_fork
                 else None
             ),
-            tracker=self.tracker,
+            tracker=resolved_tracker,
             spawning_parent_pointer=(
                 burr_types.ParentPointer(
                     app_id=self.spawn_from_app_id,
@@ -2865,6 +3154,8 @@ class ApplicationBuilder(Generic[StateType]):
             parallel_executor_factory=self.parallel_executor_factory,
             state_persister=self.state_persister,
             state_initializer=self.state_initializer,
+            object_store=self.object_store,
+            hook_context=hook_context,
         )
 
     def build(self) -> Application[StateType]:
@@ -2892,19 +3183,28 @@ class ApplicationBuilder(Generic[StateType]):
         app async. However, we strongly encourage to switch to async persisters if you are running
         an async application.
 
+        An :py:class:`~burr.core.artifacts.AsyncArtifactStore` passed to :py:meth:`with_object_store`
+        can also be attached here -- it is only rejected if you subsequently try to execute the
+        application through a synchronous method (:py:meth:`~Application.step`,
+        :py:meth:`~Application.run`, :py:meth:`~Application.iterate`, etc.), since that combination
+        would otherwise require awaiting the store outside of an event loop.
+
         :return: The application object.
         """
         _validate_app_id(self.app_id)
         if self.state is None:
             self.state = State()
 
+        hook_context = self._serialization_hook_context()
         if self.state_persister:
             self._set_sync_state_persister()  # this is used to save the state during application run
         if self.state_initializer:
             # sets state, sequence_id, and maybe start
-            self._load_from_sync_persister()  # this is used to load application from a previously saved state
+            self._load_from_sync_persister(
+                hook_context
+            )  # this is used to load application from a previously saved state
 
-        return self._build_common()
+        return self._build_common(hook_context)
 
     async def abuild(self) -> Application[StateType]:
         """Builds the application for asynchronous runs.
@@ -2916,6 +3216,9 @@ class ApplicationBuilder(Generic[StateType]):
 
         Note: When you run an async application you can still use the normal sync functionalities, i.e.
         sync hooks of other adapters, but they will block the async event loop until finished.
+        Likewise, a synchronous :py:class:`~burr.core.artifacts.ArtifactStore` passed to
+        :py:meth:`with_object_store` still works here, but its calls will block the event loop --
+        prefer an :py:class:`~burr.core.artifacts.AsyncArtifactStore` for I/O-bound backends.
 
         In case you are using state initializers and persisters, the asynchronous application should
         be used in the following cases:
@@ -2943,14 +3246,15 @@ class ApplicationBuilder(Generic[StateType]):
         if self.state is None:
             self.state = State()
 
+        hook_context = self._serialization_hook_context()
         if self.state_persister:
             await self._set_async_state_persister()  # this is used to save the state during application run
 
         if self.state_initializer:
             # sets state, sequence_id, and maybe start
-            await self._load_from_async_persister()  # this is used to load application from a previously saved state
+            await self._load_from_async_persister(hook_context)  # used to load from a previous run
 
-        return self._build_common()
+        return self._build_common(hook_context)
 
     @property
     def is_async(self) -> bool:

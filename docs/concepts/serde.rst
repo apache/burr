@@ -132,6 +132,19 @@ Requirements for the serializer/deserializer functions:
     1. The serializer function needs to return a dictionary.
     2. Both function signatures needs to have a ``**kwargs`` parameter to allow for custom arguments to be passed in. We advise namespacing the kwargs provided to avoid conflicts with other serializers/deserializers.
 
+Storing large values in an object store
+_______________________________________
+
+If an application is configured with an object store
+(:py:meth:`with_object_store <burr.core.application.ApplicationBuilder.with_object_store>`), both
+type-based and field-based serializers receive a
+:py:class:`SerializationContext <burr.core.serde.SerializationContext>` as the
+``serialization_context`` keyword argument wherever Burr serializes state (persisters, trackers,
+resuming, sub-applications). A serializer can use it to write a large value to the store and
+persist only a small reference -- see :ref:`artifact-serde`. Serializers may also be ``async def``
+functions, in which case they're awaited by :py:meth:`State.aserialize <burr.core.state.State.aserialize>`
+(used by async persisters).
+
 
 Limitations of State Serialization
 ----------------------------------

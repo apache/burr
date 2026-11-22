@@ -23,6 +23,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 pytest.importorskip("aiobotocore")
+# tortoise-orm is only pulled in by the `tracking-server-s3` extra, not the (now
+# aiobotocore-containing) `s3`/`tests` extras, so it needs its own skip-guard here.
+pytest.importorskip("tortoise")
 
 from burr.tracking.server.backend import EventDrivenBackendMixin
 from burr.tracking.server.s3.backend import (

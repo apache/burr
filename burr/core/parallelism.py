@@ -40,6 +40,7 @@ from burr.common.async_utils import SyncOrAsyncGenerator, SyncOrAsyncGeneratorOr
 from burr.core import Action, ApplicationBuilder, ApplicationContext, Graph, State
 from burr.core.action import SingleStepAction
 from burr.core.application import ApplicationIdentifiers
+from burr.core.artifacts import ArtifactStore, AsyncArtifactStore
 from burr.core.graph import GraphBuilder
 from burr.core.persistence import BaseStateLoader, BaseStateSaver
 from burr.lifecycle import LifecycleAdapter
@@ -102,6 +103,7 @@ class SubGraphTask:
     tracker: Optional[TrackingClient] = None
     state_persister: Optional[BaseStateSaver] = None
     state_initializer: Optional[BaseStateLoader] = None
+    object_store: Optional[Union[ArtifactStore, AsyncArtifactStore]] = None
 
     def _create_app_builder(self, parent_context: ApplicationIdentifiers) -> ApplicationBuilder:
         builder = (
@@ -120,6 +122,9 @@ class SubGraphTask:
         )
         if self.tracker is not None:
             builder = builder.with_tracker(self.tracker)  # TODO -- move this into the adapter
+
+        if self.object_store is not None:
+            builder = builder.with_object_store(self.object_store)
 
         # In this case we want to persist the state for the app
         if self.state_persister is not None:
@@ -154,7 +159,10 @@ class SubGraphTask:
         return state
 
     async def arun(self, parent_context: ApplicationContext):
-        # Here for backwards compatibility, not ideal
+        # Here for backwards compatibility, not ideal. Note that build()/abuild() both accept
+        # either a sync or an async object_store -- only synchronous execution methods
+        # (step()/run()/iterate()) reject an async store, and this method always executes via
+        # app.arun(), so build() can safely be used below even when self.object_store is async.
         if (self.state_initializer is not None and not self.state_initializer.is_async()) or (
             self.state_persister is not None and not self.state_persister.is_async()
         ):
@@ -513,6 +521,7 @@ class MapActionsAndStates(TaskBasedParallelAction):
                 tracker=tracker,
                 state_persister=state_persister,
                 state_initializer=state_initializer,
+                object_store=context.object_store,
             )
 
         def _tasks() -> Generator[SubGraphTask, None, None]:

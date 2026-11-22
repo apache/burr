@@ -59,7 +59,7 @@ except ImportError:
 from burr import system
 from burr.common import types as burr_types
 from burr.core import Action, ApplicationGraph, State, serde
-from burr.core.persistence import BaseStateLoader, PersistedStateData
+from burr.core.persistence import AsyncBaseStateLoader, BaseStateLoader, PersistedStateData
 from burr.integrations.base import require_plugin
 from burr.lifecycle import (
     PostApplicationCreateHook,
@@ -68,6 +68,9 @@ from burr.lifecycle import (
     PreRunStepHook,
     PreStartSpanHook,
 )
+from burr.lifecycle.base import PostRunStepHookAsync, PreRunStepHookAsync
+from burr.tracking.base import AsyncTrackingClient
+from burr.tracking.base import SyncTrackingClient as BaseSyncTrackingClient
 from burr.tracking.common.models import (
     ApplicationMetadataModel,
     ApplicationModel,
@@ -152,14 +155,17 @@ class SyncTrackingClient(
         pass
 
 
-class LocalTrackingClient(
-    SyncTrackingClient,
-    BaseStateLoader,
-):
-    """Tracker to track locally -- goes along with the Burr UI. Writes
-    down the following:
-    #. The whole application + debugging information (e.g. source code) to a file
-    #. A line for the start/end of each step
+class _LocalTrackingClientBase:
+    """Implementation shared by the synchronous and the asynchronous local tracking client.
+
+    This inherits **no** lifecycle hook, so that the two concrete subclasses below can each
+    register exactly one family of hooks. Asynchronous applications dispatch the synchronous and
+    the asynchronous hook families together, so a class registering both ``pre_run_step`` and the
+    async ``pre_run_step`` would write every step to the log twice.
+
+    Everything here is hook-agnostic: directory/file management, the JSONL schema, state loading,
+    and copying. The step hooks themselves live on the subclasses, as they are the only thing that
+    differs (``serde.serialize`` vs ``await serde.aserialize``).
     """
 
     GRAPH_FILENAME = "graph.json"
@@ -187,6 +193,9 @@ class LocalTrackingClient(
 
         :param project: Project name -- if this already exists it will be used, otherwise it will be created.
         :param storage_dir: Storage directory
+        :param serde_kwargs: Keyword arguments passed to every serializer/deserializer this client
+            uses. These are appended to the
+            :py:class:`~burr.core.serde.SerializationContext` for the duration of each call.
         """
 
         self.f = None
@@ -196,7 +205,7 @@ class LocalTrackingClient(
                 "We will be relaxing this restriction later but for now please rename your project!"
             )
         self.raw_storage_dir = storage_dir
-        self.storage_dir = LocalTrackingClient.get_storage_path(project, storage_dir)
+        self.storage_dir = _LocalTrackingClientBase.get_storage_path(project, storage_dir)
         self.project_id = project
         self.serde_kwargs = serde_kwargs if serde_kwargs is not None else {}
         # app_id, action, partition_key  -> stream data so we can track
@@ -261,7 +270,7 @@ class LocalTrackingClient(
                 # If the parent directory exists we'll just use that
                 os.makedirs(parent_path)
             parent_children_list_path = os.path.join(
-                parent_path, LocalTrackingClient.CHILDREN_FILENAME
+                parent_path, _LocalTrackingClientBase.CHILDREN_FILENAME
             )
             # Order should not matter here
             # currently we write start events, so it really won't matter
@@ -276,12 +285,17 @@ class LocalTrackingClient(
                     # we always want to release the lock so its not held indefinitely
                     fcntl.flock(fileno, fcntl.LOCK_UN)
 
-    def copy(self) -> "LocalTrackingClient":
-        return LocalTrackingClient(
-            project=self.project_id,
-            storage_dir=self.raw_storage_dir,
-            serde_kwargs=self.serde_kwargs,
-        )
+    def _copy_kwargs(self) -> Dict[str, Any]:
+        """The constructor arguments a copy of this client needs. Subclasses use this so that
+        ``copy()`` never shares the open log file handle or the per-application stream state.
+
+        :return: Keyword arguments for the concrete class' ``__init__``.
+        """
+        return {
+            "project": self.project_id,
+            "storage_dir": self.raw_storage_dir,
+            "serde_kwargs": self.serde_kwargs,
+        }
 
     @classmethod
     def get_storage_path(cls, project, storage_dir) -> str:
@@ -444,41 +458,49 @@ class LocalTrackingClient(
         self.f.write(model.model_dump_json() + "\n")
         self.f.flush()
 
-    def pre_run_step(
+    def _begin_entry_model(
         self,
-        state: State,
+        *,
         action: Action,
         inputs: Dict[str, Any],
         sequence_id: int,
-        **future_kwargs: Any,
-    ):
-        _filtered_inputs = _filter_inputs(inputs)
-        pre_run_entry = BeginEntryModel(
+    ) -> BeginEntryModel:
+        """Builds the ``begin_entry`` line for a step. The serialization of the inputs is left to
+        the caller, as that is the one part of step logging that differs between the synchronous
+        and the asynchronous client.
+
+        :param action: The action about to run.
+        :param inputs: The step inputs, already serialized.
+        :param sequence_id: The sequence ID of the step.
+        :return: The model to append to the log.
+        """
+        return BeginEntryModel(
             start_time=datetime.datetime.now(),
             action=action.name,
-            inputs=serde.serialize(_filtered_inputs, **self.serde_kwargs),
+            inputs=inputs,
             sequence_id=sequence_id,
         )
-        self._append_write_line(pre_run_entry)
 
-    def post_run_step(
+    def _end_entry_model(
         self,
-        state: State,
+        *,
         action: Action,
         result: Optional[dict],
         sequence_id: int,
-        exception: Exception,
-        **future_kwargs: Any,
-    ):
-        post_run_entry = EndEntryModel(
+        exception: Optional[Exception],
+        state: dict,
+    ) -> EndEntryModel:
+        """Builds the ``end_entry`` line for a step -- see :py:meth:`_begin_entry_model`.
+        ``result`` and ``state`` are passed in already serialized.
+        """
+        return EndEntryModel(
             end_time=datetime.datetime.now(),
             action=action.name,
-            result=serde.serialize(result, **self.serde_kwargs),
+            result=result,
             sequence_id=sequence_id,
             exception=_format_exception(exception),
-            state=state.serialize(**self.serde_kwargs),
+            state=state,
         )
-        self._append_write_line(post_run_entry)
 
     def pre_start_span(
         self,
@@ -530,7 +552,9 @@ class LocalTrackingClient(
                 key=attribute_name,
                 action_sequence_id=action_sequence_id,
                 span_id=span.uid if span is not None else None,
-                value=serde.serialize(attribute, **self.serde_kwargs),
+                value=serde.serialize(
+                    attribute, **serde.with_serialization_context(self.serde_kwargs)
+                ),
                 tags=tags,
                 time_logged=system.now(),
             )
@@ -611,22 +635,27 @@ class LocalTrackingClient(
         # TODO:
         return []
 
-    def load(
-        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
-    ) -> Optional[PersistedStateData]:
-        # TODO:
-        if app_id is None:
-            return  # no application ID
-        path = os.path.join(self.storage_dir, app_id, self.LOG_FILENAME)
-        if not os.path.exists(path):
-            return None
+    @staticmethod
+    def _read_log_lines(path: str) -> list[dict]:
+        """Reads ``log.jsonl`` and parses every line.
+
+        :param path: Path to the log file.
+        :return: The parsed lines, in file order.
+        """
         with open(path, "r", errors="replace", encoding="utf-8") as f:
-            json_lines = f.readlines()
-        if len(json_lines) == 0:
-            return None  # in this case we have not logged anything yet
-        # load as JSON
-        json_lines = [json.loads(js_line) for js_line in json_lines]
-        # filter to only end_entry
+            raw_lines = f.readlines()
+        return [json.loads(js_line) for js_line in raw_lines]
+
+    def _find_end_entry(
+        self, json_lines: list[dict], app_id: str, sequence_id: Optional[int]
+    ) -> tuple[dict, int]:
+        """Locates the ``end_entry`` line to restore from.
+
+        :param json_lines: All parsed log lines, in file order.
+        :param app_id: The application ID, used for error messages.
+        :param sequence_id: The desired sequence ID, or ``None`` for the latest completed step.
+        :return: The matching line and the sequence ID it carries.
+        """
         line = None
         if sequence_id is None:
             # get the last one, we want to start at the end
@@ -645,8 +674,19 @@ class LocalTrackingClient(
             raise ValueError(
                 f"Sequence number {sequence_id} not found for {self.project_id}/{app_id}."
             )
+        return line, sequence_id
+
+    @staticmethod
+    def _state_to_restore(line: dict, sequence_id: int) -> dict:
+        """Extracts the serialized state from an ``end_entry`` line, dropping Burr's internal
+        ``__``-prefixed fields and re-adding the sequence ID -- exactly as the synchronous loader
+        has always done, so both clients restore identical states from identical logs.
+
+        :param line: The ``end_entry`` line.
+        :param sequence_id: The sequence ID to restore.
+        :return: The serialized state, ready for deserialization.
+        """
         prior_state = line["state"]
-        position = line["action"]
         # delete internally stuff. We can't loop over the keys and delete them in the same loop
         to_delete = []
         for key in prior_state.keys():
@@ -656,6 +696,23 @@ class LocalTrackingClient(
         for key in to_delete:
             del prior_state[key]
         prior_state["__SEQUENCE_ID"] = sequence_id  # add the sequence id back
+        return prior_state
+
+    def load(
+        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
+    ) -> Optional[PersistedStateData]:
+        # TODO:
+        if app_id is None:
+            return  # no application ID
+        path = os.path.join(self.storage_dir, app_id, self.LOG_FILENAME)
+        if not os.path.exists(path):
+            return None
+        json_lines = self._read_log_lines(path)
+        if len(json_lines) == 0:
+            return None  # in this case we have not logged anything yet
+        line, sequence_id = self._find_end_entry(json_lines, app_id, sequence_id)
+        position = line["action"]
+        prior_state = self._state_to_restore(line, sequence_id)
         return PersistedStateData(
             partition_key=partition_key,
             app_id=app_id,
@@ -667,14 +724,189 @@ class LocalTrackingClient(
         )
 
 
-# TODO -- implement async version
-# class AsyncTrackingClient(PreRunStepHookAsync, PostRunStepHookAsync, PostApplicationCreateHook):
-#     def post_application_create(self, *, state: State, state_graph: ApplicationGraph, **future_kwargs: Any):
-#         pass
-#
-#     async def pre_run_step(self, *, state: State, action: Action, **future_kwargs: Any):
-#         raise NotImplementedError(f"TODO: {self.__class__.__name__}.pre_run_step")
-#
-#     async def post_run_step(self, *, state: State, action: Action, result: Optional[dict], exception: Exception, **future_kwargs: Any):
-#         raise NotImplementedError(f"TODO: {self.__class__.__name__}.pre_run_step")
-#
+class LocalTrackingClient(
+    _LocalTrackingClientBase,
+    BaseSyncTrackingClient,
+    # ``client.SyncTrackingClient`` -- the historical definition kept below for backwards
+    # compatibility -- is already a structural superset of this one, so inheriting both adds no
+    # hooks and keeps ``isinstance`` checks against either path working.
+    SyncTrackingClient,
+    BaseStateLoader,
+):
+    """Tracker to track locally -- goes along with the Burr UI. Writes
+    down the following:
+    #. The whole application + debugging information (e.g. source code) to a file
+    #. A line for the start/end of each step
+
+    The step hooks are synchronous, so step data is serialized with
+    :py:func:`~burr.core.serde.serialize`. An application that has to serialize through
+    ``async def`` serializers -- typically because it has an
+    :py:class:`~burr.core.artifacts.AsyncArtifactStore` -- must use
+    :py:class:`AsyncLocalTrackingClient` instead, otherwise the serializer's coroutine is never
+    awaited and the step raises.
+    """
+
+    def copy(self) -> "LocalTrackingClient":
+        return LocalTrackingClient(**self._copy_kwargs())
+
+    def pre_run_step(
+        self,
+        state: State,
+        action: Action,
+        inputs: Dict[str, Any],
+        sequence_id: int,
+        **future_kwargs: Any,
+    ):
+        _filtered_inputs = _filter_inputs(inputs)
+        self._append_write_line(
+            self._begin_entry_model(
+                action=action,
+                inputs=serde.serialize(
+                    _filtered_inputs, **serde.with_serialization_context(self.serde_kwargs)
+                ),
+                sequence_id=sequence_id,
+            )
+        )
+
+    def post_run_step(
+        self,
+        state: State,
+        action: Action,
+        result: Optional[dict],
+        sequence_id: int,
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        self._append_write_line(
+            self._end_entry_model(
+                action=action,
+                result=serde.serialize(
+                    result, **serde.with_serialization_context(self.serde_kwargs)
+                ),
+                sequence_id=sequence_id,
+                exception=exception,
+                state=state.serialize(**self.serde_kwargs),
+            )
+        )
+
+
+class AsyncLocalTrackingClient(
+    _LocalTrackingClientBase,
+    AsyncTrackingClient,
+    PreRunStepHookAsync,
+    PostRunStepHookAsync,
+    PostApplicationCreateHook,
+    PreStartSpanHook,
+    PostEndSpanHook,
+    DoLogAttributeHook,
+    PreStartStreamHook,
+    PostStreamItemHook,
+    PostEndStreamHook,
+    AsyncBaseStateLoader,
+):
+    """Asynchronous counterpart to :py:class:`LocalTrackingClient`, for applications that need to
+    serialize through ``async def`` serializers/deserializers -- e.g. anything using an
+    :py:class:`~burr.core.artifacts.AsyncArtifactStore`, whose reads/writes must be awaited.
+
+    It writes the *same* ``log.jsonl`` schema as :py:class:`LocalTrackingClient` --
+    ``begin_entry`` / ``end_entry`` plus the span, attribute and stream events -- so the Burr UI
+    needs no new event format. Only ``pre_run_step`` and ``post_run_step`` are asynchronous:
+    those are the hooks that carry user data through serde. Everything that Burr only ever
+    dispatches synchronously stays synchronous:
+
+    * ``post_application_create`` -- creates directories and writes the graph/metadata.
+    * ``pre_start_span`` / ``post_end_span`` -- also invoked from the OpenTelemetry span
+      processor, which is synchronous and may run on a different thread.
+    * ``do_log_attributes`` -- attribute logging is not the target of async serialization; it
+      keeps the synchronous serde behavior, and stays inside the log's existing schema.
+    * the stream hooks -- they only write timestamps and deltas, no user data.
+
+    JSONL appends stay synchronous on purpose: they are small, and a local file append does not
+    block meaningfully. The requirement this class addresses is awaiting *serialization* and any
+    async object-store I/O it performs, not awaits on the log file.
+
+    Note this does **not** inherit from :py:class:`~burr.tracking.base.SyncTrackingClient`:
+    asynchronous applications call the synchronous *and* the asynchronous hook families, so
+    inheriting both ``pre_run_step`` variants would log every step twice.
+
+    ``load()``/``list_app_ids()`` implement
+    :py:class:`~burr.core.persistence.AsyncBaseStateLoader`, so this client can also be passed to
+    :py:meth:`~burr.core.application.ApplicationBuilder.initialize_from` and resume from a log
+    written by either client -- the log format is shared.
+    """
+
+    def copy(self) -> "AsyncLocalTrackingClient":
+        return AsyncLocalTrackingClient(**self._copy_kwargs())
+
+    async def pre_run_step(
+        self,
+        state: State,
+        action: Action,
+        inputs: Dict[str, Any],
+        sequence_id: int,
+        **future_kwargs: Any,
+    ):
+        _filtered_inputs = _filter_inputs(inputs)
+        self._append_write_line(
+            self._begin_entry_model(
+                action=action,
+                inputs=await serde.aserialize(
+                    _filtered_inputs, **serde.with_serialization_context(self.serde_kwargs)
+                ),
+                sequence_id=sequence_id,
+            )
+        )
+
+    async def post_run_step(
+        self,
+        state: State,
+        action: Action,
+        result: Optional[dict],
+        sequence_id: int,
+        exception: Exception,
+        **future_kwargs: Any,
+    ):
+        self._append_write_line(
+            self._end_entry_model(
+                action=action,
+                result=await serde.aserialize(
+                    result, **serde.with_serialization_context(self.serde_kwargs)
+                ),
+                sequence_id=sequence_id,
+                exception=exception,
+                state=await state.aserialize(**self.serde_kwargs),
+            )
+        )
+
+    async def load(
+        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
+    ) -> Optional[PersistedStateData]:
+        if app_id is None:
+            return None  # no application ID
+        path = os.path.join(self.storage_dir, app_id, self.LOG_FILENAME)
+        if not os.path.exists(path):
+            return None
+        json_lines = self._read_log_lines(path)
+        if len(json_lines) == 0:
+            return None  # in this case we have not logged anything yet
+        line, sequence_id = self._find_end_entry(json_lines, app_id, sequence_id)
+        position = line["action"]
+        prior_state = self._state_to_restore(line, sequence_id)
+        return PersistedStateData(
+            partition_key=partition_key,
+            app_id=app_id,
+            sequence_id=sequence_id,
+            position=position,
+            state=await State.adeserialize(prior_state, **self.serde_kwargs),
+            created_at=datetime.datetime.fromtimestamp(os.path.getctime(path)).isoformat(),
+            status="completed" if line["exception"] is None else "failed",
+        )
+
+    async def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
+        """Matches :py:meth:`LocalTrackingClient.list_app_ids`, which is not implemented yet.
+
+        :param partition_key: The partition key to list applications for.
+        :return: An empty list.
+        """
+        # TODO: mirror LocalTrackingClient once it lists application IDs
+        return []

@@ -43,6 +43,7 @@ Note we have a few more in [other-examples](other-examples/), but those do not y
 - [simple-chatbot-intro](simple-chatbot-intro/) - This is a simple chatbot that shows how to use Burr to create a simple chatbot. This is a good starting point for understanding how to use Burr -- the notebook follows the original [blog post](https://blog.dagworks.io/p/burr-develop-stateful-ai-applications).
 - [conversational-rag](conversational-rag/) - This shows multiple examples on how to use Burr to create a conversational RAG chatbot. This shows how to use state/prior knowledge to augment your LLM call with Burr.
 - [hello-world-counter](hello-world-counter/) - This is an example of a simple state machine, used in the docs.
+- [artifact-storage](artifact-storage/) - This example shows how to use Burr's artifact/object store to keep large values (documents, images, etc.) out of state and read them back by reference.
 - [llm-adventure-game](llm-adventure-game/) - This is an example of a simple text-based adventure game using LLMs -- it shows how to progress through hidden states while reusing components.
 - [ml-training](ml-training/) - This is an example of a simple ML training pipeline. It shows how to use Burr to track the training of a model. This is not complete.
 - [multi-agent-collaboration](multi-agent-collaboration/) - This example shows how to use Burr to create a multi-agent collaboration. This is a clone of the following [LangGraph example](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb).

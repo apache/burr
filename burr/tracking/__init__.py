@@ -15,6 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from .client import LocalTrackingClient
+from .client import AsyncLocalTrackingClient, LocalTrackingClient
 
-__all__ = ["LocalTrackingClient"]
+__all__ = ["LocalTrackingClient", "AsyncLocalTrackingClient"]
