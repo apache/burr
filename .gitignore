@@ -205,3 +205,7 @@ examples/deployment/aws/terraform/*.tfplan
 
 # Claude Code session data
 .claude/
+
+# ml-training example run artifacts
+examples/ml-training/checkpoints/
+examples/ml-training/ml_training.db

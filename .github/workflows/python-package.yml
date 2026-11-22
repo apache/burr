@@ -135,6 +135,11 @@ jobs:
         working-directory: ./examples
         run: |
           python -m pytest validate_examples.py
+      - name: Test ml-training example
+        working-directory: ./examples/ml-training
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pytest test_ml_training.py
 
   test-persister-dbs:
     runs-on: ubuntu-latest

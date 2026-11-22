@@ -34,7 +34,6 @@ FILTERLIST = [
     "other-examples",
     "conversational-rag",
     # todo -- remove the following once we've fleshed them out
-    "ml-training",
     "simulation",
     "multi-agent-collaboration",
     "web-server",

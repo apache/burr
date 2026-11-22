@@ -17,206 +17,92 @@
      under the License.
 -->
 
-# Hyperparameter tuning
+# ML training
 
-Hyperparameter tuning is a key part of training machine learning models. For use-cases ranging from grid-search
-to gaussian processes, ``burr`` is a simple way to implement robust, failure-resistant hyperparameter optimization. This involves keeping
-track of hyperparameters and metrics and feeding these into a decision function to determine where to look next.
-``burr``'s state machine can help you write and manage that process.
+This example trains a model one epoch at a time. Burr runs the training as a state machine. A person approves the model before the example registers it.
 
-This is a WIP! Please see the placeholder/example sketch in the [repository](https://github.com/apache/burr/tree/main/examples/ml-training) and contribute back if you have ideas via associated issue [here](https://github.com/apache/burr/issues/138).
+The example uses scikit-learn and its built-in digits dataset, so it needs no API key and no download. The full code, a notebook, and a test are in the [repository](https://github.com/apache/burr/tree/main/examples/ml-training).
 
-## High-level view
+![diagram](./_ml_training.png)
 
-A machine learning training system can easily be modeled as a state machine.
+## Why a state machine
 
-While often, this is more of a DAG (E.G. `query_data` -> `feature_engineer` -> `train_model` -> `evaluate_model`), there
-are some interesting reasons this as a state machine.
+A training pipeline is frequently a DAG, for example `query_data` -> `feature_engineer` -> `train_model` -> `evaluate_model`. A state machine gives you more when you make each epoch an action:
 
-## More granular training routines
+- Checkpoints: Burr saves the state after each epoch, so a failed run continues at the next epoch.
+- A separate stop rule: A transition condition decides when the training stops. The training code does not change when the stop rule changes.
+- Visibility: Burr tracks each epoch, so you can see the metrics in the Burr UI during the training.
+- Human review: The application halts before the review and continues when a person gives a decision.
 
-If, rather than treating `train` as a action, you treat `train_epoch` as an action, you can utilize the abstractions
-burr represents to get the following benefits:
+## The actions
 
-### Checkpointing
+`train_epoch` trains for one epoch and saves a checkpoint file. `evaluate` scores that checkpoint and records the best one. The state holds the metrics and the paths of the checkpoint files. The models stay on disk, so the state is small and Burr can save it as JSON.
 
-You can store the current params + best model (or pointers to them). Then go back to the failure point. This allows you
-to recover from failure in a generic way.
+```python
+@action(
+    reads=["epoch", "learning_rate", "checkpoint_dir", "latest_checkpoint"],
+    writes=["epoch", "latest_checkpoint"],
+)
+def train_epoch(state: State) -> State:
+    """Runs one epoch, starting from the latest checkpoint, and saves a new checkpoint."""
+    X_train, _, y_train, _ = load_data()
+    if state["latest_checkpoint"]:
+        model = joblib.load(state["latest_checkpoint"])
+    else:
+        model = SGDClassifier(loss="log_loss", learning_rate="constant", random_state=0)
+    # set every epoch, because the reviewer can change it
+    model.set_params(eta0=state["learning_rate"])
+    epoch = state["epoch"] + 1
+    order = np.random.default_rng(epoch).permutation(len(X_train))
+    model.partial_fit(X_train[order], y_train[order], classes=np.unique(y_train))
 
-### Decoupling training logic from termination condition
+    os.makedirs(state["checkpoint_dir"], exist_ok=True)
+    checkpoint = os.path.join(state["checkpoint_dir"], f"epoch_{epoch}.joblib")
+    joblib.dump(model, checkpoint)
+    return state.update(epoch=epoch, latest_checkpoint=checkpoint)
+```
 
-You can have a condition that checks training completeness based on metric history, which is different from the training logic itself.
-This allows you to easily swap in and out termination conditions (testing them against each other or running different ones in different scenarios),
-as well as easy reuse.
+## The stop rule
 
-### Visibility into lower-level training
+The stop rule is the condition on the transition from `evaluate` to `human_review`. To use a different rule, change that one line.
 
-Similar to [hooks](https://lightning.ai/docs/pytorch/stable//extensions/callbacks.html) in pytorch lightning,
-you can use Burr hooks to log metrics, visualize, etc... at each step. This allows you to have a more granular view of training that updates live
-(obviuosly depending on the UI/model-monitoring you're using.)
+```python
+.with_transitions(
+    ("train_epoch", "evaluate", default),
+    ("evaluate", "human_review", expr("epochs_since_best >= patience or epoch >= max_epochs")),
+    ("evaluate", "train_epoch", default),
+    ("human_review", "train_epoch", when(decision="continue")),
+    ("human_review", "register_model", when(decision="approve")),
+    ("human_review", "reject_model", when(decision="reject")),
+)
+```
 
 ## Human in the loop
 
-While some models are trained in a single-shot and shipped to production, many require human input.
-Burr can be used to express training, then checkpoint/pause the state while a human is evaluating it,
-and have their input (e.g. go/no-go) passed in as an [input parameter](https://burr.apache.org/concepts/actions/#runtime-inputs).
-
-Note that this still requires a scheduling tool (say a task executor that runs until the next human input is needed),
-but that task executor does not need to be complicated (all it needs to do is run a job when prompted, and possibly on a chron schedule).
-
-## Hyperparameter training
-
-Similar to epoch training, hyperparameter training can be modeled as a state machine. The system makes a decision about what
-to look for next based on the prior results. Furthermore, one can model a step that handles multiple jobs, keeping them alive/
-launching new ones as they complete (based on state).
-
-![diagram](./_ml_training.png).
-
-
-## Code example
-
-This uses the class-based API for defining an `action`.
+The decision of the reviewer is an [input](https://burr.apache.org/concepts/actions/#runtime-inputs) of the `human_review` action. The action cannot run until a person gives a decision.
 
 ```python
-"""
-This is a sketch of an example of a machine learning training pipeline using Burr where you
-want to do something dynamic like train a model for a variable number of iterations and then
-pick the best model from each of the iterations based on some validation metric. E.g. hyperparameter search.
+@action(
+    reads=["epoch", "learning_rate"],
+    writes=["decision", "max_epochs", "epochs_since_best", "learning_rate"],
+)
+def human_review(
+    state: State, decision: str, extra_epochs: int = 5, learning_rate: Optional[float] = None
+) -> State:
+    ...
 
-You could adjust this example to continue training a model until you reach a certain validation metric,
-or hit a max number of iterations (or epochs), etc.
-
-Note: this example uses the class based API to define the actions. You could also use the function+decorator API.
-"""
-import burr.core.application
-from burr.core import Action, Condition, State, default
-
-
-class ProcessDataAction(Action):
-    @property
-    def reads(self) -> list[str]:
-        return ["data_path"]
-
-    def run(self, state: State, **run_kwargs) -> dict:
-        """This is where you would load and process your data.
-        You can take in state and reference object fields.
-
-        You need to return a dictionary of the results that `update()` will then use to update the state.
-        """
-        # load data, and run some feature engineering -- create the data sets
-        # TODO: fill in
-        return {"training_data": "SOME_OBJECT/PATH", "evaluation_data": "SOME_OBJECT/PATH"}
-
-    @property
-    def writes(self) -> list[str]:
-        return ["training_data", "evaluation_data"]
-
-    def update(self, result: dict, state: State) -> State:
-        return state.update(
-            training_data=result["training_data"], evaluation_data=result["evaluation_data"]
-        )
-
-
-class TrainModel(Action):
-    @property
-    def reads(self) -> list[str]:
-        return ["training_data", "iterations"]
-
-    def run(self, state: State, **run_kwargs) -> dict:
-        """This is where you'd build the model and on each iteration do something different.
-        E.g. hyperparameter search.
-        """
-        # train the model, i.e. run one "iteration" whatever that means for you.
-        # TODO: fill in
-        return {
-            "model": "SOME_MODEL",
-            "iterations": state["iterations"] + 1,
-            "metrics": "SOME_METRICS",
-        }
-
-    @property
-    def writes(self) -> list[str]:
-        return ["models", "training_metrics", "iterations"]
-
-    def update(self, result: dict, state: State) -> State:
-        return state.update(
-            iterations=result["iterations"],  # set current iteration value
-        ).append(
-            models=result["model"],  # append -- note this can get big if your model is big
-            # so you'll want to overwrite but store the conditions, or log somewhere
-            metrics=result["metrics"],  # append the metrics
-        )
-
-
-class ValidateModel(Action):
-    @property
-    def reads(self) -> list[str]:
-        return ["models", "evaluation_data"]
-
-    def run(self, state: State, **run_kwargs) -> dict:
-        """Compute validation metrics using the model and evaluation data."""
-        # TODO: fill in
-        return {"validation_metrics": "SOME_METRICS"}
-
-    @property
-    def writes(self) -> list[str]:
-        return ["validation_metrics"]
-
-    def update(self, result: dict, state: State) -> State:
-        return state.append(validation_metrics=result["validation_metrics"])
-
-
-class BestModel(Action):
-    @property
-    def reads(self) -> list[str]:
-        return ["validation_metrics", "models"]
-
-    def run(self, state: State, **run_kwargs) -> dict:
-        """Select the best model based on the validation metrics."""
-        # TODO: fill in
-        return {"best_model": "SOME_MODEL"}
-
-    @property
-    def writes(self) -> list[str]:
-        return ["best_model"]
-
-    def update(self, result: dict, state: State) -> State:
-        return state.update(best_model=result["best_model"])
-
-
-def application(iterations: int) -> burr.core.application.Application:
-    return (
-        burr.core.ApplicationBuilder()
-        .with_state(
-            data_path="data.csv",
-            iterations=10,
-            training_data=None,
-            evaluation_data=None,
-            models=[],
-            training_metrics=[],
-            validation_metrics=[],
-            best_model=None,
-        )
-        .with_actions(
-            process_data=ProcessDataAction(),
-            train_model=TrainModel(),
-            validate_model=ValidateModel(),
-            best_model=BestModel(),
-        )
-        .with_transitions(
-            ("process_data", "train_model", default),
-            ("train_model", "validate_model", default),
-            ("validate_model", "best_model", Condition.expr(f"iterations>{iterations}")),
-            ("validate_model", "train_model", default),
-        )
-        .with_entrypoint("process_data")
-        .build()
-    )
-
-
-if __name__ == "__main__":
-    app = application(100)  # doing good data science is up to you...
-    app.visualize(output_file_path="statemachine", include_conditions=True, view=True, format="png")
-    # you could run things like this:
-    # last_action, result, state = app.run(halt_after=["best_model"])
+app.run(halt_before=["human_review"])  # trains, then stops before the review
+app.run(halt_after=["register_model", "reject_model"], inputs={"decision": "approve"})
 ```
+
+A persister saves the state after each step. As a result, the process can exit at the review. When the person replies, a scheduler or a web request builds the application again with the same `app_id`, and the run continues at the review.
+
+## Hyperparameter tuning
+
+The reviewer can change one hyperparameter at the review: the learning rate. When the decision is `continue`, an optional input named `learning_rate` gives the new value. The action writes it to the state, and `train_epoch` uses it from the next epoch.
+
+```python
+app.run(halt_before=["human_review"], inputs={"decision": "continue", "learning_rate": 0.01})
+```
+
+This example does not include an automatic hyperparameter search. You can model one in the same way. An action takes the place of the reviewer. It reads the earlier results from the state and selects the next parameters to try.
