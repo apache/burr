@@ -129,7 +129,7 @@ export const TESTIMONIALS = [
     name: "Aditya K.",
     title: "DS Architect",
     company: "TaskHuman",
-    logo: `${BASE_PATH}/logos/taskhuman.svg`,
+    logo: null,
     quote:
       "Moving from LangChain to Burr was a game-changer! It took me just a few hours to get started with Burr, compared to the days and weeks I spent trying to navigate LangChain. I pitched Burr to my teammates, and we pivoted our entire codebase to it.",
   },
