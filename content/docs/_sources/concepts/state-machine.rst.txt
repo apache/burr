@@ -192,6 +192,33 @@ in a web-server (create a graph once, application many times), import the graph 
 You can read more about it in the :py:class:`GraphBuilder docs <burr.core.graph.GraphBuilder>`.
 
 ----------
+Validation
+----------
+
+Burr does not check an action's declared ``reads`` and ``writes`` when it runs, so a key that nothing ever sets
+only shows up as a ``KeyError`` once an action tries to use it. Pass ``validate=True`` to ``build()`` (or ``abuild()``)
+to catch this up front:
+
+.. code-block:: python
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(human_input, ai_response)
+        .with_transitions(
+            ("human_input", "ai_response"),
+            ("ai_response", "human_input")
+        ).with_state(chat_history=[])
+        .with_entrypoint("human_input")
+        .build(validate=True)
+    )
+
+This raises a ``ValueError`` listing every action or transition condition that reads a key no action writes and
+the initial state (from ``with_state`` or the ``default_state`` of ``initialize_from``) does not provide. It runs
+before any persisted state is loaded. Keys that are written on some paths but not others are not reported.
+You can also run the check on a graph directly with
+:py:meth:`Graph.validate <burr.core.graph.Graph.validate>`, which returns the problems instead of raising.
+
+----------
 Inspection
 ----------
 

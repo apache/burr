@@ -422,7 +422,13 @@ and not the <code class="docutils literal notranslate"><span class="pre">Applica
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">burr.core.application.</span></span><span class="sig-name descname"><span class="pre">ApplicationBuilder</span></span><a class="headerlink" href="#burr.core.application.ApplicationBuilder" title="Link to this definition">¶</a></dt>
 <dd><dl class="py method">
 <dt class="sig sig-object py" id="burr.core.application.ApplicationBuilder.abuild">
-<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">abuild</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.application.Application" title="burr.core.application.Application"><span class="pre">Application</span></a><span class="p"><span class="pre">[</span></span><span class="pre">StateType</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.application.ApplicationBuilder.abuild" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">abuild</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.application.Application" title="burr.core.application.Application"><span class="pre">Application</span></a><span class="p"><span class="pre">[</span></span><span class="pre">StateType</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.application.ApplicationBuilder.abuild" title="Link to this definition">¶</a></dt>
 <dd><p>Builds the application for asynchronous runs.</p>
 <p>We support both synchronous and asynchronous applications. To save/load in an asynchronous
 manner add the async persister versions and use this method to initialize them. This will
@@ -457,15 +463,25 @@ be used in the following cases:</p>
 </table>
 </div>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The application object.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>validate</strong> – Whether to check the graph for state keys that are read but never written
+or provided by the initial state. See <a class="reference internal" href="#burr.core.graph.Graph.validate" title="burr.core.graph.Graph.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Graph.validate</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The application object.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="burr.core.application.ApplicationBuilder.build">
-<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.application.Application" title="burr.core.application.Application"><span class="pre">Application</span></a><span class="p"><span class="pre">[</span></span><span class="pre">StateType</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.application.ApplicationBuilder.build" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.core.application.Application" title="burr.core.application.Application"><span class="pre">Application</span></a><span class="p"><span class="pre">[</span></span><span class="pre">StateType</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.application.ApplicationBuilder.build" title="Link to this definition">¶</a></dt>
 <dd><p>Builds the application for synchronous runs.</p>
 <p>We support both synchronous and asynchronous applications. In case you are using state initializers
 and persisters, the synchronous application should be used in the following cases:</p>
@@ -502,8 +518,12 @@ and persisters, the synchronous application should be used in the following case
 app async. However, we strongly encourage to switch to async persisters if you are running
 an async application.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The application object.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>validate</strong> – Whether to check the graph for state keys that are read but never written
+or provided by the initial state. See <a class="reference internal" href="#burr.core.graph.Graph.validate" title="burr.core.graph.Graph.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Graph.validate</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The application object.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1815,6 +1835,24 @@ or indirectly through the ApplicationBuilder.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="burr.core.graph.Graph.validate">
+<span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">initial_state_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.graph.Graph.validate" title="Link to this definition">¶</a></dt>
+<dd><p>Checks the graph for state keys that are read but can never be set.</p>
+<p>A key is reported when an action or a transition condition reads it, but no action
+writes it and it is not in the initial state. This only uses the declared <code class="docutils literal notranslate"><span class="pre">reads</span></code> and
+<code class="docutils literal notranslate"><span class="pre">writes</span></code>, so it will not catch a key that is written on some paths but not on others.
+Keys starting with <code class="docutils literal notranslate"><span class="pre">__</span></code> are internal to Burr and are skipped.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>initial_state_keys</strong> – Keys in the state before the first action runs</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A description of each problem found, empty if there are none</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="burr.core.graph.Graph.visualize">
 <span class="sig-name descname"><span class="pre">visualize</span></span><span class="sig-paren">(</span>
 
@@ -1988,6 +2026,7 @@ for graphviz, instead pass <cite>format</cite> in <cite>engine_kwargs</cite> (e.
 <li><a class="reference internal" href="#burr.core.graph.Graph.get_action"><code class="docutils literal notranslate"><span class="pre">Graph.get_action()</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.graph.Graph.get_actions_by_tag"><code class="docutils literal notranslate"><span class="pre">Graph.get_actions_by_tag()</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.graph.Graph.get_next_node"><code class="docutils literal notranslate"><span class="pre">Graph.get_next_node()</span></code></a></li>
+<li><a class="reference internal" href="#burr.core.graph.Graph.validate"><code class="docutils literal notranslate"><span class="pre">Graph.validate()</span></code></a></li>
 <li><a class="reference internal" href="#burr.core.graph.Graph.visualize"><code class="docutils literal notranslate"><span class="pre">Graph.visualize()</span></code></a></li>
 </ul>
 </li>

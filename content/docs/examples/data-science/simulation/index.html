@@ -505,7 +505,7 @@ actions, or an action that loops over all “users”. We are still figuring out
 
 <span class="nd">@action</span><span class="p">(</span>
     <span class="n">reads</span><span class="o">=</span><span class="p">[</span><span class="s2">"simulation_start"</span><span class="p">,</span> <span class="s2">"simulation_end"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">,</span> <span class="s2">"data"</span><span class="p">,</span> <span class="s2">"current_timestep"</span><span class="p">],</span>
-    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">],</span>
+    <span class="n">writes</span><span class="o">=</span><span class="p">[</span><span class="s2">"data"</span><span class="p">,</span> <span class="s2">"current_timestep"</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">forecast</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="n">State</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""This action forecasts the next timestep in the simulation and appends it to data."""</span>

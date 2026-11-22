@@ -551,6 +551,29 @@ in a web-server (create a graph once, application many times), import the graph 
 </div>
 <p>You can read more about it in the <a class="reference internal" href="../../reference/application/#burr.core.graph.GraphBuilder" title="burr.core.graph.GraphBuilder"><code class="xref py py-class docutils literal notranslate"><span class="pre">GraphBuilder</span> <span class="pre">docs</span></code></a>.</p>
 </section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading">¶</a></h2>
+<p>Burr does not check an action’s declared <code class="docutils literal notranslate"><span class="pre">reads</span></code> and <code class="docutils literal notranslate"><span class="pre">writes</span></code> when it runs, so a key that nothing ever sets
+only shows up as a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> once an action tries to use it. Pass <code class="docutils literal notranslate"><span class="pre">validate=True</span></code> to <code class="docutils literal notranslate"><span class="pre">build()</span></code> (or <code class="docutils literal notranslate"><span class="pre">abuild()</span></code>)
+to catch this up front:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">app</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ApplicationBuilder</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">with_actions</span><span class="p">(</span><span class="n">human_input</span><span class="p">,</span> <span class="n">ai_response</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">with_transitions</span><span class="p">(</span>
+        <span class="p">(</span><span class="s2">"human_input"</span><span class="p">,</span> <span class="s2">"ai_response"</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"ai_response"</span><span class="p">,</span> <span class="s2">"human_input"</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">with_state</span><span class="p">(</span><span class="n">chat_history</span><span class="o">=</span><span class="p">[])</span>
+    <span class="o">.</span><span class="n">with_entrypoint</span><span class="p">(</span><span class="s2">"human_input"</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">validate</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>This raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> listing every action or transition condition that reads a key no action writes and
+the initial state (from <code class="docutils literal notranslate"><span class="pre">with_state</span></code> or the <code class="docutils literal notranslate"><span class="pre">default_state</span></code> of <code class="docutils literal notranslate"><span class="pre">initialize_from</span></code>) does not provide. It runs
+before any persisted state is loaded. Keys that are written on some paths but not others are not reported.
+You can also run the check on a graph directly with
+<a class="reference internal" href="../../reference/application/#burr.core.graph.Graph.validate" title="burr.core.graph.Graph.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Graph.validate</span></code></a>, which returns the problems instead of raising.</p>
+</section>
 <section id="inspection">
 <h2>Inspection<a class="headerlink" href="#inspection" title="Link to this heading">¶</a></h2>
 <p>You can ask various questions of the state machine using publicly-supported APIs:</p>
@@ -639,6 +662,7 @@ in a web-server (create a graph once, application many times), import the graph 
 </ul>
 </li>
 <li><a class="reference internal" href="#graph-api">Graph API</a></li>
+<li><a class="reference internal" href="#validation">Validation</a></li>
 <li><a class="reference internal" href="#inspection">Inspection</a></li>
 </ul>
 </li>
