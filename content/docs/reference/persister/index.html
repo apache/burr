@@ -452,6 +452,12 @@ that will be used by lifecycle hooks to save and load state.</p>
 <td><p>❌</p></td>
 <td><p>❌</p></td>
 </tr>
+<tr class="row-even"><td><p>Aerospike</p></td>
+<td><p>aerospike</p></td>
+<td><p><a class="reference internal" href="#syncaerospikeref"><span class="std std-ref">AerospikeBasePersister</span></a></p></td>
+<td><p>❌</p></td>
+<td><p>❌</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -987,7 +993,7 @@ It then sets the initialized field to True if the table exists.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="burr.core.persistence.SQLitePersister.list_app_ids">
 <span class="sig-name descname"><span class="pre">list_app_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.core.persistence.SQLitePersister.list_app_ids" title="Link to this definition">¶</a></dt>
-<dd><p>Lists the app_ids for a given partition_key, each once, most recently saved first.</p>
+<dd><p>Lists each app once, newest timestamp first, breaking ties by insertion order.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1562,6 +1568,179 @@ is what it was before the action was applied.</p></li>
 
 </dd></dl>
 
+<dl class="py class" id="syncaerospikeref">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">burr.integrations.persisters.b_aerospike.</span></span><span class="sig-name descname"><span class="pre">AerospikeBasePersister</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">namespace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'test'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">history_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_state'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">head_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_head'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">membership_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_apps'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">key_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">serde_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">_client_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">_owned</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister" title="Link to this definition">¶</a></dt>
+<dd><p>Synchronous Aerospike-backed implementation of Burr’s <code class="docutils literal notranslate"><span class="pre">BaseStatePersister</span></code>.</p>
+<p>The persister stores one immutable history record per <code class="docutils literal notranslate"><span class="pre">(partition_key,</span>
+<span class="pre">app_id,</span> <span class="pre">sequence_id)</span></code> and a small mutable head record per <code class="docutils literal notranslate"><span class="pre">(partition_key,</span>
+<span class="pre">app_id)</span></code> that points to the latest sequence. Application IDs within a
+partition are listed through one materialized membership record per
+logical partition.</p>
+<p>This optional integration requires Python 3.10+ and the official Aerospike
+Python client. Burr core remains compatible with Python 3.9+.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">namespace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'test'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">history_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_state'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">head_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_head'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">membership_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_apps'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">key_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">serde_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">_client_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">_owned</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.__init__" title="Link to this definition">¶</a></dt>
+<dd><p>Initialize the persister with an Aerospike client.</p>
+<p>Direct construction accepts an already-connected caller-owned client.
+Use <a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_values" title="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_values"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_values()</span></code></a> or <a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_config" title="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_config"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_config()</span></code></a> for persister-owned
+clients.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.cleanup">
+<span class="sig-name descname"><span class="pre">cleanup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.cleanup" title="Link to this definition">¶</a></dt>
+<dd><p>Close the persister-owned client, if any.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_config">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_config</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister" title="burr.integrations.persisters.b_aerospike.AerospikeBasePersister"><span class="pre">AerospikeBasePersister</span></a></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_config" title="Link to this definition">¶</a></dt>
+<dd><p>Create a persister from a configuration dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_values">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_values</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">hosts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">client_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">namespace</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'test'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">history_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_state'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">head_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_head'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">membership_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'burr_apps'</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">key_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">serde_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister" title="burr.integrations.persisters.b_aerospike.AerospikeBasePersister"><span class="pre">AerospikeBasePersister</span></a></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_values" title="Link to this definition">¶</a></dt>
+<dd><p>Create a persister from seed hosts and client configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>hosts</strong> – Aerospike seed hosts as <code class="docutils literal notranslate"><span class="pre">[(host,</span> <span class="pre">port),</span> <span class="pre">...]</span></code>.</p></li>
+<li><p><strong>client_config</strong> – Additional official client configuration options.</p></li>
+<li><p><strong>namespace</strong> – Aerospike namespace.</p></li>
+<li><p><strong>history_set</strong> – Set for immutable checkpoint records.</p></li>
+<li><p><strong>head_set</strong> – Set for mutable latest-sequence heads.</p></li>
+<li><p><strong>membership_set</strong> – Set for per-partition application membership.</p></li>
+<li><p><strong>key_prefix</strong> – Optional logical prefix for key isolation.</p></li>
+<li><p><strong>serde_kwargs</strong> – Kwargs for Burr <code class="docutils literal notranslate"><span class="pre">State</span></code> serialization.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.initialize">
+<span class="sig-name descname"><span class="pre">initialize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.initialize" title="Link to this definition">¶</a></dt>
+<dd><p>Mark the dynamically provisioned persister ready for use.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.is_initialized">
+<span class="sig-name descname"><span class="pre">is_initialized</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.is_initialized" title="Link to this definition">¶</a></dt>
+<dd><p>Check if the persister has been initialized appropriately.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.list_app_ids">
+<span class="sig-name descname"><span class="pre">list_app_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.list_app_ids" title="Link to this definition">¶</a></dt>
+<dd><p>Returns list of app IDs for a given primary key</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">app_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">sequence_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">PersistedStateData</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.load" title="Link to this definition">¶</a></dt>
+<dd><p>Load the latest or a specific checkpoint for an application.</p>
+<p><code class="docutils literal notranslate"><span class="pre">app_id=None</span></code> is not supported by the Aerospike persister; callers must
+supply an application identifier.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="burr.integrations.persisters.b_aerospike.AerospikeBasePersister.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">app_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">sequence_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../state/#burr.core.state.State" title="burr.core.state.State"><span class="pre">State</span></a></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.save" title="Link to this definition">¶</a></dt>
+<dd><p>Saves the state for a given app_id, sequence_id, position</p>
+<p>(PK, App_id, sequence_id, position) are a unique identifier for the state. Why not just
+(PK, App_id, sequence_id)? Because we’re over-engineering this here. We’re always going to have
+a position so might as well make it a quadruple.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partition_key</strong> – the partition key. Note this could be None, but it’s up to the persistor to whether
+that is a valid value it can handle.</p></li>
+<li><p><strong>app_id</strong> – Appliaction UID to write with</p></li>
+<li><p><strong>sequence_id</strong> – Sequence ID of the last executed step</p></li>
+<li><p><strong>position</strong> – The action name that was implemented</p></li>
+<li><p><strong>state</strong> – The current state of the application</p></li>
+<li><p><strong>status</strong> – The status of this state, either “completed” or “failed”. If “failed” the state is what it was
+before the action was applied.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 <p>Note that the <a class="reference internal" href="../tracking/#burr.tracking.LocalTrackingClient" title="burr.tracking.client.LocalTrackingClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalTrackingClient</span></code></a> leverages the <a class="reference internal" href="#burr.core.persistence.BaseStateLoader" title="burr.core.persistence.BaseStateLoader"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseStateLoader</span></code></a> to allow loading state,
 although it uses different mechanisms to save state (as it tracks more than just state).</p>
 </section>
@@ -1700,7 +1879,7 @@ It then sets the initialized field to True if the table exists.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="burr.integrations.persisters.b_aiosqlite.AsyncSQLitePersister.list_app_ids">
 <em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">list_app_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partition_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#burr.integrations.persisters.b_aiosqlite.AsyncSQLitePersister.list_app_ids" title="Link to this definition">¶</a></dt>
-<dd><p>Lists the app_ids for a given partition_key, each once, most recently saved first.</p>
+<dd><p>Lists each app once, newest timestamp first, breaking ties by insertion order.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2354,6 +2533,18 @@ It inherits from the AsyncBaseStatePersister class.</p>
 <li><a class="reference internal" href="#burr.integrations.persisters.b_pymongo.MongoDBBasePersister.load"><code class="docutils literal notranslate"><span class="pre">MongoDBBasePersister.load()</span></code></a></li>
 <li><a class="reference internal" href="#burr.integrations.persisters.b_pymongo.MongoDBBasePersister.save"><code class="docutils literal notranslate"><span class="pre">MongoDBBasePersister.save()</span></code></a></li>
 <li><a class="reference internal" href="#burr.integrations.persisters.b_pymongo.MongoDBBasePersister.set_serde_kwargs"><code class="docutils literal notranslate"><span class="pre">MongoDBBasePersister.set_serde_kwargs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister</span></code></a><ul>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.__init__"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.cleanup"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.cleanup()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_config"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.from_config()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.from_values"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.from_values()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.initialize"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.initialize()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.is_initialized"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.is_initialized()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.list_app_ids"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.list_app_ids()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.load"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.load()</span></code></a></li>
+<li><a class="reference internal" href="#burr.integrations.persisters.b_aerospike.AerospikeBasePersister.save"><code class="docutils literal notranslate"><span class="pre">AerospikeBasePersister.save()</span></code></a></li>
 </ul>
 </li>
 </ul>

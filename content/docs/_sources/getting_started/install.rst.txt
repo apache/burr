@@ -135,6 +135,12 @@ This installs the dependencies for Redis.
 
 .. code-block:: bash
 
+    pip install "apache-burr[aerospike]"
+
+This installs the dependencies for Aerospike. It requires Python 3.10 or newer; Burr core remains compatible with Python 3.9.
+
+.. code-block:: bash
+
     pip install "apache-burr[start]"
 
 This installs the dependencies for the UI, CLI, and running demos. It is equivalent to `learn` above.
