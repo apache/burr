@@ -415,6 +415,7 @@ def mount_mcp(
 
     Call this before the React catch-all route is registered. The MCP transport runs inside the
     app's lifespan, so when the UI is mounted in another app, that app must run the UI's lifespan.
+    :py:func:`burr.tracking.server.run.mount_burr_ui` does this.
 
     :param ui_app: The Burr UI app
     :param backend: Backend the tools read from

@@ -23,6 +23,7 @@ import pytest
 
 pytest.importorskip("mcp.server.mcpserver", reason="the MCP endpoint needs mcp>=2")
 
+from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from mcp import Client  # noqa: E402
 
@@ -347,6 +348,16 @@ def test_ui_app_serves_mcp(ui_backend):
             assert "claude mcp add --transport http burr" in get.json()["detail"]
             # The REST API still works next to it
             assert client.get("/api/v0/projects").status_code == 200
+
+
+def test_mount_burr_ui_serves_mcp(ui_backend):
+    # mount_burr_ui() runs the UI's lifespan inside the parent's, and the MCP transport with it
+    parent = FastAPI()
+    run.mount_burr_ui(parent, path="/burr", serve_static=False)
+    with TestClient(parent, base_url="http://localhost:7241") as client:
+        assert "get_step" in _tool_names(
+            client.post("/burr/mcp", json=TOOLS_LIST, headers=MCP_HEADERS)
+        )
 
 
 def test_mcp_rejects_other_hosts(ui_backend):
