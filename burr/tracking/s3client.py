@@ -98,7 +98,7 @@ def _filter_inputs(d: dict) -> dict:
 
 
 def _allowed_project_name(project_name: str, on_windows: bool) -> bool:
-    allowed_chars = "a-zA-Z0-9_\-"
+    allowed_chars = r"a-zA-Z0-9_\-"
     if not on_windows:
         allowed_chars += ":"
     pattern = f"^[{allowed_chars}]+$"
