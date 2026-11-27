@@ -121,6 +121,12 @@ def test_state_wipe_keep():
     assert wiped.get_all() == {"foo": "bar"}
 
 
+def test_state_wipe_all():
+    state = State({"foo": "bar", "baz": "qux"})
+    wiped = state.wipe()
+    assert wiped.get_all() == {}
+
+
 def test_state_append_validate_failure():
     state = State({"foo": "bar"})
     with pytest.raises(ValueError, match="non-appendable"):
