@@ -1,0 +1,13 @@
+.venv*/
+.wrangler/
+node_modules/
+python_modules/
+.runtime-cache/
+__pycache__/
+.dev.vars*
+.env
+output/
+wrangler.*.jsonc
+package-lock.json
+pylock.toml
+uv.lock
