@@ -40,6 +40,52 @@ def _load_release_module():
 release = _load_release_module()
 
 
+def test_wheel_build_stages_license_and_restores_source_on_failure(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    source_license = b"source archive license\n"
+    source_config = b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]\n'
+    Path("LICENSE").write_bytes(source_license)
+    Path("LICENSE-wheel").write_bytes(b"wheel license\n")
+    Path("pyproject.toml").write_bytes(source_config)
+    monkeypatch.setattr(release, "_build_ui_artifacts", lambda: None)
+    monkeypatch.setattr(release, "_prepare_wheel_contents", lambda: (False, False, None, []))
+
+    def fail_build(command, **kwargs):
+        assert command == ["flit", "build", "--format", "wheel"]
+        assert Path("LICENSE").read_bytes() == b"wheel license\n"
+        assert Path("pyproject.toml").read_bytes() == (
+            b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]\n'
+        )
+        raise SystemExit(1)
+
+    monkeypatch.setattr(release, "_run_command", fail_build)
+    with pytest.raises(SystemExit):
+        release._build_wheel_from_current_dir("0.43.0", source_date_epoch=1700000000)
+    assert Path("LICENSE").read_bytes() == source_license
+    assert Path("pyproject.toml").read_bytes() == source_config
+
+
+def test_wheel_build_rejects_unrecognized_license_config(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    source_license = b"source archive license\n"
+    source_config = b'license-files = [ "LICENSE-wheel", "NOTICE", "DISCLAIMER" ]\n'
+    Path("LICENSE").write_bytes(source_license)
+    Path("LICENSE-wheel").write_bytes(b"wheel license\n")
+    Path("pyproject.toml").write_bytes(source_config)
+    monkeypatch.setattr(release, "_build_ui_artifacts", lambda: None)
+    monkeypatch.setattr(release, "_prepare_wheel_contents", lambda: (False, False, None, []))
+
+    def unexpected_build(*args, **kwargs):
+        pytest.fail("Flit must not run when license staging fails")
+
+    monkeypatch.setattr(release, "_run_command", unexpected_build)
+    with pytest.raises(SystemExit, match="1"):
+        release._build_wheel_from_current_dir("0.43.0", source_date_epoch=1700000000)
+    assert "expected license-files setting not found" in capsys.readouterr().out
+    assert Path("LICENSE").read_bytes() == source_license
+    assert Path("pyproject.toml").read_bytes() == source_config
+
+
 def test_build_sdist_uses_artifact_specific_license(monkeypatch, tmp_path):
     project_files = {
         "LICENSE": "full source license\nwebsite/src/components/ui/\n",
@@ -80,7 +126,7 @@ def test_build_sdist_uses_artifact_specific_license(monkeypatch, tmp_path):
 
     artifact = Path(release._build_sdist_from_git("0.42.0", str(output_dir)))
 
-    assert artifact == output_dir / "apache-burr-0.42.0-incubating-sdist.tar.gz"
+    assert artifact == output_dir / "apache_burr-0.42.0.tar.gz"
     with tarfile.open(artifact, "r:gz") as archive:
         license_text = archive.extractfile("apache_burr-0.42.0/LICENSE").read().decode()
         assert license_text == project_files["LICENSE-sdist"]
@@ -136,7 +182,7 @@ def _write_artifact_set(directory: Path, version: str, wheel_name: str = None) -
     wheel_name = wheel_name or f"apache_burr-{version}-py3-none-any.whl"
     artifact_names = [
         f"apache-burr-{version}-incubating-src.tar.gz",
-        f"apache-burr-{version}-incubating-sdist.tar.gz",
+        f"apache_burr-{version}.tar.gz",
         wheel_name,
     ]
     for artifact_name in artifact_names:
@@ -157,14 +203,15 @@ def test_parse_rc_label_rejects_invalid_format():
 
 
 def test_validate_promotion_artifacts_requires_expected_set(tmp_path):
-    _write_artifact_set(tmp_path, "0.42.0")
+    wheel_name = "apache_burr-0.42.0-py3-none-any.whl"
+    _write_artifact_set(tmp_path, "0.42.0", wheel_name)
 
     artifacts = release._validate_promotion_artifacts(str(tmp_path), "0.42.0")
 
     assert len(artifacts) == 9
     assert any(path.endswith("apache-burr-0.42.0-incubating-src.tar.gz") for path in artifacts)
-    assert any(path.endswith("apache-burr-0.42.0-incubating-sdist.tar.gz") for path in artifacts)
-    assert any(path.endswith("apache_burr-0.42.0-py3-none-any.whl") for path in artifacts)
+    assert any(path.endswith("apache_burr-0.42.0.tar.gz") for path in artifacts)
+    assert any(path.endswith(wheel_name) for path in artifacts)
 
 
 def test_validate_promotion_artifacts_fails_when_companion_missing(tmp_path):
@@ -189,14 +236,15 @@ def test_twine_upload_command_includes_only_sdist_and_wheel():
         [
             "apache-burr-0.42.0-incubating-src.tar.gz",
             "apache-burr-0.42.0-incubating-src.tar.gz.asc",
-            "apache-burr-0.42.0-incubating-sdist.tar.gz",
+            "apache_burr-0.42.0.tar.gz",
+            "apache_burr-0.42.0.tar.gz.asc",
+            "apache_burr-0.42.0.tar.gz.sha512",
             "apache_burr-0.42.0-py3-none-any.whl",
         ]
     )
 
     assert command == (
-        "twine upload apache-burr-0.42.0-incubating-sdist.tar.gz "
-        "apache_burr-0.42.0-py3-none-any.whl"
+        "twine upload apache_burr-0.42.0-py3-none-any.whl " "apache_burr-0.42.0.tar.gz"
     )
 
 
@@ -233,7 +281,7 @@ def test_cmd_promote_dry_run_uses_server_copy_without_committing(monkeypatch, tm
     def fake_validate(rc_checkout_dir: str, version: str):
         assert version == "0.42.0"
         return [
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-sdist.tar.gz",
+            f"{rc_checkout_dir}/apache_burr-0.42.0.tar.gz",
             f"{rc_checkout_dir}/apache_burr-0.42.0-py3-none-any.whl",
         ]
 

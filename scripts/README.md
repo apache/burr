@@ -33,7 +33,7 @@ Specifically, we set the following guidelines:
 |---|---|---|---|---|
 | Build Scripts | ✓ | ✓ | ✗ | Included in tar.gz and sdist as they are needed to reproduce the build, but not in the whl. These are only meant to be consumed by developers/pod members. |
 | Library Source code | ✓ | ✓ | ✓ | Core library source code is included in all three distributions: tar.gz, sdist, and whl. |
-| Tests (integration and unit) | ✓ | ✓ | ✗ | We expect users/PMC to download the source distribution, build from source, run the tests, and validate. Thus we include in the tar.gz and sdist, but not in the whl. |
+| Tests (integration and unit) | ✓ | ✗ | ✗ | Tests ship in the full source archive (`-src.tar.gz`) for voters to build, test, and validate the release. They are not included in the sdist or wheel. |
 | READMEs | ✓ | ✓ | ✓ | Standard project metadata files (README.md, LICENSE, NOTICE, DISCLAIMER) are included in all three distributions: tar.gz, sdist, and whl. |
 | Documentation | ✓ | ✗ | ✗ | Documentation source is included in the tar.gz for voters to review, but not in the sdist or whl as it is not needed for building or using the package. |
 | Deployment templates | ✓ | ✓ | ✓ | Convenience deployment templates are included in tar.gz, sdist, and whl as they are referred to by specific utility commands for deploying that are included in source. |
@@ -41,8 +41,26 @@ Specifically, we set the following guidelines:
 | Examples (by default required for demo server) | ✓ | ✓ | ✓ | We have four examples (see pyproject.toml) required by the demo server which can be run by a single command. These are included in tar.gz, sdist, and whl as they are needed for the demo functionality. |
 | Other examples | ✓ | ✗ | ✗ | These are included in the tar.gz for voters to review but not included in the sdist or whl as they are not needed to build or run the package. They serve more as documentation. |
 
+## Artifact naming and licence decisions
 
-
+- **Keep wheel filenames without `incubating`.** Wheels use names such as
+  `apache_burr-0.43.0-py3-none-any.whl`, without the proposed `1incubating` build tag.
+  They are convenience binaries; the source archive is the voting artifact.
+  For now, we retain the exact wheel in Apache dist for provenance and verification
+  against the package published to PyPI. The
+  [dev-list discussion](https://lists.apache.org/thread/7t31297fhwqp9sqo6nvopgf0qw10zy4y)
+  remains open; this approach does not clear the Clutch filename warning.
+- **Keep `LICENSE-wheel` in the sdist.** Rebuilding a wheel from the sdist builds
+  the tracking UI and bundles its JavaScript dependencies. `LICENSE-wheel` supplies
+  the acknowledgements for those dependencies and is packaged in the rebuilt wheel
+  as `LICENSE`. The sdist's own `LICENSE` describes the source files it ships;
+  retaining `LICENSE-wheel` supports the subsequent wheel build.
+- **Keep the sdist's Python package filename.** The release helper produces names
+  such as `apache_burr-0.43.0.tar.gz`. Like the wheel, the sdist is a Python
+  convenience package: retain the same filename and bytes in Apache dist and on
+  PyPI, without a rename before upload. The ASF source release remains
+  `apache-burr-0.43.0-incubating-src.tar.gz`. This naming change does not resolve
+  the ongoing Clutch discussion.
 
 # Release Process
 
@@ -53,15 +71,14 @@ Specifically, we set the following guidelines:
 
 Prerequisites:
 - Python 3.10+
-- `flit` for building (`pip install flit`)
-- `twine` for package validation (`pip install twine`)
+- Release tools (`pip install -e ".[release]"`): Flit for building and Twine for validation.
 - GPG key configured for signing
 - Node.js + npm for UI builds
 - Apache RAT jar for license checking (optional)
 
 ```bash
 # Install build dependencies
-pip install flit
+pip install -e ".[release]"
 pip install -e ".[cli]"  # Installs burr-admin-build-ui command
 
 # Verify GPG setup
@@ -108,6 +125,12 @@ python scripts/apache_release.py result-email --version 0.41.0 --rc 0 --binding-
 python scripts/apache_release.py announce-email --version 0.41.0
 ```
 
+Release wheel filenames follow the [artifact naming decisions](#artifact-naming-and-licence-decisions)
+above (for example, `apache_burr-0.43.0-py3-none-any.whl`).
+The wheel build temporarily stages `LICENSE-wheel` as `LICENSE` and updates Flit's
+licence-file setting, restoring the source files afterward. The verifier checks
+the packaged `LICENSE` against `LICENSE-wheel`.
+
 Output: `dist/` directory with tar.gz (archive + sdist), whl, plus .asc and .sha512 files. The wheel is validated with `twine check` to ensure metadata correctness before signing. Install from the whl file to test it out after running the `wheel` subcommand.
 
 ## Promoting a voted RC
@@ -142,6 +165,37 @@ python scripts/apache_release.py promote 0.41.0-RC0 your_apache_id \
   --release-svn-root https://dist.apache.org/repos/dist/release/burr
 ```
 
+## Cleaning up superseded releases
+
+After publishing a new release, remove superseded versions from the active
+`dist/release` area. Keep the latest release for each maintained branch and the
+shared `KEYS` file. This is separate from promoting an approved RC out of `dist/dev`.
+
+Before removing a version, check its directory at
+`https://archive.apache.org/dist/incubator/burr/<version>/` and confirm that all
+release artifacts and their `.asc` and `.sha512` files are present. Apache archives
+releases automatically, generally within a day of publication; wait until the
+archive is complete before proceeding. See the
+[Apache release distribution policy](https://infra.apache.org/release-distribution.html#releases-are-archived).
+
+Remove only the superseded version directory using SVN (no checkout required):
+
+```bash
+# Replace with the superseded version whose archive you have checked.
+OLD_VERSION="<superseded-version>"
+svn delete \
+  "https://dist.apache.org/repos/dist/release/incubator/burr/${OLD_VERSION}" \
+  --username your_apache_id \
+  -m "Remove superseded Burr ${OLD_VERSION}; retained in archive.apache.org"
+
+# Verify the current releases and KEYS remain.
+svn ls https://dist.apache.org/repos/dist/release/incubator/burr/
+```
+
+The URL-based `svn delete` commits immediately. It removes the version from active
+distribution while preserving its archived copy; it does not remove the PyPI release.
+Update any website links for the retired version to point to its archive location.
+
 ## For Voters: Verifying a Release
 
 If you're voting on a release, follow these steps to verify the release candidate:
@@ -165,14 +219,14 @@ gpg --import KEYS
 gpg --verify apache-burr-${VERSION}-incubating-src.tar.gz.asc apache-burr-${VERSION}-incubating-src.tar.gz
 
 # Verify sdist signature
-gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VERSION}-incubating-sdist.tar.gz
+gpg --verify apache_burr-${VERSION}.tar.gz.asc apache_burr-${VERSION}.tar.gz
 
 # Verify wheel signature
 gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
 
 # 3. Verify all SHA512 checksums
 sha512sum -c apache-burr-${VERSION}-incubating-src.tar.gz.sha512
-sha512sum -c apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512
+sha512sum -c apache_burr-${VERSION}.tar.gz.sha512
 sha512sum -c apache_burr-${VERSION}-py3-none-any.whl.sha512
 
 # 4. Extract the source archive
@@ -180,51 +234,102 @@ tar -xzf apache-burr-${VERSION}-incubating-src.tar.gz
 cd apache-burr-${VERSION}-incubating-src/
 
 # 5. Install build dependencies
-pip install flit
+pip install -e ".[release]"
 
 # 6. Build the wheel from source (this also builds the UI)
 python scripts/apache_release.py wheel ${VERSION} ${RC}
 
-# 7. Install and test the wheel you just built -- play with the UI
-pip install "dist/apache_burr-${VERSION}-py3-none-any.whl[learn]"
+# 7. Install and test the wheel in a fresh environment outside the source tree.
+# This ensures the editable build-tools installation cannot mask wheel defects.
+WHEEL_PATH="$PWD/dist/apache_burr-${VERSION}-py3-none-any.whl"
+WHEEL_TEST_DIR=$(mktemp -d)
+python -m venv "$WHEEL_TEST_DIR/venv"
+source "$WHEEL_TEST_DIR/venv/bin/activate"
+cd "$WHEEL_TEST_DIR"
+python -m pip install "${WHEEL_PATH}[learn]"
 burr
 
 ```
 
-Note that the script currently signs the file with a signature. We will be adding the ability to bypass that, but if you want to build from scratch you can follow this process:
-
+The release script signs its output. To build an unsigned wheel manually, start
+from the repository root of a clean checkout or an extracted source archive, with
+the release tools installed (`python -m pip install -e ".[release]"`). This follows
+the same UI, example, licence, and file-exclusion steps as the release helper.
+Use the same `SOURCE_DATE_EPOCH` for both builds when comparing them. In a Git
+checkout, obtain it with `git show -s --format=%ct HEAD`; for an extracted archive,
+set it to the timestamp of the release's source commit before running these steps.
 
 ```bash
-# 1. Build UI
-cd telemetry/ui
-npm install
-npm run build
-cd ../..
+# Run in a subshell so build settings and the cleanup trap stay local.
+(
+set -eu
+export FLIT_USE_VCS=0
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}"
 
-# 2. Copy UI build to the right place
+# 1. Build and copy the UI, replacing any previous output.
+npm install --prefix telemetry/ui
+npm run build --prefix telemetry/ui
+rm -rf burr/tracking/server/build
 mkdir -p burr/tracking/server/build
 cp -a telemetry/ui/build/. burr/tracking/server/build/
 
-# 3. Handle examples (replace symlink with actual files)
-rm burr/examples  # Remove symlink
+# 2. Back up files that must be restored, even if the build fails.
+WHEEL_BACKUP=$(mktemp -d)
+cp LICENSE "$WHEEL_BACKUP/LICENSE"
+cp pyproject.toml "$WHEEL_BACKUP/pyproject.toml"
+mv burr/examples "$WHEEL_BACKUP/examples"
+restore_wheel_sources() {
+    cp "$WHEEL_BACKUP/LICENSE" LICENSE
+    cp "$WHEEL_BACKUP/pyproject.toml" pyproject.toml
+    rm -rf burr/examples
+    mv "$WHEEL_BACKUP/examples" burr/examples
+    if [ -f "$WHEEL_BACKUP/terraform.gitignore" ]; then
+        mv "$WHEEL_BACKUP/terraform.gitignore" burr/tracking/server/s3/deployment/terraform/.gitignore
+    fi
+    rm -rf "$WHEEL_BACKUP"
+}
+trap restore_wheel_sources EXIT
+
+# 3. Include exactly the examples used by the release helper.
 mkdir burr/examples
 cp examples/__init__.py burr/examples/
-cp -r examples/email-assistant burr/examples/
-cp -r examples/multi-modal-chatbot burr/examples/
-cp -r examples/streaming-fastapi burr/examples/
-cp -r examples/deep-researcher burr/examples/
+for example in email-assistant multi-modal-chatbot streaming-fastapi deep-researcher hello-world-counter; do
+    cp -R "examples/$example" burr/examples/
+done
 
-# 4. Build wheel
+# Match the sdist's exclusion of this VCS file.
+if [ -f burr/tracking/server/s3/deployment/terraform/.gitignore ]; then
+    mv burr/tracking/server/s3/deployment/terraform/.gitignore "$WHEEL_BACKUP/terraform.gitignore"
+fi
+
+# 4. Stage the wheel licence under LICENSE before Flit generates metadata/RECORD.
+python - <<'PYTHON'
+from pathlib import Path
+
+config = Path("pyproject.toml")
+source = config.read_bytes()
+wheel = source.replace(
+    b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+    b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
+)
+if wheel == source:
+    raise SystemExit("Expected license-files setting not found in pyproject.toml")
+config.write_bytes(wheel)
+Path("LICENSE").write_bytes(Path("LICENSE-wheel").read_bytes())
+PYTHON
+
+# 5. Build; the exit trap restores the source files and examples afterwards.
 flit build --format wheel
-
-# 5. Restore symlink
-rm -rf burr/examples
-ln -s ../examples burr/examples
+)
 ```
 
-Then use the wheel at `dist/apache_burr-0.41.0-py3-none-any.whl`
+The wheel is written to `dist/apache_burr-<version>-py3-none-any.whl`. Validate it
+with `python -m twine check <wheel-path>` and test it in a fresh environment
+outside the source tree, as shown above. To compare it with the automated build:
 
-
+```bash
+python scripts/verify_apache_artifacts.py compare-wheels <automated-wheel> <manual-wheel>
+```
 
 See the "Verification" section below for more detailed verification steps including license checking.
 

@@ -106,7 +106,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Cache Apache RAT
         id: cache-rat
@@ -142,8 +142,11 @@ jobs:
       - name: Verify all 3 artifacts exist
         run: |
           test -f "dist/apache-burr-${BURR_VERSION}-incubating-src.tar.gz"
-          test -f "dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
+          test -f "dist/apache_burr-${BURR_VERSION}.tar.gz"
           test -f "dist/apache_burr-${BURR_VERSION}-py3-none-any.whl"
+
+      - name: Verify artifact LICENSE, NOTICE, and DISCLAIMER contents
+        run: python scripts/verify_apache_artifacts.py artifacts --artifacts-dir dist
 
       # RAT excludes burr/tracking/server/build/**, so it never inspects the
       # compiled UI -- the only content the wheel adds over the sdist. This
@@ -282,7 +285,7 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends graphviz
 
       - name: Install Python build deps
-        run: pip install flit twine jinja2
+        run: pip install -e ".[release]"
 
       - name: Download release artifacts
         uses: actions/download-artifact@v8
@@ -295,7 +298,7 @@ jobs:
           BURR_VERSION: ${{ needs.build-artifacts.outputs.version }}
         run: |
           mkdir -p /tmp/sdist-extract /tmp/sdist-wheel
-          SDIST_PATH="dist/apache-burr-${BURR_VERSION}-incubating-sdist.tar.gz"
+          SDIST_PATH="dist/apache_burr-${BURR_VERSION}.tar.gz"
           export SOURCE_DATE_EPOCH=$(python -c \
             "import sys, tarfile; print(int(tarfile.open(sys.argv[1]).next().mtime))" \
             "$SDIST_PATH")

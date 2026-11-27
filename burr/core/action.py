@@ -807,6 +807,14 @@ class Condition(Function):
         for example a dashboard rule editor, a YAML-driven graph definition, or any user
         input. Use ``expr`` when the expression is authored by a developer and checked in.
 
+        .. warning::
+
+            Restricting syntax does not limit CPU or memory consumption. Expressions
+            such as large exponentiations or string repetitions can exhaust resources.
+            Applications accepting untrusted expressions must enforce their own resource
+            limits, for example by evaluating them in an isolated worker with time and
+            memory limits. Do not rely on ``safe_expr`` alone to prevent denial of service.
+
         The allowed grammar is intentionally small:
 
         - Constants: ``int``, ``float``, ``str``, ``bool``, ``None``.

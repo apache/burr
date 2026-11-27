@@ -799,16 +799,14 @@ def _build_sdist_from_git(
         if not original_sdist.is_file():
             _fail(f"Could not find sdist: {original_sdist}")
 
-        apache_sdist = os.path.join(
-            output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
-        )
-        if os.path.exists(apache_sdist):
-            os.remove(apache_sdist)
-        shutil.move(original_sdist, apache_sdist)
+        output_sdist = os.path.join(output_dir, f"apache_burr-{version.lower()}.tar.gz")
+        if os.path.exists(output_sdist):
+            os.remove(output_sdist)
+        shutil.move(original_sdist, output_sdist)
 
-    print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
+    print(f"    ✓ Saved to: {os.path.basename(output_sdist)}")
 
-    return apache_sdist
+    return output_sdist
 
 
 # ============================================================================
@@ -969,22 +967,34 @@ def _build_wheel_from_current_dir(
     try:
         epoch = source_date_epoch if source_date_epoch is not None else _wheel_source_date_epoch()
 
-        _run_command(
-            ["flit", "build", "--format", "wheel"],
-            description="",
-            error_message="Wheel build failed",
-            success_message="Wheel built successfully",
-            env=_release_build_environment(epoch),
+        # Let Flit generate metadata and RECORD for the artifact-specific LICENSE.
+        license_path, config_path = Path("LICENSE"), Path(VERSION_FILE)
+        source_license, source_config = license_path.read_bytes(), config_path.read_bytes()
+        wheel_config = source_config.replace(
+            b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+            b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
         )
+        if wheel_config == source_config:
+            _fail(
+                "Could not stage wheel LICENSE: expected license-files setting not found in pyproject.toml"
+            )
+        try:
+            license_path.write_bytes(Path("LICENSE-wheel").read_bytes())
+            config_path.write_bytes(wheel_config)
+            _run_command(
+                ["flit", "build", "--format", "wheel"],
+                description="",
+                error_message="Wheel build failed",
+                success_message="Wheel built successfully",
+                env=_release_build_environment(epoch),
+            )
+        finally:
+            license_path.write_bytes(source_license)
+            config_path.write_bytes(source_config)
 
-        # Find the wheel
-        wheel_pattern = f"dist/apache_burr-{version}*.whl"
-        wheel_files = glob.glob(wheel_pattern)
-
-        if not wheel_files:
-            _fail(f"No wheel found matching: {wheel_pattern}")
-
-        wheel_path = wheel_files[0]
+        wheel_path = f"dist/apache_burr-{version}-py3-none-any.whl"
+        if not os.path.isfile(wheel_path):
+            _fail(f"No wheel found at: {wheel_path}")
         print(f"    ✓ Wheel created: {os.path.basename(wheel_path)}")
 
         # flit build always writes to dist/. If the caller asked for a
@@ -1075,7 +1085,6 @@ def _collect_all_artifacts(version: str, output_dir: str = "dist") -> list[str]:
 
     artifacts = []
     for filename in os.listdir(output_dir):
-        # Match both incubating artifacts and wheel (which doesn't have -incubating suffix)
         version_match = f"{version}-incubating" in filename or f"{version}" in filename
         if version_match:
             if any(filename.endswith(ext) for ext in [".tar.gz", ".whl", ".asc", ".sha512"]):
@@ -1212,7 +1221,7 @@ def _expected_promotion_artifact_patterns(version: str) -> dict[str, str]:
     """Return the required artifact patterns for a final release promotion."""
     return {
         "source_archive": f"apache-burr-{version}-incubating-src.tar.gz",
-        "sdist": f"apache-burr-{version}-incubating-sdist.tar.gz",
+        "sdist": f"apache_burr-{version}.tar.gz",
         "wheel": f"apache_burr-{version}-*.whl",
     }
 
@@ -1254,7 +1263,8 @@ def _twine_upload_command(promoted_artifacts: list[str]) -> str:
     upload_candidates = [
         artifact
         for artifact in promoted_artifacts
-        if artifact.endswith(".whl") or artifact.endswith("-incubating-sdist.tar.gz")
+        if artifact.endswith(".whl")
+        or re.fullmatch(r"apache_burr-[^-]+\.tar\.gz", os.path.basename(artifact))
     ]
     upload_names = " ".join(sorted(os.path.basename(artifact) for artifact in upload_candidates))
     return f"twine upload {upload_names}"

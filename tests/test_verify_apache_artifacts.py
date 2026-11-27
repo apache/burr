@@ -24,6 +24,8 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+import pytest
+
 
 def _load_verify_module():
     module_path = Path(__file__).resolve().parent.parent / "scripts" / "verify_apache_artifacts.py"
@@ -88,9 +90,7 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
                 "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
                 "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
                 "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
-                "apache_burr-0.41.0.dist-info/licenses/LICENSE-wheel": _reference_text(
-                    "LICENSE-wheel"
-                ),
+                "apache_burr-0.41.0.dist-info/licenses/LICENSE": _reference_text("LICENSE-wheel"),
             },
         )
 
@@ -99,12 +99,36 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
         assert summary.ok is True
 
 
-def test_verify_artifact_contents_fails_when_wheel_license_file_is_missing():
+@pytest.mark.parametrize(
+    "artifact_name",
+    ["apache_burr-0.43.0.tar.gz", "apache-burr-0.43.0-incubating-sdist.tar.gz"],
+)
+@pytest.mark.parametrize("license_name", ["LICENSE-sdist", "LICENSE", "LICENSE-wheel", None])
+def test_verify_sdist_requires_its_own_license(tmp_path, artifact_name, license_name):
+    files = {name: _reference_text(name) for name in ("NOTICE", "DISCLAIMER")}
+    if license_name is not None:
+        files["LICENSE"] = _reference_text(license_name)
+    _write_tar_gz(tmp_path / artifact_name, "apache_burr-0.43.0", files)
+
+    summary = verify.VerificationSummary()
+    expected_valid = license_name == "LICENSE-sdist"
+    assert verify.verify_artifact_contents(str(tmp_path), summary) is expected_valid
+    assert summary.ok is expected_valid
+    assert verify._release_artifact_map(str(tmp_path))["sdist"] == [artifact_name]
+
+
+@pytest.mark.parametrize("license_name", [None, "LICENSE-wheel", "LICENSE"])
+def test_verify_artifact_contents_rejects_missing_old_or_source_license(license_name):
     with tempfile.TemporaryDirectory() as temp_dir:
         artifacts_dir = Path(temp_dir) / "dist"
         artifacts_dir.mkdir()
 
         wheel_path = artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl"
+        license_files = {}
+        if license_name:
+            license_files[
+                f"apache_burr-0.41.0.dist-info/licenses/{license_name}"
+            ] = _reference_text(license_name)
         _write_wheel(
             wheel_path,
             {
@@ -113,13 +137,14 @@ def test_verify_artifact_contents_fails_when_wheel_license_file_is_missing():
                 "apache_burr-0.41.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
                 "apache_burr-0.41.0.dist-info/licenses/NOTICE": _reference_text("NOTICE"),
                 "apache_burr-0.41.0.dist-info/licenses/DISCLAIMER": _reference_text("DISCLAIMER"),
+                **license_files,
             },
         )
 
         summary = verify.VerificationSummary()
         assert verify.verify_artifact_contents(str(artifacts_dir), summary) is False
         assert any(
-            result.name.endswith("contains LICENSE-wheel") and result.status == verify.FAIL
+            result.name.endswith("contains LICENSE") and result.status == verify.FAIL
             for result in summary.results
         )
 
@@ -130,7 +155,7 @@ def test_verify_reproducible_build_compares_rebuilt_outputs(monkeypatch):
         artifacts_dir.mkdir()
 
         source_tar = artifacts_dir / "apache-burr-0.41.0-incubating-src.tar.gz"
-        release_sdist = artifacts_dir / "apache-burr-0.41.0-incubating-sdist.tar.gz"
+        release_sdist = artifacts_dir / "apache_burr-0.41.0.tar.gz"
         release_wheel = artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl"
 
         _write_tar_gz(source_tar, "apache-burr-0.41.0-incubating-src", {"README.md": b"source"})
@@ -257,16 +282,48 @@ def test_rat_scan_target_prefers_single_extracted_project_dir():
         assert rat_target == "apache-burr-0.41.0-incubating-src"
 
 
-def test_artifact_files_ignores_rat_reports():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        artifacts_dir = Path(temp_dir)
-        (artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl").write_bytes(b"wheel")
-        (artifacts_dir / "rat-report-sample.xml").write_text("report", encoding="utf-8")
-        (artifacts_dir / "rat-report-sample.txt").write_text("report", encoding="utf-8")
+def test_artifact_files_ignores_unrelated_files(tmp_path):
+    artifacts = [
+        "apache-burr-0.43.0-incubating-src.tar.gz",
+        "apache_burr-0.43.0.tar.gz",
+        "apache-burr-0.43.0-incubating-sdist.tar.gz",
+        "apache_burr-0.43.0-py3-none-any.whl",
+    ]
+    unrelated = [
+        "KEYS",
+        "README.md",
+        "rat-report-sample.xml",
+        "rat-report-sample.txt",
+        "apache-rat-0.18.tar.gz",
+        "other_package-1.0-py3-none-any.whl",
+    ]
+    for name in artifacts + unrelated:
+        (tmp_path / name).write_bytes(b"content")
+    for name in artifacts:
+        for suffix in (".asc", ".sha512"):
+            (tmp_path / (name + suffix)).write_bytes(b"companion")
+    (tmp_path / "apache_burr-0.42.0-py3-none-any.whl").mkdir()
 
-        artifact_files = verify._artifact_files(str(artifacts_dir))
+    assert verify._artifact_files(str(tmp_path)) == sorted(artifacts)
 
-        assert artifact_files == ["apache_burr-0.41.0-py3-none-any.whl"]
+
+def test_verify_signatures_still_requires_artifact_companions(tmp_path):
+    wheel_path = tmp_path / "apache_burr-0.43.0-py3-none-any.whl"
+    _write_wheel(
+        wheel_path,
+        {
+            "burr/__init__.py": b"# example\n" * 200,
+            "apache_burr-0.43.0.dist-info/METADATA": b"Metadata-Version: 2.1\n",
+            "apache_burr-0.43.0.dist-info/WHEEL": b"Wheel-Version: 1.0\n",
+        },
+    )
+    (tmp_path / "KEYS").write_text("key file", encoding="utf-8")
+
+    summary = verify.VerificationSummary()
+    assert verify.verify_signatures(str(tmp_path), summary) is False
+    failures = [result for result in summary.results if result.status == verify.FAIL]
+    assert {result.details for result in failures} == {"missing .asc", "missing .sha512"}
+    assert all(wheel_path.name in result.name for result in failures)
 
 
 def test_wheel_content_hashes_returns_sha256_per_file(tmp_path):

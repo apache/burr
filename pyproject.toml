@@ -89,6 +89,8 @@ aerospike = [
 ]
 
 release = [
+  "flit",
+  "twine",
   "jinja2",
 ]
 
@@ -265,8 +267,7 @@ burr-test-case = "burr.cli.__main__:cli_test_case"
 
 [dependency-groups]
 dev = [
-  "apache-burr[cli]",
-  "flit",
+  "apache-burr[cli,release]",
 ]
 
 [tool.flit.module]
@@ -275,6 +276,7 @@ name = "burr"
 
 [tool.flit.sdist]
 include = [
+  ".rat-excludes",
   "LICENSE",
   "NOTICE",
   "DISCLAIMER",
@@ -289,7 +291,8 @@ include = [
   "examples/hello-world-counter/**",
 ]
 exclude = [
-  # burr-redirect: non-ASF PyPI redirect package, not part of the ASF source release.
+  # Redirect-package sources ship in the full source archive, but are not needed
+  # to build apache-burr and are excluded from its sdist.
   "burr-redirect/**",
   "telemetry/ui/node_modules/**",
   "telemetry/ui/build/**",
