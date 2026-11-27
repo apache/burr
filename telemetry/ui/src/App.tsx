@@ -17,7 +17,8 @@
  * under the License.
  */
 
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, useRoutes } from 'react-router-dom';
+import type { RouteObject } from 'react-router-dom';
 import './App.css';
 import { ProjectList } from './components/routes/ProjectList';
 import { AppList } from './components/routes/AppList';
@@ -48,6 +49,46 @@ import { useTheme } from './hooks/useTheme';
  *
  * @returns A rendered application object
  */
+export const appRoutes: RouteObject[] = [
+  { id: 'root', path: '/', element: <Navigate to="/projects" /> },
+  { id: 'projects', path: '/projects', element: <ProjectList /> },
+  { id: 'project-apps-all', path: '/project/:projectId', element: <AppList /> },
+  {
+    id: 'identity-app-list',
+    path: '/partition-identity/:projectId/apps',
+    element: <AppList />
+  },
+  {
+    id: 'identity-app-detail',
+    path: '/partition-identity/:projectId/app/:appId',
+    element: <AppViewContainer />
+  },
+  { id: 'legacy-app-list', path: '/project/:projectId/:partitionKey', element: <AppList /> },
+  {
+    id: 'legacy-app-detail',
+    path: '/project/:projectId/:partitionKey/:appId',
+    element: <AppViewContainer />
+  },
+  { id: 'annotations', path: '/annotations/:projectId/', element: <AnnotationsViewContainer /> },
+  { id: 'demo-counter', path: '/demos/counter', element: <Counter /> },
+  { id: 'demo-chatbot', path: '/demos/chatbot', element: <ChatbotWithTelemetry /> },
+  {
+    id: 'demo-streaming-chatbot',
+    path: '/demos/streaming-chatbot',
+    element: <StreamingChatbotWithTelemetry />
+  },
+  { id: 'demo-email', path: '/demos/email-assistant', element: <EmailAssistantWithTelemetry /> },
+  {
+    id: 'demo-deep-researcher',
+    path: '/demos/deep-researcher',
+    element: <DeepResearcherWithTelemetry />
+  },
+  { id: 'admin', path: '/admin', element: <AdminView /> },
+  { id: 'fallback', path: '*', element: <Navigate to="/projects" /> }
+];
+
+const AppRoutes = () => useRoutes(appRoutes);
+
 const App = () => {
   // Initialize theme at the app root so the `dark` class is applied on load
   // (respects system preference, falls back to stored manual override).
@@ -56,21 +97,7 @@ const App = () => {
     <QueryClientProvider client={new QueryClient()}>
       <Router basename={window.__BURR_BASE_PATH__ || ''}>
         <AppContainer>
-          <Routes>
-            <Route path="/" element={<Navigate to="/projects" />} />
-            <Route path="/projects" element={<ProjectList />} />
-            <Route path="/project/:projectId" element={<AppList />} />
-            <Route path="/project/:projectId/:partitionKey" element={<AppList />} />
-            <Route path="/project/:projectId/:partitionKey/:appId" element={<AppViewContainer />} />
-            <Route path="/annotations/:projectId/" element={<AnnotationsViewContainer />} />
-            <Route path="/demos/counter" element={<Counter />} />
-            <Route path="/demos/chatbot" element={<ChatbotWithTelemetry />} />
-            <Route path="/demos/streaming-chatbot" element={<StreamingChatbotWithTelemetry />} />
-            <Route path="/demos/email-assistant" element={<EmailAssistantWithTelemetry />} />
-            <Route path="/demos/deep-researcher" element={<DeepResearcherWithTelemetry />} />
-            <Route path="/admin" element={<AdminView />} />
-            <Route path="*" element={<Navigate to="/projects" />} />
-          </Routes>
+          <AppRoutes />
         </AppContainer>
       </Router>
     </QueryClientProvider>

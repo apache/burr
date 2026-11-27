@@ -79,6 +79,73 @@ export class DefaultService {
     });
   }
   /**
+   * List Apps By Partition Query
+   * List applications with an unambiguous partition identity.
+   * @param projectId
+   * @param partitionKey
+   * @param nonePartition
+   * @param limit
+   * @param offset
+   * @returns ApplicationPage Successful Response
+   * @throws ApiError
+   */
+  public static listAppsByPartitionQuery(
+    projectId: string,
+    partitionKey?: string,
+    nonePartition?: boolean,
+    limit: number = 100,
+    offset?: number
+  ): CancelablePromise<ApplicationPage> {
+    return __request(OpenAPI, {
+      method: 'GET',
+      url: '/api/v0/apps/{project_id}/list',
+      path: {
+        project_id: projectId
+      },
+      query: {
+        partition_key: partitionKey,
+        none_partition: nonePartition,
+        limit: limit,
+        offset: offset
+      },
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
+   * Get Application Logs By Partition Query
+   * Get steps for an application with an unambiguous partition identity.
+   * @param projectId
+   * @param appId
+   * @param partitionKey
+   * @param nonePartition
+   * @returns ApplicationLogs Successful Response
+   * @throws ApiError
+   */
+  public static getApplicationLogsByPartitionQuery(
+    projectId: string,
+    appId: string,
+    partitionKey?: string,
+    nonePartition?: boolean
+  ): CancelablePromise<ApplicationLogs> {
+    return __request(OpenAPI, {
+      method: 'GET',
+      url: '/api/v0/apps/{project_id}/{app_id}/detail',
+      path: {
+        project_id: projectId,
+        app_id: appId
+      },
+      query: {
+        partition_key: partitionKey,
+        none_partition: nonePartition
+      },
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
    * Get Apps
    * Gets all apps visible by the user
    *
@@ -158,6 +225,43 @@ export class DefaultService {
    * @returns AnnotationOut Successful Response
    * @throws ApiError
    */
+  public static createAnnotationByPartitionQuery(
+    projectId: string,
+    appId: string,
+    sequenceId: number,
+    requestBody: AnnotationCreate,
+    partitionKey?: string,
+    nonePartition?: boolean
+  ): CancelablePromise<AnnotationOut> {
+    return __request(OpenAPI, {
+      method: 'POST',
+      url: '/api/v0/apps/{project_id}/{app_id}/annotations/{sequence_id}',
+      path: {
+        project_id: projectId,
+        app_id: appId,
+        sequence_id: sequenceId
+      },
+      query: {
+        partition_key: partitionKey,
+        none_partition: nonePartition
+      },
+      body: requestBody,
+      mediaType: 'application/json',
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
+   * Create Annotation
+   * @param projectId
+   * @param appId
+   * @param partitionKey
+   * @param sequenceId
+   * @param requestBody
+   * @returns AnnotationOut Successful Response
+   * @throws ApiError
+   */
   public static createAnnotationApiV0ProjectIdAppIdPartitionKeySequenceIdAnnotationsPost(
     projectId: string,
     appId: string,
@@ -209,6 +313,41 @@ export class DefaultService {
     });
   }
   /**
+   * Get Annotations By Partition Query
+   * Get annotations with an unambiguous partition identity.
+   * @param projectId
+   * @param appId
+   * @param partitionKey
+   * @param stepSequenceId
+   * @param nonePartition
+   * @returns AnnotationOut Successful Response
+   * @throws ApiError
+   */
+  public static getAnnotationsByPartitionQuery(
+    projectId: string,
+    appId?: string | null,
+    partitionKey?: string | null,
+    stepSequenceId?: number | null,
+    nonePartition?: boolean
+  ): CancelablePromise<Array<AnnotationOut>> {
+    return __request(OpenAPI, {
+      method: 'GET',
+      url: '/api/v0/apps/{project_id}/annotations',
+      path: {
+        project_id: projectId
+      },
+      query: {
+        app_id: appId,
+        partition_key: partitionKey,
+        step_sequence_id: stepSequenceId,
+        none_partition: nonePartition
+      },
+      errors: {
+        422: `Validation Error`
+      }
+    });
+  }
+  /**
    * Get Annotations
    * @param projectId
    * @param appId
@@ -221,7 +360,8 @@ export class DefaultService {
     projectId: string,
     appId?: string | null,
     partitionKey?: string | null,
-    stepSequenceId?: number | null
+    stepSequenceId?: number | null,
+    nonePartition?: boolean
   ): CancelablePromise<Array<AnnotationOut>> {
     return __request(OpenAPI, {
       method: 'GET',
@@ -232,7 +372,8 @@ export class DefaultService {
       query: {
         app_id: appId,
         partition_key: partitionKey,
-        step_sequence_id: stepSequenceId
+        step_sequence_id: stepSequenceId,
+        none_partition: nonePartition
       },
       errors: {
         422: `Validation Error`
