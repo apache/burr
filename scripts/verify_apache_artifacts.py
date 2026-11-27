@@ -130,7 +130,7 @@ def _sha512_for_file(path: str) -> str:
 def _read_expected_text_files() -> dict[str, bytes]:
     project_root = Path(__file__).resolve().parent.parent
     expected: dict[str, bytes] = {}
-    for filename in (*REQUIRED_TEXT_FILES, "LICENSE-wheel"):
+    for filename in (*REQUIRED_TEXT_FILES, "LICENSE-sdist", "LICENSE-wheel"):
         expected[filename] = (project_root / filename).read_bytes()
     return expected
 
@@ -139,7 +139,7 @@ def _artifact_files(artifacts_dir: str) -> list[str]:
     """Select Burr release packages, ignoring keys, reports, and companion files."""
     artifact_pattern = re.compile(
         r"(?:apache-burr-[^-]+-incubating-(?:src|sdist)\.tar\.gz"
-        r"|apache_burr-[^-]+-py3-none-any\.whl)"
+        r"|apache_burr-[^-]+\.tar\.gz|apache_burr-[^-]+-py3-none-any\.whl)"
     )
     return sorted(
         name
@@ -436,11 +436,12 @@ def verify_artifact_contents(
 
         if artifact_name.endswith(".tar.gz"):
             file_bytes = _tar_file_bytes(artifact_path)
+            license_name = "LICENSE" if artifact_name.endswith("-src.tar.gz") else "LICENSE-sdist"
             if not _verify_required_text_files(
                 artifact_name,
                 file_bytes,
                 REQUIRED_TEXT_FILES,
-                expected_files,
+                {**expected_files, "LICENSE": expected_files[license_name]},
                 summary,
             ):
                 all_valid = False
@@ -780,7 +781,11 @@ def _release_artifact_map(artifacts_dir: str) -> dict[str, list[str]]:
     artifacts = _artifact_files(artifacts_dir)
     return {
         "source": [name for name in artifacts if name.endswith("-src.tar.gz")],
-        "sdist": [name for name in artifacts if name.endswith("-sdist.tar.gz")],
+        "sdist": [
+            name
+            for name in artifacts
+            if name.endswith(".tar.gz") and not name.endswith("-src.tar.gz")
+        ],
         "wheel": [name for name in artifacts if name.endswith(".whl")],
     }
 

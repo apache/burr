@@ -46,22 +46,21 @@ Specifically, we set the following guidelines:
 - **Keep wheel filenames without `incubating`.** Wheels use names such as
   `apache_burr-0.43.0-py3-none-any.whl`, without the proposed `1incubating` build tag.
   They are convenience binaries; the source archive is the voting artifact.
-  We retain the exact wheel in Apache dist for provenance and verification against
-  the package published to PyPI. This is the project's chosen approach from the
-  [dev-list discussion](https://lists.apache.org/thread/7t31297fhwqp9sqo6nvopgf0qw10zy4y);
-  it does not clear the Clutch filename warning.
+  For now, we retain the exact wheel in Apache dist for provenance and verification
+  against the package published to PyPI. The
+  [dev-list discussion](https://lists.apache.org/thread/7t31297fhwqp9sqo6nvopgf0qw10zy4y)
+  remains open; this approach does not clear the Clutch filename warning.
 - **Keep `LICENSE-wheel` in the sdist.** Rebuilding a wheel from the sdist builds
   the tracking UI and bundles its JavaScript dependencies. `LICENSE-wheel` supplies
   the acknowledgements for those dependencies and is packaged in the rebuilt wheel
   as `LICENSE`. The sdist's own `LICENSE` describes the source files it ships;
   retaining `LICENSE-wheel` supports the subsequent wheel build.
-- **Keep `incubating` in the Apache sdist filename.** The release helper continues
-  to produce names such as `apache-burr-0.43.0-incubating-sdist.tar.gz`. This naming
-  can interfere with pip inferring the package name and version when installing
-  directly from an archive URL. We accept that limitation during incubation rather
-  than introduce a temporary naming change, and will revisit it on graduation.
-  Install the wheel or the package from PyPI for normal use; extract the source
-  archive for the build and verification workflow below.
+- **Keep the sdist's Python package filename.** The release helper produces names
+  such as `apache_burr-0.43.0.tar.gz`. Like the wheel, the sdist is a Python
+  convenience package: retain the same filename and bytes in Apache dist and on
+  PyPI, without a rename before upload. The ASF source release remains
+  `apache-burr-0.43.0-incubating-src.tar.gz`. This naming change does not resolve
+  the ongoing Clutch discussion.
 
 # Release Process
 
@@ -220,14 +219,14 @@ gpg --import KEYS
 gpg --verify apache-burr-${VERSION}-incubating-src.tar.gz.asc apache-burr-${VERSION}-incubating-src.tar.gz
 
 # Verify sdist signature
-gpg --verify apache-burr-${VERSION}-incubating-sdist.tar.gz.asc apache-burr-${VERSION}-incubating-sdist.tar.gz
+gpg --verify apache_burr-${VERSION}.tar.gz.asc apache_burr-${VERSION}.tar.gz
 
 # Verify wheel signature
 gpg --verify apache_burr-${VERSION}-py3-none-any.whl.asc apache_burr-${VERSION}-py3-none-any.whl
 
 # 3. Verify all SHA512 checksums
 sha512sum -c apache-burr-${VERSION}-incubating-src.tar.gz.sha512
-sha512sum -c apache-burr-${VERSION}-incubating-sdist.tar.gz.sha512
+sha512sum -c apache_burr-${VERSION}.tar.gz.sha512
 sha512sum -c apache_burr-${VERSION}-py3-none-any.whl.sha512
 
 # 4. Extract the source archive

@@ -799,16 +799,14 @@ def _build_sdist_from_git(
         if not original_sdist.is_file():
             _fail(f"Could not find sdist: {original_sdist}")
 
-        apache_sdist = os.path.join(
-            output_dir, f"apache-burr-{version.lower()}-incubating-sdist.tar.gz"
-        )
-        if os.path.exists(apache_sdist):
-            os.remove(apache_sdist)
-        shutil.move(original_sdist, apache_sdist)
+        output_sdist = os.path.join(output_dir, f"apache_burr-{version.lower()}.tar.gz")
+        if os.path.exists(output_sdist):
+            os.remove(output_sdist)
+        shutil.move(original_sdist, output_sdist)
 
-    print(f"    ✓ Renamed to: {os.path.basename(apache_sdist)}")
+    print(f"    ✓ Saved to: {os.path.basename(output_sdist)}")
 
-    return apache_sdist
+    return output_sdist
 
 
 # ============================================================================
@@ -1223,7 +1221,7 @@ def _expected_promotion_artifact_patterns(version: str) -> dict[str, str]:
     """Return the required artifact patterns for a final release promotion."""
     return {
         "source_archive": f"apache-burr-{version}-incubating-src.tar.gz",
-        "sdist": f"apache-burr-{version}-incubating-sdist.tar.gz",
+        "sdist": f"apache_burr-{version}.tar.gz",
         "wheel": f"apache_burr-{version}-*.whl",
     }
 
@@ -1265,7 +1263,8 @@ def _twine_upload_command(promoted_artifacts: list[str]) -> str:
     upload_candidates = [
         artifact
         for artifact in promoted_artifacts
-        if artifact.endswith(".whl") or artifact.endswith("-incubating-sdist.tar.gz")
+        if artifact.endswith(".whl")
+        or re.fullmatch(r"apache_burr-[^-]+\.tar\.gz", os.path.basename(artifact))
     ]
     upload_names = " ".join(sorted(os.path.basename(artifact) for artifact in upload_candidates))
     return f"twine upload {upload_names}"

@@ -126,7 +126,7 @@ def test_build_sdist_uses_artifact_specific_license(monkeypatch, tmp_path):
 
     artifact = Path(release._build_sdist_from_git("0.42.0", str(output_dir)))
 
-    assert artifact == output_dir / "apache-burr-0.42.0-incubating-sdist.tar.gz"
+    assert artifact == output_dir / "apache_burr-0.42.0.tar.gz"
     with tarfile.open(artifact, "r:gz") as archive:
         license_text = archive.extractfile("apache_burr-0.42.0/LICENSE").read().decode()
         assert license_text == project_files["LICENSE-sdist"]
@@ -182,7 +182,7 @@ def _write_artifact_set(directory: Path, version: str, wheel_name: str = None) -
     wheel_name = wheel_name or f"apache_burr-{version}-py3-none-any.whl"
     artifact_names = [
         f"apache-burr-{version}-incubating-src.tar.gz",
-        f"apache-burr-{version}-incubating-sdist.tar.gz",
+        f"apache_burr-{version}.tar.gz",
         wheel_name,
     ]
     for artifact_name in artifact_names:
@@ -210,7 +210,7 @@ def test_validate_promotion_artifacts_requires_expected_set(tmp_path):
 
     assert len(artifacts) == 9
     assert any(path.endswith("apache-burr-0.42.0-incubating-src.tar.gz") for path in artifacts)
-    assert any(path.endswith("apache-burr-0.42.0-incubating-sdist.tar.gz") for path in artifacts)
+    assert any(path.endswith("apache_burr-0.42.0.tar.gz") for path in artifacts)
     assert any(path.endswith(wheel_name) for path in artifacts)
 
 
@@ -236,14 +236,15 @@ def test_twine_upload_command_includes_only_sdist_and_wheel():
         [
             "apache-burr-0.42.0-incubating-src.tar.gz",
             "apache-burr-0.42.0-incubating-src.tar.gz.asc",
-            "apache-burr-0.42.0-incubating-sdist.tar.gz",
+            "apache_burr-0.42.0.tar.gz",
+            "apache_burr-0.42.0.tar.gz.asc",
+            "apache_burr-0.42.0.tar.gz.sha512",
             "apache_burr-0.42.0-py3-none-any.whl",
         ]
     )
 
     assert command == (
-        "twine upload apache-burr-0.42.0-incubating-sdist.tar.gz "
-        "apache_burr-0.42.0-py3-none-any.whl"
+        "twine upload apache_burr-0.42.0-py3-none-any.whl " "apache_burr-0.42.0.tar.gz"
     )
 
 
@@ -280,7 +281,7 @@ def test_cmd_promote_dry_run_uses_server_copy_without_committing(monkeypatch, tm
     def fake_validate(rc_checkout_dir: str, version: str):
         assert version == "0.42.0"
         return [
-            f"{rc_checkout_dir}/apache-burr-0.42.0-incubating-sdist.tar.gz",
+            f"{rc_checkout_dir}/apache_burr-0.42.0.tar.gz",
             f"{rc_checkout_dir}/apache_burr-0.42.0-py3-none-any.whl",
         ]
 

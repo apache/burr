@@ -99,6 +99,24 @@ def test_verify_artifact_contents_passes_for_tarball_and_wheel():
         assert summary.ok is True
 
 
+@pytest.mark.parametrize(
+    "artifact_name",
+    ["apache_burr-0.43.0.tar.gz", "apache-burr-0.43.0-incubating-sdist.tar.gz"],
+)
+@pytest.mark.parametrize("license_name", ["LICENSE-sdist", "LICENSE", "LICENSE-wheel", None])
+def test_verify_sdist_requires_its_own_license(tmp_path, artifact_name, license_name):
+    files = {name: _reference_text(name) for name in ("NOTICE", "DISCLAIMER")}
+    if license_name is not None:
+        files["LICENSE"] = _reference_text(license_name)
+    _write_tar_gz(tmp_path / artifact_name, "apache_burr-0.43.0", files)
+
+    summary = verify.VerificationSummary()
+    expected_valid = license_name == "LICENSE-sdist"
+    assert verify.verify_artifact_contents(str(tmp_path), summary) is expected_valid
+    assert summary.ok is expected_valid
+    assert verify._release_artifact_map(str(tmp_path))["sdist"] == [artifact_name]
+
+
 @pytest.mark.parametrize("license_name", [None, "LICENSE-wheel", "LICENSE"])
 def test_verify_artifact_contents_rejects_missing_old_or_source_license(license_name):
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -137,7 +155,7 @@ def test_verify_reproducible_build_compares_rebuilt_outputs(monkeypatch):
         artifacts_dir.mkdir()
 
         source_tar = artifacts_dir / "apache-burr-0.41.0-incubating-src.tar.gz"
-        release_sdist = artifacts_dir / "apache-burr-0.41.0-incubating-sdist.tar.gz"
+        release_sdist = artifacts_dir / "apache_burr-0.41.0.tar.gz"
         release_wheel = artifacts_dir / "apache_burr-0.41.0-py3-none-any.whl"
 
         _write_tar_gz(source_tar, "apache-burr-0.41.0-incubating-src", {"README.md": b"source"})
@@ -267,6 +285,7 @@ def test_rat_scan_target_prefers_single_extracted_project_dir():
 def test_artifact_files_ignores_unrelated_files(tmp_path):
     artifacts = [
         "apache-burr-0.43.0-incubating-src.tar.gz",
+        "apache_burr-0.43.0.tar.gz",
         "apache-burr-0.43.0-incubating-sdist.tar.gz",
         "apache_burr-0.43.0-py3-none-any.whl",
     ]
