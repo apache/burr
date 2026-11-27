@@ -1005,7 +1005,10 @@ class Application(Generic[ApplicationStateType]):
         )
 
     def _step(
-        self, inputs: Optional[Dict[str, Any]], _run_hooks: bool = True
+        self,
+        inputs: Optional[Dict[str, Any]],
+        _run_hooks: bool = True,
+        _processed_inputs: Optional[Dict[str, Any]] = None,
     ) -> Optional[Tuple[Action, dict, State]]:
         """Internal-facing version of step. This is the same as step, but with an additional
         parameter to hide hook execution so async can leverage it."""
@@ -1015,7 +1018,11 @@ class Application(Generic[ApplicationStateType]):
                 return None
             if inputs is None:
                 inputs = {}
-            action_inputs = self._process_inputs(inputs, next_action)
+            action_inputs = (
+                self._process_inputs(inputs, next_action)
+                if _processed_inputs is None
+                else _processed_inputs
+            )
             if _run_hooks:
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "pre_run_step",
@@ -1144,7 +1151,12 @@ class Application(Generic[ApplicationStateType]):
         out = await self._astep(inputs=inputs, _run_hooks=True)
         return out
 
-    async def _astep(self, inputs: Optional[Dict[str, Any]], _run_hooks: bool = True):
+    async def _astep(
+        self,
+        inputs: Optional[Dict[str, Any]],
+        _run_hooks: bool = True,
+        _processed_inputs: Optional[Dict[str, Any]] = None,
+    ):
         # we want to increment regardless of failure
         with self.context:
             next_action = self.get_next_action()
@@ -1152,12 +1164,17 @@ class Application(Generic[ApplicationStateType]):
                 return None
             if inputs is None:
                 inputs = {}
+            action_inputs = (
+                self._process_inputs(inputs, next_action)
+                if _processed_inputs is None
+                else _processed_inputs
+            )
             if _run_hooks:
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "pre_run_step",
                     action=next_action,
                     state=self._state,
-                    inputs=inputs,
+                    inputs=action_inputs,
                     sequence_id=self.sequence_id,
                     app_id=self._uid,
                     partition_key=self._partition_key,
@@ -1171,16 +1188,17 @@ class Application(Generic[ApplicationStateType]):
                     # but that's safer than assuming its OK to launch a thread
                     # TODO -- add an option/configuration to launch a thread (yikes, not super safe, but for a pure function
                     # which this is supposed to be its OK).
-                    # In this case we allow the self._step to do input processing
                     # Execute the synchronous step without hooks here. Async hooks still run
                     # afterward so async persisters can save the completed state of synchronous steps.
-                    output = self._step(inputs=inputs, _run_hooks=False)
+                    output = self._step(
+                        inputs=inputs,
+                        _run_hooks=False,
+                        _processed_inputs=action_inputs,
+                    )
                     if output is None:
                         return None
                     next_action, result, new_state = output
-                # In this case we want to process inputs because we run the function directly
                 else:
-                    action_inputs = self._process_inputs(inputs, next_action)
                     if next_action.single_step:
                         result, new_state = await _arun_single_step_action(
                             next_action, self._state, inputs=action_inputs
@@ -1588,11 +1606,12 @@ class Application(Generic[ApplicationStateType]):
                         results=results, final_state=state
                     )
             self._increment_sequence_id()
+            action_inputs = self._process_inputs(inputs, next_action)
             self._adapter_set.call_all_lifecycle_hooks_sync(
                 "pre_run_step",
                 action=next_action,
                 state=self._state,
-                inputs=inputs,
+                inputs=action_inputs,
                 sequence_id=self.sequence_id,
                 app_id=self._uid,
                 partition_key=self._partition_key,
@@ -1635,11 +1654,12 @@ class Application(Generic[ApplicationStateType]):
                     partition_key=self._partition_key,
                 )
 
-            action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
-                action, result, state = self._step(inputs=inputs, _run_hooks=False)
+                action, result, state = self._step(
+                    inputs=inputs, _run_hooks=False, _processed_inputs=action_inputs
+                )
                 self._adapter_set.call_all_lifecycle_hooks_sync(
                     "post_run_step",
                     app_id=self._uid,
@@ -1846,11 +1866,12 @@ class Application(Generic[ApplicationStateType]):
                         results=results, final_state=state
                     )
             self._increment_sequence_id()
+            action_inputs = self._process_inputs(inputs, next_action)
             await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                 "pre_run_step",
                 action=next_action,
                 state=self._state,
-                inputs=inputs,
+                inputs=action_inputs,
                 sequence_id=self.sequence_id,
                 app_id=self._uid,
                 partition_key=self._partition_key,
@@ -1891,11 +1912,12 @@ class Application(Generic[ApplicationStateType]):
                 )
                 await call_execute_method_wrapper.acall_post(self, exc)
 
-            action_inputs = self._process_inputs(inputs, next_action)
             if not next_action.streaming:
                 # In this case we are halting at a non-streaming condition
                 # This is allowed as we want to maintain a more consistent API
-                action, result, state = await self._astep(inputs=inputs, _run_hooks=False)
+                action, result, state = await self._astep(
+                    inputs=inputs, _run_hooks=False, _processed_inputs=action_inputs
+                )
                 await self._adapter_set.call_all_lifecycle_hooks_sync_and_async(
                     "post_run_step",
                     app_id=self._uid,
