@@ -82,6 +82,15 @@ from burr.tracking.common.models import (
     InitializeStreamModel,
     PointerModel,
 )
+from burr.tracking.common.partition_paths import (
+    application_directory,
+    join_path,
+    log_has_end_entry,
+    metadata_partition_key,
+    partition_directories,
+    partition_matches,
+    read_metadata,
+)
 from burr.visibility import ActionSpan
 
 logger = logging.getLogger(__name__)
@@ -106,6 +115,69 @@ INPUT_FILTERLIST = {"__tracer"}
 
 def _filter_inputs(d: dict) -> dict:
     return {k: v for k, v in d.items() if k not in INPUT_FILTERLIST}
+
+
+def _resolve_existing_app_dir(
+    app_root: str,
+    partition_key: Optional[str],
+    *,
+    log_filename: str,
+    metadata_filename: str,
+    context: str,
+) -> Optional[str]:
+    """Resolve an existing application directory for a partition, or None if absent.
+
+    Legacy data at ``app_root`` is only accepted when its metadata confirms the requested
+    partition. Missing or mismatched metadata is an explicit error rather than a guess.
+    """
+    legacy_log = join_path(app_root, log_filename)
+    if partition_key is not None:
+        nested_dir = application_directory(app_root, partition_key)
+        nested_log = join_path(nested_dir, log_filename)
+        if log_has_end_entry(nested_log):
+            metadata = read_metadata(join_path(nested_dir, metadata_filename))
+            if not partition_matches(metadata, partition_key):
+                raise ValueError(
+                    f"Local tracking data for {context} is corrupt: partition directory metadata "
+                    f"does not confirm partition {partition_key!r}."
+                )
+            return nested_dir
+        if os.path.exists(legacy_log):
+            metadata = read_metadata(join_path(app_root, metadata_filename))
+            if partition_matches(metadata, partition_key):
+                return app_root
+            raise ValueError(
+                f"Local tracking data for {context} exists at the legacy path but belongs to "
+                f"partition {metadata_partition_key(metadata)!r} (or has no partition metadata). "
+                f"Refusing to load it as partition {partition_key!r}. Move/archive the legacy "
+                "directory explicitly if this is intended."
+            )
+        if os.path.exists(nested_log):
+            metadata = read_metadata(join_path(nested_dir, metadata_filename))
+            if not partition_matches(metadata, partition_key):
+                raise ValueError(
+                    f"Local tracking data for {context} is corrupt: partition directory metadata "
+                    f"does not confirm partition {partition_key!r}."
+                )
+            return nested_dir
+        return None
+
+    if os.path.exists(legacy_log):
+        metadata = read_metadata(join_path(app_root, metadata_filename))
+        if partition_matches(metadata, None):
+            return app_root
+        raise ValueError(
+            f"Local tracking data for {context} belongs to partition "
+            f"{metadata_partition_key(metadata)!r}. Refusing to load it without a partition_key."
+        )
+    if any(
+        log_has_end_entry(join_path(directory, log_filename))
+        for directory in partition_directories(app_root)
+    ):
+        raise ValueError(
+            f"Partition tracking data exists for {context}; supply partition_key to select one."
+        )
+    return None
 
 
 def _allowed_project_name(project_name: str, on_windows: bool) -> bool:
@@ -224,6 +296,7 @@ class LocalTrackingClient(
                 # We do it once for the fork_parent (if it exists), and once for the spawn_parent (if it exists)
                 (
                     fork_parent_pointer_model.app_id,
+                    fork_parent_pointer_model.partition_key,
                     ChildApplicationModel(
                         child=PointerModel(
                             app_id=app_id,
@@ -242,6 +315,7 @@ class LocalTrackingClient(
             parent_relationships.append(
                 (
                     spawn_parent_pointer_model.app_id,
+                    spawn_parent_pointer_model.partition_key,
                     ChildApplicationModel(
                         child=PointerModel(
                             app_id=app_id,
@@ -254,13 +328,14 @@ class LocalTrackingClient(
                     ),
                 )
             )
-        for parent_id, child_of in parent_relationships:
-            parent_path = os.path.join(self.storage_dir, parent_id)
+        for parent_id, parent_partition_key, child_of in parent_relationships:
+            parent_root = join_path(self.storage_dir, parent_id)
+            parent_path = application_directory(parent_root, parent_partition_key)
             if not os.path.exists(parent_path):
                 # This currently makes the parent directory so that it does not fail
                 # If the parent directory exists we'll just use that
                 os.makedirs(parent_path)
-            parent_children_list_path = os.path.join(
+            parent_children_list_path = join_path(
                 parent_path, LocalTrackingClient.CHILDREN_FILENAME
             )
             # Order should not matter here
@@ -285,7 +360,7 @@ class LocalTrackingClient(
 
     @classmethod
     def get_storage_path(cls, project, storage_dir) -> str:
-        return str(os.path.join(os.path.expanduser(storage_dir), project))
+        return str(join_path(os.path.expanduser(storage_dir), project))
 
     @classmethod
     def app_log_exists(
@@ -293,21 +368,29 @@ class LocalTrackingClient(
         project: str,
         app_id: str,
         storage_dir: str = DEFAULT_STORAGE_DIR,
+        partition_key: Optional[str] = None,
     ) -> bool:
         """Function to check if state exists for a given project and app_id.
 
         :param project: the name of the project
         :param app_id: the application instance id
         :param storage_dir: the storage directory.
+        :param partition_key: partition to inspect; None selects legacy/no-partition data.
         :return: True if state exists, False otherwise.
         """
-        path = os.path.join(cls.get_storage_path(project, storage_dir), app_id, cls.LOG_FILENAME)
-        if not os.path.exists(path):
+        app_root = join_path(cls.get_storage_path(project, storage_dir), app_id)
+        directory = _resolve_existing_app_dir(
+            app_root,
+            partition_key,
+            log_filename=cls.LOG_FILENAME,
+            metadata_filename=cls.METADATA_FILENAME,
+            context=f"{project}/{app_id}",
+        )
+        if directory is None:
             return False
-        lines = open(path, "r", errors="replace", encoding="utf-8").readlines()
-        if len(lines) == 0:
-            return False
-        return True
+        path = join_path(directory, cls.LOG_FILENAME)
+        with open(path, "r", errors="replace", encoding="utf-8") as f:
+            return bool(f.readlines())
 
     @classmethod
     def load_state(
@@ -316,6 +399,7 @@ class LocalTrackingClient(
         app_id: str,
         sequence_id: int = -1,
         storage_dir: str = DEFAULT_STORAGE_DIR,
+        partition_key: Optional[str] = None,
     ) -> tuple[dict, str]:
         """This is deprecated and will be removed when we migrate over demos. Do not use! Instead use
         the persistence API :py:class:`initialize_from <burr.core.application.ApplicationBuilder.initialize_from>`
@@ -332,11 +416,22 @@ class LocalTrackingClient(
         :param app_id: the application instance id
         :param sequence_id: the sequence number of the state to load. Defaults to last index (i.e. -1).
         :param storage_dir: the storage directory.
+        :param partition_key: partition to load; None selects legacy/no-partition data.
         :return: the state as a dictionary, and the entry point as a string.
         """
         if sequence_id is None:
             sequence_id = -1  # get the last one
-        path = os.path.join(cls.get_storage_path(project, storage_dir), app_id, cls.LOG_FILENAME)
+        app_root = join_path(cls.get_storage_path(project, storage_dir), app_id)
+        directory = _resolve_existing_app_dir(
+            app_root,
+            partition_key,
+            log_filename=cls.LOG_FILENAME,
+            metadata_filename=cls.METADATA_FILENAME,
+            context=f"{project}/{app_id}",
+        )
+        if directory is None:
+            raise ValueError(f"No logs found for {project}/{app_id} under {storage_dir}")
+        path = join_path(directory, cls.LOG_FILENAME)
         if not os.path.exists(path):
             raise ValueError(f"No logs found for {project}/{app_id} under {storage_dir}")
         with open(path, "r", errors="replace", encoding="utf-8") as f:
@@ -370,14 +465,19 @@ class LocalTrackingClient(
         prior_state["__SEQUENCE_ID"] = line_seq  # add the sequence id back
         return prior_state, entry_point
 
-    def _ensure_dir_structure(self, app_id: str):
+    def _ensure_dir_structure(self, app_id: str, partition_key: Optional[str] = None) -> str:
         if not os.path.exists(self.storage_dir):
             logger.info(f"Creating storage directory: {self.storage_dir}")
             os.makedirs(self.storage_dir)
-        application_path = os.path.join(self.storage_dir, app_id)
+        app_root = join_path(self.storage_dir, app_id)
+        if not os.path.exists(app_root):
+            logger.info(f"Creating application directory: {app_root}")
+            os.makedirs(app_root)
+        application_path = application_directory(app_root, partition_key)
         if not os.path.exists(application_path):
-            logger.info(f"Creating application directory: {application_path}")
+            logger.info(f"Creating partition directory: {application_path}")
             os.makedirs(application_path)
+        return application_path
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -402,15 +502,15 @@ class LocalTrackingClient(
         spawning_parent_pointer: Optional[burr_types.ParentPointer],
         **future_kwargs: Any,
     ):
-        self._ensure_dir_structure(app_id)
+        application_path = self._ensure_dir_structure(app_id, partition_key)
         self.f = open(
-            os.path.join(self.storage_dir, app_id, self.LOG_FILENAME),
+            join_path(application_path, self.LOG_FILENAME),
             "a",
             encoding="utf-8",
             errors="replace",
         )
 
-        graph_path = os.path.join(self.storage_dir, app_id, self.GRAPH_FILENAME)
+        graph_path = join_path(application_path, self.GRAPH_FILENAME)
         if os.path.exists(graph_path):
             logger.info(f"Graph already exists at {graph_path}. Not overwriting.")
             return
@@ -420,7 +520,7 @@ class LocalTrackingClient(
         with open(graph_path, "w", encoding="utf-8", errors="replace") as f:
             json.dump(graph, f)
 
-        metadata_path = os.path.join(self.storage_dir, app_id, self.METADATA_FILENAME)
+        metadata_path = join_path(application_path, self.METADATA_FILENAME)
         if os.path.exists(metadata_path):
             logger.info(f"Metadata already exists at {metadata_path}. Not overwriting.")
             return
@@ -607,19 +707,50 @@ class LocalTrackingClient(
         if self.f is not None:
             self.f.close()
 
-    def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
-        # TODO:
-        return []
+    def list_app_ids(self, partition_key: Optional[str], **kwargs) -> list[str]:
+        app_ids = []
+        if not os.path.isdir(self.storage_dir):
+            return app_ids
+        for app_id in sorted(os.listdir(self.storage_dir)):
+            app_root = join_path(self.storage_dir, app_id)
+            if not os.path.isdir(app_root):
+                continue
+            try:
+                directory = _resolve_existing_app_dir(
+                    app_root,
+                    partition_key,
+                    log_filename=self.LOG_FILENAME,
+                    metadata_filename=self.METADATA_FILENAME,
+                    context=f"{self.project_id}/{app_id}",
+                )
+            except ValueError:
+                # Ambiguous legacy data is reported by load(); it is not an app id to list here.
+                continue
+            if directory is not None and os.path.getsize(join_path(directory, self.LOG_FILENAME)):
+                app_ids.append(app_id)
+        return app_ids
 
     def load(
-        self, partition_key: str, app_id: Optional[str], sequence_id: Optional[int] = None, **kwargs
+        self,
+        partition_key: Optional[str],
+        app_id: Optional[str],
+        sequence_id: Optional[int] = None,
+        **kwargs,
     ) -> Optional[PersistedStateData]:
         # TODO:
         if app_id is None:
             return  # no application ID
-        path = os.path.join(self.storage_dir, app_id, self.LOG_FILENAME)
-        if not os.path.exists(path):
+        app_root = join_path(self.storage_dir, app_id)
+        directory = _resolve_existing_app_dir(
+            app_root,
+            partition_key,
+            log_filename=self.LOG_FILENAME,
+            metadata_filename=self.METADATA_FILENAME,
+            context=f"{self.project_id}/{app_id}",
+        )
+        if directory is None:
             return None
+        path = join_path(directory, self.LOG_FILENAME)
         with open(path, "r", errors="replace", encoding="utf-8") as f:
             json_lines = f.readlines()
         if len(json_lines) == 0:

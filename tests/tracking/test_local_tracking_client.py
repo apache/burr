@@ -41,6 +41,7 @@ from burr.tracking.common.models import (
     EndSpanModel,
     PointerModel,
 )
+from burr.tracking.common.partition_paths import application_directory
 from burr.visibility import TracerFactory
 
 
@@ -213,7 +214,9 @@ def test_persister_tracks_parent(tmpdir):
     old_app_id = "old"
     new_app_id = "new"
     log_dir = os.path.join(tmpdir, "tracking")
-    results_dir = os.path.join(log_dir, "test_persister_tracks_parent", new_app_id)
+    results_dir = application_directory(
+        os.path.join(log_dir, "test_persister_tracks_parent", new_app_id), "user123"
+    )
     project_name = "test_persister_tracks_parent"
     app: Application = (
         ApplicationBuilder()
@@ -268,7 +271,8 @@ def test_persister_resume_without_fork_has_no_parent(tmpdir):
     assert app.state["count"] == 5
     assert app.parent_pointer is None
     metadata_path = os.path.join(
-        log_dir, project_name, app_id, LocalTrackingClient.METADATA_FILENAME
+        application_directory(os.path.join(log_dir, project_name, app_id), "user123"),
+        LocalTrackingClient.METADATA_FILENAME,
     )
     with open(metadata_path) as f:
         metadata_parsed = ApplicationMetadataModel.model_validate(json.load(f))
@@ -326,7 +330,8 @@ def test_fork_children_have_correct_partition_key(tmpdir):
 
     # Check children.jsonl in the parent app directory
     children_path = os.path.join(
-        log_dir, project_name, old_app_id, LocalTrackingClient.CHILDREN_FILENAME
+        application_directory(os.path.join(log_dir, project_name, old_app_id), partition_key),
+        LocalTrackingClient.CHILDREN_FILENAME,
     )
     assert os.path.exists(children_path), "children.jsonl should exist for the parent app"
 
@@ -382,8 +387,12 @@ def test_local_backend_reads_utf8_annotations_graph_and_children(tmpdir, monkeyp
     child_partition_key = "clave-ni\u00f1a"
     log_dir = os.path.join(tmpdir, "tracking")
     project_dir = os.path.join(log_dir, project_name)
-    app_dir = os.path.join(project_dir, app_id)
+    app_dir = application_directory(os.path.join(project_dir, app_id), partition_key)
     os.makedirs(app_dir)
+    with open(
+        os.path.join(app_dir, LocalTrackingClient.METADATA_FILENAME), "w", encoding="utf-8"
+    ) as f:
+        json.dump({"partition_key": partition_key}, f)
 
     backend = LocalBackend(path=log_dir)
 
