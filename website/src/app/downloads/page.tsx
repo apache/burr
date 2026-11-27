@@ -435,7 +435,16 @@ export default function DownloadsPage() {
 
             <h3 className="mt-6 mb-2 font-semibold">1. Import the KEYS file</h3>
             <p className="text-sm text-[var(--muted)] mb-3">
-              The KEYS file holds the public PGP keys of all Apache Burr
+              The{" "}
+              <a
+                href={KEYS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-[var(--text)]"
+              >
+                KEYS file
+              </a>{" "}
+              holds the public PGP keys of all Apache Burr
               release managers, served from{" "}
               <code className="font-mono text-xs">downloads.apache.org</code>:
             </p>
