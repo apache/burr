@@ -199,6 +199,18 @@ def _fn_with_untyped_state_arg(state) -> OriginalModel:
     ...
 
 
+def _fn_with_optional_state_arg(state: Optional[OriginalModel]) -> OriginalModel:
+    ...
+
+
+def _fn_with_optional_return_type(state: OriginalModel) -> Optional[OriginalModel]:
+    ...
+
+
+def _fn_with_list_return_type(state: OriginalModel) -> List[OriginalModel]:
+    ...
+
+
 def _fn_correct_same_itype_otype(state: OriginalModel, input_1: int) -> OriginalModel:
     ...
 
@@ -215,6 +227,9 @@ def _fn_correct_diff_itype_otype(state: OriginalModel, input_1: int) -> NestedMo
         (_fn_with_incorrect_return_type, ValueError),
         (_fn_with_no_return_type, ValueError),
         (_fn_with_untyped_state_arg, ValueError),
+        (_fn_with_optional_state_arg, ValueError),
+        (_fn_with_optional_return_type, ValueError),
+        (_fn_with_list_return_type, ValueError),
     ],
 )
 def test__validate_and_extract_signature_types_error(fn, expected_exception):
