@@ -138,6 +138,7 @@ def _validate_and_extract_signature_types(
     if (
         state_model is None
         or state_model is inspect.Parameter.empty
+        or not isinstance(state_model, type)
         or not issubclass(state_model, pydantic.BaseModel)
     ):
         raise ValueError(
@@ -145,7 +146,7 @@ def _validate_and_extract_signature_types(
             "The 'state' parameter must be annotated with a type extending pydantic.BaseModel. "
             f"Got: {state_model}."
         )
-    if (ret_hint := type_hints.get("return")) is None or not issubclass(
+    if not isinstance(ret_hint := type_hints.get("return"), type) or not issubclass(
         ret_hint, pydantic.BaseModel
     ):
         raise ValueError(
