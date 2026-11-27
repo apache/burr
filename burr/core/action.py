@@ -1456,6 +1456,20 @@ def _log_superseded_callback_error(error: BaseException, callback_error: Excepti
     )
 
 
+def _log_secondary_hook_error(step_error: BaseException, hook_error: Exception) -> None:
+    """A lifecycle hook failed while the step's own error was already propagating.
+
+    The step's error is the one the caller is handling; keep it and log the hook's failure
+    instead of letting the ``finally`` block replace it.
+    """
+    logger.warning(
+        "A post_run_step hook raised while reporting a streaming step that failed with %r; "
+        "keeping the step's error",
+        step_error,
+        exc_info=(type(hook_error), hook_error, hook_error.__traceback__),
+    )
+
+
 _CLOSE_WHILE_RUNNING = (
     "Cannot close a streaming result while it is producing an item (closing from a hook, or from "
     "another task). Stop it from the code that consumes it (break out of the loop), or cancel the "
@@ -1541,6 +1555,24 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
             self._callback_realized = True
             self._callback(*self._result, exc)
 
+    def _realize_callback_keeping_step_error(self, exc: Optional[BaseException]) -> None:
+        """Iterator-finally variant of :py:meth:`_realize_callback`.
+
+        ``close()`` has its own first-error-wins rule (a cleanup error wins, otherwise the
+        callback error is stored and re-raised) and must keep seeing callback errors, so this
+        wrapper is used only by ``__iter__``'s finally: when the step already has an error, a
+        *callback* ``Exception`` is logged rather than allowed to replace it. A hook's
+        ``BaseException`` (KeyboardInterrupt / CancelledError / SystemExit) is never caught.
+        """
+        if self._callback_realized:
+            return
+        try:
+            self._realize_callback(exc)
+        except Exception as callback_error:
+            if exc is None:
+                raise
+            _log_secondary_hook_error(exc, callback_error)
+
     def close(self) -> None:
         """Stops the stream early without draining it.
 
@@ -1599,13 +1631,17 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
 
     def __iter__(self) -> Iterator[StreamResultType]:
         def gen_fn():
+            # Only exceptions raised *inside this iterator* describe this step. sys.exc_info()
+            # is thread state and would report an exception the caller happens to be handling.
+            exc: Optional[BaseException] = None
             try:
                 while True:
                     out = self.__next__()
                     yield out
             except StopIteration:
                 return
-            except GeneratorExit:
+            except GeneratorExit as e:
+                exc = e
                 # The caller stopped iterating (``break``, or dropped the iterator): unwind the
                 # action *before* reporting the step.
                 if not self._closed:
@@ -1614,8 +1650,11 @@ class StreamingResultContainer(Generic[StateType, StreamResultType], Iterator[St
                     except Exception:
                         _log_abandoned_stop_error()
                 raise
+            except BaseException as e:
+                exc = e
+                raise
             finally:
-                self._realize_callback(sys.exc_info()[1])
+                self._realize_callback_keeping_step_error(exc)
 
         # We really don't need an internal generator function but this was done to keep it the same
         # as the async version
@@ -1695,6 +1734,17 @@ class AsyncStreamingResultContainer(
             self._callback_realized = True
             await self._callback(*self._result, exc)
 
+    async def _realize_callback_keeping_step_error(self, exc: Optional[BaseException]) -> None:
+        """Async counterpart of ``_realize_callback_keeping_step_error``; see the sync version."""
+        if self._callback_realized:
+            return
+        try:
+            await self._realize_callback(exc)
+        except Exception as callback_error:
+            if exc is None:
+                raise
+            _log_secondary_hook_error(exc, callback_error)
+
     async def aclose(self) -> None:
         """Stops the stream early without draining it.
 
@@ -1768,12 +1818,15 @@ class AsyncStreamingResultContainer(
         but it works in most cases."""
 
         async def gen_fn():
+            # See __iter__: only this iterator's own exceptions describe this step.
+            exc: Optional[BaseException] = None
             try:
                 while True:
                     yield await self.__anext__()
             except StopAsyncIteration:
                 return
-            except GeneratorExit:
+            except GeneratorExit as e:
+                exc = e
                 # The caller stopped iterating (``break``, or dropped the iterator): unwind the
                 # action *before* reporting the step. If an explicit ``aclose()`` got there
                 # first, wait for it so the step isn't reported while cleanup is still running.
@@ -1785,8 +1838,11 @@ class AsyncStreamingResultContainer(
                 else:
                     await asyncio.wait([self._close_future])
                 raise
+            except BaseException as e:
+                exc = e
+                raise
             finally:
-                await self._realize_callback(sys.exc_info()[1])
+                await self._realize_callback_keeping_step_error(exc)
 
         # return it as `__aiter__` cannot be async/have awaits :/
         return gen_fn()
