@@ -972,14 +972,17 @@ def _build_wheel_from_current_dir(
         # Let Flit generate metadata and RECORD for the artifact-specific LICENSE.
         license_path, config_path = Path("LICENSE"), Path(VERSION_FILE)
         source_license, source_config = license_path.read_bytes(), config_path.read_bytes()
+        wheel_config = source_config.replace(
+            b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+            b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
+        )
+        if wheel_config == source_config:
+            _fail(
+                "Could not stage wheel LICENSE: expected license-files setting not found in pyproject.toml"
+            )
         try:
             license_path.write_bytes(Path("LICENSE-wheel").read_bytes())
-            config_path.write_bytes(
-                source_config.replace(
-                    b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
-                    b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
-                )
-            )
+            config_path.write_bytes(wheel_config)
             _run_command(
                 ["flit", "build", "--format", "wheel"],
                 description="",

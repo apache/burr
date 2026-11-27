@@ -252,40 +252,85 @@ burr
 
 ```
 
-Note that the script currently signs the file with a signature. We will be adding the ability to bypass that, but if you want to build from scratch you can follow this process:
-
+The release script signs its output. To build an unsigned wheel manually, start
+from the repository root of a clean checkout or an extracted source archive, with
+the release tools installed (`python -m pip install -e ".[release]"`). This follows
+the same UI, example, licence, and file-exclusion steps as the release helper.
+Use the same `SOURCE_DATE_EPOCH` for both builds when comparing them. In a Git
+checkout, obtain it with `git show -s --format=%ct HEAD`; for an extracted archive,
+set it to the timestamp of the release's source commit before running these steps.
 
 ```bash
-# 1. Build UI
-cd telemetry/ui
-npm install
-npm run build
-cd ../..
+# Run in a subshell so build settings and the cleanup trap stay local.
+(
+set -eu
+export FLIT_USE_VCS=0
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git show -s --format=%ct HEAD)}"
 
-# 2. Copy UI build to the right place
+# 1. Build and copy the UI, replacing any previous output.
+npm install --prefix telemetry/ui
+npm run build --prefix telemetry/ui
+rm -rf burr/tracking/server/build
 mkdir -p burr/tracking/server/build
 cp -a telemetry/ui/build/. burr/tracking/server/build/
 
-# 3. Handle examples (replace symlink with actual files)
-rm burr/examples  # Remove symlink
+# 2. Back up files that must be restored, even if the build fails.
+WHEEL_BACKUP=$(mktemp -d)
+cp LICENSE "$WHEEL_BACKUP/LICENSE"
+cp pyproject.toml "$WHEEL_BACKUP/pyproject.toml"
+mv burr/examples "$WHEEL_BACKUP/examples"
+restore_wheel_sources() {
+    cp "$WHEEL_BACKUP/LICENSE" LICENSE
+    cp "$WHEEL_BACKUP/pyproject.toml" pyproject.toml
+    rm -rf burr/examples
+    mv "$WHEEL_BACKUP/examples" burr/examples
+    if [ -f "$WHEEL_BACKUP/terraform.gitignore" ]; then
+        mv "$WHEEL_BACKUP/terraform.gitignore" burr/tracking/server/s3/deployment/terraform/.gitignore
+    fi
+    rm -rf "$WHEEL_BACKUP"
+}
+trap restore_wheel_sources EXIT
+
+# 3. Include exactly the examples used by the release helper.
 mkdir burr/examples
 cp examples/__init__.py burr/examples/
-cp -r examples/email-assistant burr/examples/
-cp -r examples/multi-modal-chatbot burr/examples/
-cp -r examples/streaming-fastapi burr/examples/
-cp -r examples/deep-researcher burr/examples/
+for example in email-assistant multi-modal-chatbot streaming-fastapi deep-researcher hello-world-counter; do
+    cp -R "examples/$example" burr/examples/
+done
 
-# 4. Build wheel
+# Match the sdist's exclusion of this VCS file.
+if [ -f burr/tracking/server/s3/deployment/terraform/.gitignore ]; then
+    mv burr/tracking/server/s3/deployment/terraform/.gitignore "$WHEEL_BACKUP/terraform.gitignore"
+fi
+
+# 4. Stage the wheel licence under LICENSE before Flit generates metadata/RECORD.
+python - <<'PYTHON'
+from pathlib import Path
+
+config = Path("pyproject.toml")
+source = config.read_bytes()
+wheel = source.replace(
+    b'license-files = ["LICENSE-wheel", "NOTICE", "DISCLAIMER"]',
+    b'license-files = ["LICENSE", "NOTICE", "DISCLAIMER"]',
+)
+if wheel == source:
+    raise SystemExit("Expected license-files setting not found in pyproject.toml")
+config.write_bytes(wheel)
+Path("LICENSE").write_bytes(Path("LICENSE-wheel").read_bytes())
+PYTHON
+
+# 5. Build; the exit trap restores the source files and examples afterwards.
 flit build --format wheel
-
-# 5. Restore symlink
-rm -rf burr/examples
-ln -s ../examples burr/examples
+)
 ```
 
-Then use the wheel at `dist/apache_burr-0.41.0-py3-none-any.whl`
+The wheel is written to `dist/apache_burr-<version>-py3-none-any.whl`. Validate it
+with `python -m twine check <wheel-path>` and test it in a fresh environment
+outside the source tree, as shown above. To compare it with the automated build:
 
-
+```bash
+python scripts/verify_apache_artifacts.py compare-wheels <automated-wheel> <manual-wheel>
+```
 
 See the "Verification" section below for more detailed verification steps including license checking.
 
