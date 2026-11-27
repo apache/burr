@@ -19,8 +19,8 @@
 
 Exposes what the UI shows (projects, apps, steps, state, annotations) as MCP tools, so coding
 assistants and scripts can inspect runs without a browser. The tools call the same
-``BackendBase`` the REST API uses. ``create_burr_ui_app`` mounts it at ``/mcp`` when ``mcp>=2``
-is installed (see ``BURR_MCP_ENABLED`` in ``run.py``).
+``BackendBase`` the REST API uses. ``create_burr_ui_app`` mounts it at ``/mcp`` when
+``BURR_MCP_ENABLED=true`` (see ``run.py``).
 
 This module is not called ``mcp.py`` so that running ``run.py`` as a script, which puts this
 directory on ``sys.path``, does not shadow the ``mcp`` package.
@@ -34,6 +34,7 @@ from fastapi import FastAPI, HTTPException
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
@@ -431,7 +432,13 @@ def mount_mcp(
         # keep, and the endpoint works the same behind multiple workers. This (re)creates
         # server.session_manager; the Starlette app it returns is not needed.
         server.streamable_http_app(
-            streamable_http_path=path, stateless_http=True, json_response=True
+            streamable_http_path=path,
+            stateless_http=True,
+            json_response=True,
+            # Answer any Host and Origin, like the REST API next to it. The SDK's default answers
+            # only localhost, which breaks /mcp behind a hostname or proxy; who can reach the
+            # server is the deployer's choice (see SECURITY.md).
+            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         )
 
     class Transport:

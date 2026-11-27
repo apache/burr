@@ -164,18 +164,18 @@ MCP endpoint
 ------------
 
 The tracking server can also serve its data to coding assistants (Claude Code, Cursor, ...) and
-scripts over the `Model Context Protocol <https://modelcontextprotocol.io>`_. Install the ``mcp``
-extra and start the server as usual:
+scripts over the `Model Context Protocol <https://modelcontextprotocol.io>`_. The endpoint is off
+by default. Install the ``mcp`` extra and turn it on when you start the server:
 
 .. code-block:: bash
 
     pip install "apache-burr[mcp]"
-    burr   # UI at http://localhost:7241, MCP at http://localhost:7241/mcp
+    BURR_MCP_ENABLED=true burr   # UI at http://localhost:7241, MCP at http://localhost:7241/mcp
     claude mcp add --transport http burr http://localhost:7241/mcp
 
 For Cursor, add ``{"mcpServers": {"burr": {"url": "http://localhost:7241/mcp"}}}`` to its MCP
 settings. To serve only the API and MCP, without the browser UI, run
-``BURR_SERVE_STATIC=false burr --no-open``.
+``BURR_MCP_ENABLED=true BURR_SERVE_STATIC=false burr --no-open``.
 
 The tools read from the same backend as the UI:
 
@@ -217,8 +217,8 @@ The endpoint is configured with environment variables:
    * - Variable
      - Effect
    * - ``BURR_MCP_ENABLED``
-     - ``auto`` (default) serves ``/mcp`` when ``mcp>=2`` is installed. ``true`` fails at startup
-       if it is not, and ``false`` never serves it.
+     - ``true`` serves ``/mcp`` and fails at startup if ``mcp>=2`` is not installed. ``false``
+       (default) does not serve it.
    * - ``BURR_MCP_GROUPS``
      - Comma-separated tool groups, ``inspect`` (default) and/or ``annotate``.
    * - ``BURR_MCP_MAX_CHARS``
@@ -230,6 +230,6 @@ Things to know before turning it on:
 - Tracked state often holds end-user text, which can contain prompt injection. The server tells
   the assistant to treat state, inputs and results as data, but an assistant can still be misled
   by what it reads. Write tools (``annotate``) are off unless you enable them.
-- ``burr`` binds to ``127.0.0.1``, and ``/mcp`` answers only requests whose ``Host`` header is
-  localhost (421 otherwise), so a web page cannot reach it through DNS rebinding.
-- The UI server has no authentication. Anyone who can reach the REST API can reach ``/mcp``.
+- ``/mcp`` is reachable exactly like the REST API next to it: no authentication, and no ``Host``
+  check, so it also works behind a hostname or a reverse proxy. ``burr`` binds to ``127.0.0.1``;
+  before exposing the server, protect it the way you would the UI (see :doc:`../security`).

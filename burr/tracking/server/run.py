@@ -193,15 +193,15 @@ if app_spec.snapshotting:
 def _mount_mcp(ui_app: FastAPI) -> None:
     """Serves the MCP endpoint at /mcp, depending on these environment variables:
 
-    - ``BURR_MCP_ENABLED``: ``auto`` (default) serves it when mcp>=2 is installed, ``true``
-      fails at startup if it isn't, ``false`` never serves it.
+    - ``BURR_MCP_ENABLED``: ``false`` (default) never serves it, ``true`` serves it and fails at
+      startup if mcp>=2 isn't installed.
     - ``BURR_MCP_GROUPS``: comma-separated tool groups, ``inspect`` (default) and/or ``annotate``.
     - ``BURR_MCP_MAX_CHARS``: the most characters of any one value a tool returns, which callers
       cannot raise. Unset (default) means no limit.
     """
-    setting = os.getenv("BURR_MCP_ENABLED", "auto").lower()
-    if setting not in ("auto", "true", "false"):
-        raise ValueError(f"BURR_MCP_ENABLED must be auto, true or false, not {setting!r}")
+    setting = os.getenv("BURR_MCP_ENABLED", "false").lower()
+    if setting not in ("true", "false"):
+        raise ValueError(f"BURR_MCP_ENABLED must be true or false, not {setting!r}")
     if setting == "false":
         return
     try:
@@ -210,12 +210,7 @@ def _mount_mcp(ui_app: FastAPI) -> None:
         found = None
     if found is None or int(found.split(".")[0]) < 2:
         hint = "Burr's MCP endpoint needs mcp>=2: pip install 'apache-burr[mcp]'"
-        if setting == "true":
-            raise RuntimeError(hint if found is None else f"{hint} (found mcp {found})")
-        if found is not None:
-            # Installed at an older major by something else: keep the UI working, but say why
-            logger.warning("Not serving /mcp: %s (found mcp %s)", hint, found)
-        return
+        raise RuntimeError(hint if found is None else f"{hint} (found mcp {found})")
 
     from burr.tracking.server.mcp_endpoint import mount_mcp
 

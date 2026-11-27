@@ -324,8 +324,10 @@ async def test_annotate_step(backend):
 @pytest.fixture
 def ui_backend(backend, monkeypatch):
     monkeypatch.setattr(run, "backend", backend)
-    for name in ("BURR_MCP_ENABLED", "BURR_MCP_GROUPS", "BURR_MCP_MAX_CHARS"):
+    for name in ("BURR_MCP_GROUPS", "BURR_MCP_MAX_CHARS"):
         monkeypatch.delenv(name, raising=False)
+    # MCP is off by default (test_off_by_default); the other tests turn it on
+    monkeypatch.setenv("BURR_MCP_ENABLED", "true")
     return backend
 
 
@@ -360,13 +362,14 @@ def test_mount_burr_ui_serves_mcp(ui_backend):
         )
 
 
-def test_mcp_rejects_other_hosts(ui_backend):
-    # DNS-rebinding protection from the MCP SDK: only localhost Host headers by default
-    with TestClient(
-        run.create_burr_ui_app(serve_static=False), base_url="http://evil.example"
-    ) as client:
-        response = client.post("/mcp", json=TOOLS_LIST, headers=MCP_HEADERS)
-    assert response.status_code == 421
+def test_mcp_works_behind_a_hostname(ui_backend):
+    # Like the REST API, /mcp has no Host or Origin policy of its own: it works behind a proxy
+    url = "https://burr.example.com"
+    with TestClient(run.create_burr_ui_app(serve_static=False), base_url=url) as client:
+        assert "get_step" in _tool_names(
+            client.post("/mcp", json=TOOLS_LIST, headers={**MCP_HEADERS, "Origin": url})
+        )
+        assert client.get("/api/v0/projects", headers={"Origin": url}).status_code == 200
 
 
 def test_settings_pick_groups_and_limit(ui_backend, monkeypatch):
@@ -415,26 +418,21 @@ def _fake_mcp_version(monkeypatch, found):
     monkeypatch.setattr(run.importlib.metadata, "version", version)
 
 
-def test_auto_skips_old_mcp_with_a_warning(ui_backend, monkeypatch, caplog):
-    _fake_mcp_version(monkeypatch, "1.27.0")
+@pytest.mark.parametrize("found", [None, "1.27.0", "2.0.0"])
+def test_off_by_default(ui_backend, monkeypatch, caplog, found):
+    # Without BURR_MCP_ENABLED=true there is no /mcp, whichever mcp is installed, and no warning
+    monkeypatch.delenv("BURR_MCP_ENABLED")
+    _fake_mcp_version(monkeypatch, found)
     with caplog.at_level(logging.WARNING, logger=run.logger.name):
         app = run.create_burr_ui_app(serve_static=False)
-    assert "found mcp 1.27.0" in caplog.text
+    assert caplog.text == ""
     with TestClient(app, base_url="http://localhost:7241") as client:
         assert client.post("/mcp", json=TOOLS_LIST, headers=MCP_HEADERS).status_code == 404
-
-
-def test_auto_without_mcp_changes_nothing(ui_backend, monkeypatch, caplog):
-    _fake_mcp_version(monkeypatch, None)
-    with caplog.at_level(logging.WARNING, logger=run.logger.name):
-        run.create_burr_ui_app(serve_static=False)
-    assert caplog.text == ""
 
 
 @pytest.mark.parametrize("found", [None, "1.27.0"])
 def test_enabled_requires_mcp_2(ui_backend, monkeypatch, found):
     _fake_mcp_version(monkeypatch, found)
-    monkeypatch.setenv("BURR_MCP_ENABLED", "true")
     with pytest.raises(RuntimeError, match="needs mcp>=2"):
         run.create_burr_ui_app(serve_static=False)
 
