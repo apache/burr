@@ -22,7 +22,7 @@ import './App.css';
 import { ProjectList } from './components/routes/ProjectList';
 import { AppList } from './components/routes/AppList';
 import { AppViewContainer } from './components/routes/app/AppView';
-import { QueryClient, QueryClientProvider } from 'react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppContainer } from './components/nav/appcontainer';
 import { ChatbotWithTelemetry } from './examples/Chatbot';
 import { Counter } from './examples/Counter';

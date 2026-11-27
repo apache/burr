@@ -20,48 +20,47 @@
 import { Button } from '../components/common/button';
 import { TwoColumnLayout } from '../components/common/layout';
 import { ApplicationSummary, DefaultService } from '../api';
-import { useState } from 'react';
-import { useMutation, useQuery } from 'react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loading } from '../components/common/loading';
 import { TelemetryWithSelector } from './Common';
 
 const CounterApp = (props: { projectId: string; appId: string | undefined }) => {
   const [counterValue, setCounterValue] = useState<number>(0);
 
-  const { isLoading } = useQuery(
-    ['counter-state', props.projectId, props.appId],
-    () =>
+  const { data: counterData, isLoading } = useQuery({
+    queryKey: ['counter-state', props.projectId, props.appId],
+    queryFn: () =>
       DefaultService.getCounterStateApiV0CounterStateProjectIdAppIdGet(
         props.projectId,
         props.appId || ''
       ),
-    {
-      enabled: props.appId !== undefined,
-      onSuccess: (data) => {
-        setCounterValue(data.counter);
-      }
-    }
-  );
+    enabled: props.appId !== undefined
+  });
 
-  const mutation = useMutation(
-    () => {
+  useEffect(() => {
+    if (counterData) {
+      setCounterValue(counterData.counter);
+    }
+  }, [counterData]);
+
+  const mutation = useMutation({
+    mutationFn: () => {
       return DefaultService.countApiV0CounterCountProjectIdAppIdPost(
         props.projectId,
         props.appId || ''
       );
     },
-    {
-      onSuccess: (data) => {
-        setCounterValue(data.counter);
-      }
+    onSuccess: (data) => {
+      setCounterValue(data.counter);
     }
-  );
+  });
 
   if (isLoading) {
     return <Loading />;
   }
 
-  const isWaiting = mutation.isLoading;
+  const isWaiting = mutation.isPending;
 
   return (
     <div className="mr-4 bg-white w-full flex flex-col h-full">

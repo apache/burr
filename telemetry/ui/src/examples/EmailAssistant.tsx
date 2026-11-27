@@ -28,7 +28,7 @@ import {
   QuestionAnswers
 } from '../api';
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery } from 'react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loading } from '../components/common/loading';
 import { Field, Label } from '../components/common/fieldset';
 import { Textarea } from '../components/common/textarea';
@@ -205,10 +205,10 @@ export const SubmitFeedbackView = (props: {
 export const EmailAssistant = (props: { projectId: string; appId: string | undefined }) => {
   // starts off as null
   const [emailAssistantState, setEmailAssistantState] = useState<EmailAssistantState | null>(null);
-  const { data: validationData, isLoading: isValidationLoading } = useQuery(
-    ['valid', props.projectId, props.appId],
-    DefaultService.validateEnvironmentApiV0EmailAssistantValidateProjectIdAppIdGet
-  );
+  const { data: validationData, isLoading: isValidationLoading } = useQuery({
+    queryKey: ['valid', props.projectId, props.appId],
+    queryFn: DefaultService.validateEnvironmentApiV0EmailAssistantValidateProjectIdAppIdGet
+  });
 
   useEffect(() => {
     if (props.appId !== undefined) {
@@ -224,69 +224,64 @@ export const EmailAssistant = (props: { projectId: string; appId: string | undef
     }
   }, [props.appId, props.projectId]); // This will only get called when the appID or projectID changes, which will be at the beginning
 
-  const { isLoading: isGetInitialStateLoading } = useQuery(
+  const { data: initialStateData, isLoading: isGetInitialStateLoading } = useQuery({
     // TODO -- handle errors
-    ['emailAssistant', props.projectId, props.appId],
-    () =>
+    queryKey: ['emailAssistant', props.projectId, props.appId],
+    queryFn: () =>
       DefaultService.getStateApiV0EmailAssistantStateProjectIdAppIdGet(
         props.projectId,
         props.appId || '' // TODO -- find a cleaner way of doing a skip-token like thing here
         // This is skipped if the appId is undefined so this is just to make the type-checker happy
       ),
-    {
-      enabled: props.appId !== undefined,
-      onSuccess: (data) => {
-        setEmailAssistantState(data); // when its succesful we want to set the displayed chat history
-      }
-    }
-  );
+    enabled: props.appId !== undefined
+  });
 
-  const submitInitialMutation = useMutation(
-    (draftData: DraftInit) =>
+  useEffect(() => {
+    if (initialStateData) {
+      setEmailAssistantState(initialStateData);
+    }
+  }, [initialStateData]);
+
+  const submitInitialMutation = useMutation({
+    mutationFn: (draftData: DraftInit) =>
       DefaultService.initializeDraftApiV0EmailAssistantCreateProjectIdAppIdPost(
         props.projectId,
         props.appId || 'create_new',
         draftData
       ),
-    {
-      onSuccess: (data) => {
-        setEmailAssistantState(data);
-      }
+    onSuccess: (data) => {
+      setEmailAssistantState(data);
     }
-  );
+  });
 
-  const submitAnswersMutation = useMutation(
-    (answers: QuestionAnswers) =>
+  const submitAnswersMutation = useMutation({
+    mutationFn: (answers: QuestionAnswers) =>
       DefaultService.answerQuestionsApiV0EmailAssistantAnswerQuestionsProjectIdAppIdPost(
         props.projectId,
         props.appId || '',
         answers
       ),
-    {
-      onSuccess: (data) => {
-        setEmailAssistantState(data);
-      }
+    onSuccess: (data) => {
+      setEmailAssistantState(data);
     }
-  );
-  const submitFeedbackMutation = useMutation(
-    (feedbacks: Feedback) =>
+  });
+  const submitFeedbackMutation = useMutation({
+    mutationFn: (feedbacks: Feedback) =>
       DefaultService.provideFeedbackApiV0EmailAssistantProvideFeedbackProjectIdAppIdPost(
         props.projectId,
         props.appId || '',
         feedbacks
       ),
-    {
-      onSuccess: (data) => {
-        setEmailAssistantState(data);
-      }
+    onSuccess: (data) => {
+      setEmailAssistantState(data);
     }
-  );
+  });
 
   const isLoading = isGetInitialStateLoading;
   const anyMutationLoading =
-    submitInitialMutation.isLoading ||
-    submitAnswersMutation.isLoading ||
-    submitFeedbackMutation.isLoading;
+    submitInitialMutation.isPending ||
+    submitAnswersMutation.isPending ||
+    submitFeedbackMutation.isPending;
 
   if (isLoading || isValidationLoading) {
     return <Loading />;
@@ -406,29 +401,28 @@ export const EmailAssistantAppSelector = (props: {
   placeholder: string;
 }) => {
   const { projectId, setApp } = props;
-  const { data, refetch } = useQuery(
-    ['apps', projectId],
-    () => DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(projectId as string, '__none__'),
-    { enabled: projectId !== undefined }
-  );
-  const createAndUpdateMutation = useMutation(
-    (app_id: string) =>
+  const { data, refetch } = useQuery({
+    queryKey: ['apps', projectId],
+    queryFn: () =>
+      DefaultService.getAppsApiV0ProjectIdPartitionKeyAppsGet(projectId as string, '__none__'),
+    enabled: projectId !== undefined
+  });
+  const createAndUpdateMutation = useMutation({
+    mutationFn: (app_id: string) =>
       DefaultService.createNewApplicationApiV0EmailAssistantCreateNewProjectIdAppIdPost(
         projectId,
         app_id
       ),
-    {
-      onSuccess: (appID) => {
-        refetch().then((data) => {
-          const appSummaries = data.data?.applications || [];
-          const app = appSummaries.find((app) => app.app_id === appID);
-          if (app) {
-            setApp(app);
-          }
-        });
-      }
+    onSuccess: (appID) => {
+      refetch().then((data) => {
+        const appSummaries = data.data?.applications || [];
+        const app = appSummaries.find((app) => app.app_id === appID);
+        if (app) {
+          setApp(app);
+        }
+      });
     }
-  );
+  });
   const appSetter = (appID: string) => createAndUpdateMutation.mutate(appID);
   const dataOrEmpty = Array.from(data?.applications || []);
   const options = dataOrEmpty

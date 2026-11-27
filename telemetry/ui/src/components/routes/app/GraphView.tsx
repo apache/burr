@@ -21,7 +21,8 @@ import { ActionModel, ApplicationModel, Step } from '../../../api';
 
 import dagre from 'dagre';
 import React, { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   BaseEdge,
   Controls,
   EdgeProps,
@@ -32,9 +33,9 @@ import ReactFlow, {
   getBezierPath,
   useNodes,
   useReactFlow
-} from 'reactflow';
+} from '@xyflow/react';
 
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 import { AppContext, backgroundColorsForIndex } from './AppView';
 import { getActionStatus } from '../../../utils';
 import { getSmartEdge } from '@tisoap/react-flow-smart-edge';
@@ -178,7 +179,7 @@ export const ActionActionEdge = ({
         targetY,
         nodes
       });
-      if (getSmartEdgeResponse !== null) {
+      if (!(getSmartEdgeResponse instanceof Error)) {
         return getSmartEdgeResponse.svgPathString;
       }
     }
@@ -417,7 +418,7 @@ export const _Graph = (props: {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          edgesUpdatable={false}
+          edgesReconnectable={false}
           nodesDraggable={false}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
