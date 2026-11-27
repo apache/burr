@@ -50,7 +50,10 @@ class PreRunStepHook(abc.ABC):
 
         :param state: State prior to step execution
         :param action: Action to be executed
-        :param inputs: Inputs to the action
+        :param inputs: The inputs the action is about to receive -- the caller's inputs
+            filtered to the ones this action declares, plus any dependency the framework
+            injects (``__context``/``__tracer``). Validation has already run, so this hook
+            does not fire for a step whose inputs are unusable.
         :param sequence_id: Sequence ID of the action
         :param future_kwargs: Future keyword arguments
         """
@@ -77,7 +80,10 @@ class PreRunStepHookAsync(abc.ABC):
 
         :param state: State prior to step execution
         :param action: Action to be executed
-        :param inputs: Inputs to the action
+        :param inputs: The inputs the action is about to receive -- the caller's inputs
+            filtered to the ones this action declares, plus any dependency the framework
+            injects (``__context``/``__tracer``). Validation has already run, so this hook
+            does not fire for a step whose inputs are unusable.
         :param sequence_id: Sequence ID of the action
         :param future_kwargs: Future keyword arguments
         """
