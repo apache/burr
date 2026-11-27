@@ -32,15 +32,13 @@ The :py:class:`State <burr.core.state.State>` class provides the ability to mani
 meaning that you can only create new states from old ones, not modify them in place.
 
 
-State manipulation is done through calling methods on the ``State`` class. The most common write are:
+State manipulation is done through calling methods on the ``State`` class. Because state is immutable,
+each write returns a new ``State`` object. The most common writes are:
 
-.. code-block:: python
-
-    state.update(foo=bar)  # update the state with the key "foo" set to "bar"
-    state.append(foo=bar)  # append "bar" to the list at "foo"
-    state.increment(foo=1)  # increment the value at "foo" by 1
-    state.wipe(keep=["foo", "bar"])  # remove all keys except "foo" and "bar"
-    state.wipe(delete=["foo", "bar"])  # remove "foo" and "bar" from the state
+.. literalinclude:: ../../tests/docs/recipes/state.py
+   :language: python
+   :start-after: # docs:start:manipulate-state
+   :end-before: # docs:end:manipulate-state
 
 .. warning::
 
@@ -54,10 +52,10 @@ State manipulation is done through calling methods on the ``State`` class. The m
 The read operations extend from those in the `Mapping <https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping>`_
 interface, but there are a few extra:
 
-.. code-block:: python
-
-    state.subset(["foo", "bar"])  # return a new state with only the keys "foo" and "bar"
-    state.get_all()  # return a dictionary with every key/value of the state
+.. literalinclude:: ../../tests/docs/recipes/state.py
+   :language: python
+   :start-after: # docs:start:read-state
+   :end-before: # docs:end:read-state
 
 When an update action is run, the state is first subsetted to get just the keys that are being read from,
 then the action is run, and a new state is written to. This state is merged back into the original state
