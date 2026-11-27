@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from importlib.resources import files
 from pathlib import Path
 from types import ModuleType
-from typing import Optional
+from typing import Optional, Sequence
 
 from burr import system
 from burr.core.persistence import PersistedStateData
@@ -167,6 +167,8 @@ def _run_server(
     initial_page="",
     host: str = "127.0.0.1",
     backend: str = "local",
+    enable_workspace: bool = False,
+    workspace_roots: Sequence[str] = (),
 ):
     # TODO: Implement server running logic here
     # Example: Start a web server, configure ports, etc.
@@ -204,6 +206,18 @@ def _run_server(
     env = {
         "BURR_BACKEND_IMPL": BACKEND_MODULES[backend],
     }
+    if enable_workspace:
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            logger.warning(
+                f"Workspace routes can read files and run Python scripts on this machine, and the "
+                f"server is listening on {host} with no authentication. Only do this behind an "
+                f"authenticating proxy -- see SECURITY.md."
+            )
+        env["BURR_ENABLE_WORKSPACE"] = "true"
+        if workspace_roots:
+            env["BURR_WORKSPACE_ROOTS"] = os.pathsep.join(
+                os.path.abspath(os.path.expanduser(root)) for root in workspace_roots
+            )
     _command(cmd, capture_output=False, addl_env=env)
 
 
@@ -224,10 +238,40 @@ def _run_server(
     help="Backend to use for the server.",
     type=click.Choice(["local", "s3"]),
 )
+@click.option(
+    "--enable-workspace",
+    is_flag=True,
+    help="Enable the workspace routes (browse files and run Python scripts from the UI). "
+    "Off by default: the server has no authentication.",
+)
+@click.option(
+    "--workspace-root",
+    "workspace_roots",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory workspaces may be linked under (repeatable). "
+    "Defaults to the current directory.",
+)
 def run_server(
-    port: int, dev_mode: bool, no_open: bool, no_copy_demo_data: bool, host: str, backend: str
+    port: int,
+    dev_mode: bool,
+    no_open: bool,
+    no_copy_demo_data: bool,
+    host: str,
+    backend: str,
+    enable_workspace: bool,
+    workspace_roots: Sequence[str],
 ):
-    _run_server(port, dev_mode, no_open, no_copy_demo_data, host=host, backend=backend)
+    _run_server(
+        port,
+        dev_mode,
+        no_open,
+        no_copy_demo_data,
+        host=host,
+        backend=backend,
+        enable_workspace=enable_workspace,
+        workspace_roots=workspace_roots,
+    )
 
 
 @cli.command()
