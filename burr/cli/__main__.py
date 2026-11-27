@@ -35,6 +35,7 @@ from burr import system
 from burr.core.persistence import PersistedStateData
 from burr.integrations.base import require_plugin
 from burr.log_setup import setup_logging
+from burr.testing import _transform_state_to_test_case
 
 try:
     import click
@@ -282,31 +283,6 @@ def generate_demo_data(s3_bucket, data_dir, unique_app_names: bool, no_clear_cur
             generate_all(data_dir=data_dir, unique_app_names=unique_app_names)
     else:
         generate_all(s3_bucket=s3_bucket, unique_app_names=unique_app_names)
-
-
-def _remove_private_keys(state: dict):
-    return {key: value for key, value in state.items() if not key.startswith("__")}
-
-
-def _transform_state_to_test_case(
-    before_action_state: dict, after_action_state: dict, action_name: str, test_name: str
-) -> dict:
-    """Helper function to transform a state into a test case.
-
-    :param state:
-    :param action_name:
-    :param test_name:
-    :return:
-    """
-    # Remove private Burr keys -- don't want to expose these in the test case since we could change them
-    before_action_state = _remove_private_keys(before_action_state)
-    after_action_state = _remove_private_keys(after_action_state)
-    return {
-        "action": action_name,
-        "name": test_name,
-        "input_state": before_action_state,
-        "expected_state": after_action_state,
-    }
 
 
 @click.group()

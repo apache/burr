@@ -172,6 +172,11 @@ tracking-server = [
   "typing-inspect",
 ]
 
+mcp = [
+  "apache-burr[tracking-server]",
+  "mcp>=2,<3",
+]
+
 pydantic = [
   "pydantic>=2.0"
 ]

@@ -22,6 +22,34 @@ Module to help with testing.
 import json
 
 
+def _remove_private_keys(state: dict):
+    return {key: value for key, value in state.items() if not key.startswith("__")}
+
+
+def _transform_state_to_test_case(
+    before_action_state: dict, after_action_state: dict, action_name: str, test_name: str
+) -> dict:
+    """Helper function to transform a state into a test case.
+
+    Used by ``burr-test-case create`` and the tracking server's MCP endpoint.
+
+    :param before_action_state: state the action starts from
+    :param after_action_state: state the action is expected to produce
+    :param action_name: name of the action under test
+    :param test_name: name of the test case
+    :return: a test case that :py:func:`load_test_cases` can read
+    """
+    # Remove private Burr keys -- don't want to expose these in the test case since we could change them
+    before_action_state = _remove_private_keys(before_action_state)
+    after_action_state = _remove_private_keys(after_action_state)
+    return {
+        "action": action_name,
+        "name": test_name,
+        "input_state": before_action_state,
+        "expected_state": after_action_state,
+    }
+
+
 # one way to parameterize tests is to store the serialized state in a json file
 # and then load it for the test.
 def load_test_cases(file_name: str) -> tuple:
