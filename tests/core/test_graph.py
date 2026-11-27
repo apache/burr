@@ -95,6 +95,17 @@ def test__validate_transitions_redundant_transition():
         )
 
 
+def test__validate_transitions_default_must_be_last():
+    with pytest.raises(ValueError, match="unreachable"):
+        _validate_transitions(
+            [
+                ("counter", "result", default),
+                ("counter", "counter", Condition.expr("count < 10")),
+            ],
+            {"counter", "result"},
+        )
+
+
 def test__validate_actions_valid():
     _validate_actions([Result("test")])
 
@@ -130,6 +141,12 @@ def test_graph_builder_builds():
     )
     assert len(graph.actions) == 2
     assert len(graph.transitions) == 2
+
+
+def test_graph_builder_rejects_transition_after_default():
+    builder = GraphBuilder().with_transitions(("counter", "result"))
+    with pytest.raises(ValueError, match="unreachable"):
+        builder.with_transitions(("counter", "counter", Condition.expr("count < 10")))
 
 
 def test_graph_builder_with_graph():
