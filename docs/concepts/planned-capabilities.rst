@@ -17,99 +17,106 @@
    under the License.
 
 
-====================
-Planned Capabilities
-====================
+==================
+Roadmap and Status
+==================
 
-These are on the roadmap (and will be part of Burr in the imminent future), but have not been built yet.
+This page is a status report on notable Apache Burr capabilities, accurate as of October 2026.
+It records where each item stands -- shipped, in review, under discussion, or planned -- rather than
+making commitments or ranking priorities. Work happens in the open: proposals and design discussions
+go to the ``dev@burr.apache.org`` mailing list, and code goes through pull requests on
+`GitHub <https://github.com/apache/burr>`_. If something you need is missing, open an issue or start
+a thread.
 
-We build fast though, so let us know which ones you need and they'll be in there before you know it!
+-------
+Shipped
+-------
 
+Available in the current release.
 
-------------------------------------
-Evaluation & Annotation integrations
-------------------------------------
+* **State persistence and rehydration.** Save and reload application state with
+  ``ApplicationBuilder.initialize_from`` and the persister API. Built-in persisters cover in-memory,
+  SQLite, PostgreSQL, MongoDB, and Redis, with async variants. See
+  `State Persistence <https://burr.apache.org/concepts/state-persistence/>`_.
+* **Annotations in the tracking UI.** Annotate steps and spans of a run from the Burr UI; data lives
+  alongside the tracked application. See `Tracking <https://burr.apache.org/concepts/tracking/>`_
+  (introduced in `#383 <https://github.com/apache/burr/pull/383>`_).
+* **Restricted condition expressions.** ``Condition.safe_expr`` evaluates transition expressions under
+  an allowlisted AST grammar, for conditions that come from untrusted sources. See
+  `Conditions/Transitions <https://burr.apache.org/reference/conditions/>`_
+  (`#820 <https://github.com/apache/burr/pull/820>`_).
+* **Integrations.** Hamilton, Haystack, LangChain, Langfuse, OpenTelemetry (including Traceloop),
+  Pydantic, Ray, Amazon Bedrock, and Streamlit. See
+  `Integrations <https://burr.apache.org/reference/integrations/>`_.
+* **Dark mode in the UI.** Follows the system preference with a manual toggle
+  (`#830 <https://github.com/apache/burr/pull/830>`_).
+* **Security policy.** A published reporting process and security model in
+  `SECURITY.md <https://github.com/apache/burr/blob/main/SECURITY.md>`_
+  (`#944 <https://github.com/apache/burr/pull/944>`_).
 
-You can already annotate with the Burr UI. We have plans to:
+---------
+In review
+---------
 
-1. plug in metrics and custom callbacks/LLM as judge capabilities to enable you to evaluate what captured and annotated.
-2. SDK functionality to allow programmatic annotation and evaluation, as well as export and search of annotations.
+Open pull requests. Listing here means the code exists and is being reviewed, not that it will merge
+as-is.
 
------------------------------
-State Management/Immutability
------------------------------
+* **Exception transitions** via ``on_error`` capture and wildcard routing --
+  `#796 <https://github.com/apache/burr/pull/796>`_ (tracks
+  `issue #30 <https://github.com/apache/burr/issues/30>`_; this supersedes the earlier
+  ``error(APIException)`` sketch that used to live on this page).
+* **Durable execution** (suspend/resume with a durable journal on the context) --
+  `#786 <https://github.com/apache/burr/pull/786>`_; see the design discussion below.
+* **Visual builder and workspace mode** in the Burr UI --
+  `#687 <https://github.com/apache/burr/pull/687>`_.
+* **Claude Code skill** for working on Burr applications --
+  `#644 <https://github.com/apache/burr/pull/644>`_.
+* **Artifact/blob store** for large state values --
+  `#931 <https://github.com/apache/burr/pull/931>`_.
+* **Lower-level parallel streaming** -- `#836 <https://github.com/apache/burr/pull/836>`_.
+* **Mermaid graph visualization** -- `#861 <https://github.com/apache/burr/pull/861>`_.
+* **Aerospike persister** -- `#936 <https://github.com/apache/burr/pull/936>`_.
+* **Google Sheets persister** -- `#932 <https://github.com/apache/burr/pull/932>`_.
+* ``Application.get_prior_action`` -- `#943 <https://github.com/apache/burr/pull/943>`_.
+* **OrcaRouter agent example** -- `#896 <https://github.com/apache/burr/pull/896>`_.
+* **TypeScript implementation** of the core state machine --
+  `#728 <https://github.com/apache/burr/pull/728>`_.
+* **LiteLLM AI gateway integration** -- `#803 <https://github.com/apache/burr/pull/803>`_
+  (closed by inactivity on 2026-10-05 after the author added the requested end-to-end example;
+  revivable).
 
-We plan the ability to manage state in a few ways:
+----------------
+Under discussion
+----------------
 
-1. ``commit`` -- an internal tool to commit/compile a series of changes so that we have the latest state evaluated
-2. ``persist`` -- a user-facing API to persist state to a database. This will be pluggable by the user, and we will have a few built-in options (e.g. a simple in-memory store, a file store, a database store, etc...)
-3. ``hydrate`` -- a static method to hydrate state from a database. This will be pluggable by the user, and we will have a few built-in options that mirror those in ``persist`` options.
+Design threads on ``dev@burr.apache.org`` and open issues without an implementation yet.
 
-Currently state is immutable, but it utilizes an inefficient copy mechanism. This is out of expedience -- we don't anticipate this will
-be painful for the time being, but plan to build a more efficient functional paradigm. We will likely have:
+* **Durable execution design** --
+  `[DISCUSS] Durable execution in Burr <https://lists.apache.org/thread/v9nrtms7nq5noqj2ottw0r0tntohl8s5>`_
+  (May--October 2026); the implementation proposal is `#786`_ above.
+* **Builder direction** (code-picture-code round-tripping, Pyodide, roadmap) --
+  `[DISCUSS] Builder direction <https://lists.apache.org/thread/l9y4nk98wtn2rhpj9xgxszpbvq4psh7c>`_
+  and the earlier
+  `[discuss] Graph builder UI <https://lists.apache.org/thread/hst35owhcl8swv967rxlh9tpx75gwlrq>`_
+  (March 2026); related to `#687`_ above.
+* **Google Sheets persister design** --
+  `[DISCUSS] Google Sheets Persister design <https://lists.apache.org/thread/z6rmcsqb5b8t1o80z64cmnok6r6r23yy>`_
+  and `issue #213 <https://github.com/apache/burr/issues/213>`_; related to `#932`_ above.
+* **Interceptor lifecycle hook** --
+  `[discuss] adding interceptor lifecycle hook <https://lists.apache.org/thread/k4sq37opkmx0pywp40kqwqkc7x3yyvgn>`_
+  (November 2025, no implementation yet).
+* **Exception transitions** -- `issue #30`_ remains open while `#796`_ is reviewed.
 
-1. Each state object be a node in a linked list, with a pointer to the previous state. It carries a diff of the changes from the previous state.
-2. An ability to ``checkpoint`` (allowing for state garbage collection), and store state in memory/kill out the pointers.
+-------
+Planned
+-------
 
-We will also consider having the ability to have a state solely backed by redis (and not memory), but we are still thinking through the API.
+Intentions carried over from the previous version of this page that have not shipped and have no open
+pull request. No dates are attached.
 
-----------------------
-Compilation/Validation
-----------------------
-
-We currently do not validate that the chain of actions provide a valid state, although we plan to walk the graph to ensure that no "impossible"
-situation is reached. E.G. if an action reads from a state that is not written to (or not initialized), we will raise an error, likely upon calling `validate`.
-We may be changing the behavior with defaults over time.
-
---------------------
-Exception Management
---------------------
-
-Currently, exceptions will break the control flow of an action, stopping the program early. Thus,
-if an exception is expected, the program will stop early. We will be adding the ability to conditionally transition based
-on exceptions, which will allow you to transition to an error-handling (or retry) action that does not
-need the full outputs of the prior action.
-
-Here is what it would look like in the current API:
-
-.. code-block:: python
-
-    @action(reads=["attempts"], writes=["output", "attempts"])
-    def some_flaky_action(state: State, max_retries: int=3) -> State:
-        result = {"output": None, "attempts": state["attempts"] + 1}
-        try:
-            result["output"] = call_some_api(...)
-        except APIException as e:
-            if state["attempts"] >= max_retries:
-               raise e
-        return state.update(**result)
-
-One could imagine adding it as a condition (a few possibilities)
-
-.. code-block:: python
-
-    @action(reads=[], writes=["output"])
-    def some_flaky_action(state: State) -> State
-        result = {"output": call_some_api(...)}
-        return state.update(**result)
-
-    builder.with_actions(
-       some_flaky_action=some_flaky_action
-    ).with_transitions(
-       (
-          "some_flaky_action",
-          "some_flaky_action",
-          error(APIException) # infinite retries
-          error(APIException, max=3) # 3 visits to this edge then it gets reset if this is not chosen
-          # That's stored in state
-       )
-    )
-
-Will have to come up with ergonomic APIs -- the above are just some ideas.
-
-------------
-Integrations
-------------
-
-We already have support for Haystack, Hamilton, and LangChain.
-Please request any other integrations you'd like to see.
+* **Build-time graph validation.** Walk the graph at build time and flag impossible situations, such as
+  an action that reads a state field no action writes and no initial state provides.
+* **Evaluation on annotations.** Metrics, custom callbacks, and LLM-as-judge over annotated runs, plus
+  SDK support for programmatic annotation, export, and search.
+* **FastAPI integration** for serving Burr applications without hand-writing the REST layer.
+* **More storage backends** beyond the persisters listed above.
