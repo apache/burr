@@ -161,6 +161,37 @@ def test_application_tracks_end_to_end_broken(tmpdir: str):
     assert len(post_run[-1].exception) > 0 and "Broken" in post_run[-1].exception
 
 
+async def test_astream_result_preserves_non_streaming_action_exception(tmpdir: str):
+    """A non-streaming action failure must reach the caller unchanged when tracking is on.
+
+    Regression test for https://github.com/apache/burr/issues/999 -- the local tracking client
+    used to raise ``KeyError`` from ``post_end_stream`` for a stream that was never started,
+    masking the exception the action raised.
+    """
+    app_id = str(uuid.uuid4())
+    log_dir = os.path.join(tmpdir, "tracking")
+
+    @action(reads=[], writes=[])
+    async def fail(state: State) -> State:
+        raise ValueError("original failure")
+
+    app = (
+        ApplicationBuilder()
+        .with_actions(fail)
+        .with_entrypoint("fail")
+        .with_tracker(
+            project="test_astream_result_preserves_exception",
+            tracker="local",
+            params={"storage_dir": log_dir},
+        )
+        .with_identifiers(app_id=app_id)
+        .build()
+    )
+
+    with pytest.raises(ValueError, match="original failure"):
+        await app.astream_result(halt_after=["fail"])
+
+
 @pytest.mark.parametrize(
     "input_string, on_windows, expected_result",
     [
