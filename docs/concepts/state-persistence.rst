@@ -60,6 +60,21 @@ Burr `applications` are, by default, keyed on two entities:
 In the case of a chatbot, the ``app_id`` could be a uuid, and the ``partition_key`` could be the user's ID or email, etc.
 Note that ``partition_key`` can be `None` if this is not relevant. A UUID is always generated for the ``app_id`` if not provided.
 
+For ``InMemoryPersister``, ``AsyncInMemoryPersister``, and ``SQLitePersister``,
+``None`` and the empty string ``""`` identify the same default partition when
+saving, loading, or listing applications. Checkpoints loaded from this default
+partition use ``""`` as their partition key. Non-empty keys, including
+whitespace-only strings, remain distinct.
+
+.. note::
+
+    Earlier versions of the in-memory persisters treated ``None`` and ``""`` as
+    separate storage keys. They now share one application history: using both
+    aliases for the same ``app_id`` does not create two isolated applications.
+    In-memory loads still select the last saved checkpoint, or the last save for
+    a requested sequence ID. Use distinct non-empty keys if you need separate
+    partitions.
+
 You set these values using the :py:meth:`with_identifiers() <burr.core.application.ApplicationBuilder.with_identifiers>` method.
 
 Note: to access application-level metadata such as ``app_id``, ``partition_key``, ``sequence_id``, and ``action_name`` in your running application, you can have the :py:class:`ApplicationContext <burr.core.application.ApplicationContext>`
