@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from burr.core import State
-from burr.core.persistence import InMemoryPersister, SQLLitePersister
+from burr.core.persistence import InMemoryPersister, PersistenceConflictError, SQLLitePersister
 
 
 @pytest.fixture(
@@ -266,6 +266,29 @@ def test_sqlite_persister_save_without_initialize_raises_runtime_error():
             )
     finally:
         persister.cleanup()
+
+
+def test_sqlite_persister_save_of_a_saved_step_raises_conflict_and_releases_the_lock(tmp_path):
+    """Two persisters on one database file stand for two processes running the same app."""
+    db_path = str(tmp_path / "conflict.db")
+    # a short timeout makes a held write lock fail the test quickly instead of after 5 seconds
+    first = SQLLitePersister(db_path=db_path, table_name="t", connect_kwargs={"timeout": 0.1})
+    first.initialize()
+    second = SQLLitePersister(db_path=db_path, table_name="t", connect_kwargs={"timeout": 0.1})
+    try:
+        first.save("pk", "app", 0, "step", State({"writer": "first"}), "completed")
+        with pytest.raises(PersistenceConflictError) as conflict:
+            second.save("pk", "app", 0, "step", State({"writer": "second"}), "completed")
+        assert isinstance(conflict.value, ValueError)
+        assert (conflict.value.partition_key, conflict.value.app_id) == ("pk", "app")
+        assert conflict.value.sequence_id == 0
+        # neither connection holds the write lock, so both can save the next steps
+        first.save("pk", "app", 1, "step", State({"writer": "first"}), "completed")
+        second.save("pk", "app", 2, "step", State({"writer": "second"}), "completed")
+        assert second.load("pk", "app", 0)["state"]["writer"] == "first"
+    finally:
+        first.cleanup()
+        second.cleanup()
 
 
 def test_sqlite_persister_list_app_ids_without_initialize_raises_runtime_error():

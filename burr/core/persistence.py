@@ -51,6 +51,24 @@ class PersistedStateData(TypedDict):
     status: str
 
 
+class PersistenceConflictError(ValueError):
+    """Raised by ``save`` when the step it is asked to save is already saved.
+
+    A step is saved once, and a retried step gets a new sequence_id, so this means another writer
+    (another process, or another application object with the same app_id) saved this step first.
+    It subclasses ``ValueError`` because that is what the Redis and MongoDB persisters raised before.
+    """
+
+    def __init__(self, partition_key: Optional[str], app_id: str, sequence_id: int):
+        self.partition_key = partition_key
+        self.app_id = app_id
+        self.sequence_id = sequence_id
+        super().__init__(
+            f"State for partition_key={partition_key!r}, app_id={app_id!r}, "
+            f"sequence_id={sequence_id} is already saved. Another writer saved this step first."
+        )
+
+
 class BaseStateLoader(abc.ABC):
     """Base class for state initialization. This goes together with a BaseStateSaver to form the
     database for your application."""
@@ -147,6 +165,7 @@ class BaseStateSaver(abc.ABC):
         :param state: The current state of the application
         :param status: The status of this state, either "completed" or "failed". If "failed" the state is what it was
             before the action was applied.
+        :raises PersistenceConflictError: if this step is already saved, by another writer.
         """
         pass
 
@@ -192,6 +211,7 @@ class AsyncBaseStateSaver(abc.ABC):
         :param state: The current state of the application
         :param status: The status of this state, either "completed" or "failed". If "failed" the state is what it was
             before the action was applied.
+        :raises PersistenceConflictError: if this step is already saved, by another writer.
         """
         pass
 
@@ -591,6 +611,12 @@ class SQLitePersister(BaseStatePersister, BaseCopyable):
                 raise RuntimeError(
                     _UNINITIALIZED_PERSISTER_ERROR.format(table_name=self.table_name)
                 ) from e
+            raise
+        except sqlite3.IntegrityError as e:
+            # the failed INSERT leaves a transaction open, which holds the database's write lock
+            self.connection.rollback()
+            if "UNIQUE constraint failed" in str(e):
+                raise PersistenceConflictError(partition_key, app_id, sequence_id) from e
             raise
         self.connection.commit()
 

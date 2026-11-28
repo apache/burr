@@ -22,6 +22,7 @@ import pickle
 import pytest
 
 from burr.core import state
+from burr.core.persistence import PersistenceConflictError
 from burr.integrations.persisters.b_asyncpg import AsyncPostgreSQLPersister
 from burr.integrations.persisters.b_psycopg2 import PostgreSQLPersister
 
@@ -139,6 +140,34 @@ def test_serialization_with_pickle(postgresql_persister):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+def test_save_of_a_saved_step_raises_conflict_and_keeps_the_connection_usable(
+    postgresql_persister,
+):
+    postgresql_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+    with pytest.raises(PersistenceConflictError):
+        postgresql_persister.save("pk", "app_id", 1, "pos", state.State({"a": 2}), "completed")
+    # the failed INSERT was rolled back, so the connection still runs statements
+    assert postgresql_persister.load("pk", "app_id", 1)["state"].get_all() == {"a": 1}
+    postgresql_persister.save("pk", "app_id", 2, "pos", state.State({"a": 3}), "completed")
+
+
+def test_concurrent_saves_of_one_step_save_it_once(
+    postgresql_persister, assert_one_concurrent_save_wins
+):
+    other = PostgreSQLPersister.from_values(
+        db_name="postgres",
+        user="postgres",
+        password="postgres",
+        host="localhost",
+        port=5432,
+        table_name="testtable",
+    )
+    try:
+        assert_one_concurrent_save_wins([postgresql_persister, other])
+    finally:
+        other.cleanup()
+
+
 @pytest.fixture
 async def asyncpostgresql_persister():
     persister = await AsyncPostgreSQLPersister.from_values(
@@ -226,3 +255,18 @@ async def test_async_list_app_ids_is_unique_and_newest_first(asyncpostgresql_per
 async def test_async_load_nonexistent_key(asyncpostgresql_persister):
     state_data = await asyncpostgresql_persister.load("pk", "nonexistent_key")
     assert state_data is None
+
+
+async def test_async_save_of_a_saved_step_raises_conflict(asyncpostgresql_persister):
+    await asyncpostgresql_persister.save(
+        "pk", "app_id", 1, "pos", state.State({"a": 1}), "completed"
+    )
+    with pytest.raises(PersistenceConflictError):
+        await asyncpostgresql_persister.save(
+            "pk", "app_id", 1, "pos", state.State({"a": 2}), "completed"
+        )
+    data = await asyncpostgresql_persister.load("pk", "app_id", 1)
+    assert data["state"].get_all() == {"a": 1}
+    await asyncpostgresql_persister.save(
+        "pk", "app_id", 2, "pos", state.State({"a": 3}), "completed"
+    )

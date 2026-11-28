@@ -15,13 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import asyncio
 import os
 import pickle
+import uuid
 
 import pytest
 import redis
 
 from burr.core import state
+from burr.core.persistence import PersistenceConflictError
 from burr.integrations.persisters.b_redis import (
     AsyncRedisBasePersister,
     RedisBasePersister,
@@ -146,6 +149,23 @@ def test_serialization_with_pickle(redis_persister_with_ns):
     assert data["state"].get_all() == {"a": 1, "b": 2}
 
 
+def test_save_of_a_saved_step_raises_conflict(redis_persister):
+    redis_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+    with pytest.raises(PersistenceConflictError):
+        redis_persister.save("pk", "app_id", 1, "pos", state.State({"a": 2}), "completed")
+    assert redis_persister.load("pk", "app_id", 1)["state"].get_all() == {"a": 1}
+
+
+def test_concurrent_saves_of_one_step_save_it_once(
+    redis_persister, assert_one_concurrent_save_wins
+):
+    other = RedisBasePersister.from_values(host="localhost", port=6379, db=0)
+    try:
+        assert_one_concurrent_save_wins([redis_persister, other])
+    finally:
+        other.cleanup()
+
+
 @pytest.fixture
 async def async_redis_persister():
     persister = AsyncRedisBasePersister.from_values(host="localhost", port=6379, db=1)
@@ -216,3 +236,37 @@ async def test_async_list_app_ids_with_ns(async_redis_persister_with_ns):
 async def test_async_load_nonexistent_key_with_ns(async_redis_persister_with_ns):
     state_data = await async_redis_persister_with_ns.load("pk", "nonexistent_key")
     assert state_data is None
+
+
+async def test_async_save_of_a_saved_step_raises_conflict(async_redis_persister):
+    await async_redis_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+    with pytest.raises(PersistenceConflictError):
+        await async_redis_persister.save(
+            "pk", "app_id", 1, "pos", state.State({"a": 2}), "completed"
+        )
+    data = await async_redis_persister.load("pk", "app_id", 1)
+    assert data["state"].get_all() == {"a": 1}
+
+
+async def test_async_concurrent_saves_of_one_step_save_it_once(async_redis_persister):
+    other = AsyncRedisBasePersister.from_values(host="localhost", port=6379, db=1)
+    persisters = [async_redis_persister, other]
+    try:
+        for _ in range(50):
+            app_id = f"race-{uuid.uuid4()}"
+            outcomes = await asyncio.gather(
+                *(
+                    persister.save(
+                        "race", app_id, 0, "step", state.State({"writer": writer}), "completed"
+                    )
+                    for writer, persister in enumerate(persisters)
+                ),
+                return_exceptions=True,
+            )
+            winners = [writer for writer, raised in enumerate(outcomes) if raised is None]
+            assert len(winners) == 1, outcomes
+            assert isinstance(outcomes[1 - winners[0]], PersistenceConflictError), outcomes
+            data = await async_redis_persister.load("race", app_id, 0)
+            assert data["state"]["writer"] == winners[0]
+    finally:
+        await other.cleanup()

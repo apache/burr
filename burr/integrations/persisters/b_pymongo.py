@@ -21,8 +21,9 @@ from datetime import datetime, timezone
 from importlib.metadata import version as get_version
 from typing import Literal, Optional
 
-from pymongo import MongoClient
+from pymongo import ASCENDING, MongoClient
 from pymongo.driver_info import DriverInfo
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from burr.core import persistence, state
 
@@ -60,6 +61,9 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
     Note: this is called MongoDBBasePersister because we had to change the constructor and wanted to make
      this change backwards compatible.
     """
+
+    # set once save() has tried to create the unique index, see _ensure_unique_index
+    _unique_index_checked = False
 
     @classmethod
     def from_config(cls, config: dict) -> "MongoDBBasePersister":
@@ -118,6 +122,27 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
     def set_serde_kwargs(self, serde_kwargs: dict):
         """Sets the serde_kwargs for the persister."""
         self.serde_kwargs = serde_kwargs
+
+    def _ensure_unique_index(self):
+        """Creates a unique index on (partition_key, app_id, sequence_id), which makes the database
+        reject a second save of the same step even when two writers save it at once. This runs on
+        the first save rather than in the constructor, so creating a persister needs no server."""
+        if self._unique_index_checked:
+            return
+        try:
+            self.collection.create_index(
+                [("partition_key", ASCENDING), ("app_id", ASCENDING), ("sequence_id", ASCENDING)],
+                unique=True,
+            )
+        except OperationFailure as e:
+            # e.g. the collection already holds duplicates, or the user may not create indexes
+            logger.warning(
+                "Could not create a unique index on (partition_key, app_id, sequence_id) in %s, so "
+                "two writers saving the same step at once can both succeed: %s",
+                self.collection.full_name,
+                e,
+            )
+        self._unique_index_checked = True
 
     def list_app_ids(self, partition_key: str, **kwargs) -> list[str]:
         """List the app ids for a given partition key."""
@@ -184,21 +209,25 @@ class MongoDBBasePersister(persistence.BaseStatePersister):
 
         :return:
         """
+        self._ensure_unique_index()
         key = {"partition_key": partition_key, "app_id": app_id, "sequence_id": sequence_id}
         if self.collection.find_one(key):
-            raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")
+            raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id)
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        self.collection.insert_one(
-            {
-                "partition_key": partition_key,
-                "app_id": app_id,
-                "sequence_id": sequence_id,
-                "position": position,
-                "state": json_state,
-                "status": status,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        try:
+            self.collection.insert_one(
+                {
+                    "partition_key": partition_key,
+                    "app_id": app_id,
+                    "sequence_id": sequence_id,
+                    "position": position,
+                    "state": json_state,
+                    "status": status,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        except DuplicateKeyError as e:
+            raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id) from e
 
     def cleanup(self):
         """Closes the connection to the database."""

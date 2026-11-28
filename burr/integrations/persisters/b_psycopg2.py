@@ -255,11 +255,16 @@ class PostgreSQLPersister(persistence.BaseStatePersister):
         )
         cursor = self.connection.cursor()
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        cursor.execute(
-            f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
-            (partition_key, app_id, sequence_id, position, json_state, status),
-        )
+        try:
+            cursor.execute(
+                f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (partition_key, app_id, sequence_id, position, json_state, status),
+            )
+        except psycopg2.errors.UniqueViolation as e:
+            # without a rollback, every later statement on this connection fails
+            self.connection.rollback()
+            raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id) from e
         self.connection.commit()
 
     def cleanup(self):

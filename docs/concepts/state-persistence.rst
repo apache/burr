@@ -237,6 +237,25 @@ or manually close the connection to the database, by using the `.cleanup()` meth
 
 to ensure no database connection leakage.
 
+Running the same application in two places
+------------------------------------------
+
+When two processes (or two application objects) run the same ``app_id`` at the same time, both
+try to save the same step under the same ``sequence_id``. The SQLite, PostgreSQL, Redis and MongoDB
+persisters save the first one and raise
+:py:class:`PersistenceConflictError <burr.core.persistence.PersistenceConflictError>` for the other,
+and stay usable afterwards. The error is a ``ValueError``, so code that catches ``ValueError`` from
+the Redis and MongoDB persisters keeps working.
+
+Burr does not lock an application while a step runs, so the writer that gets the error has already
+run the action, including its side effects. Catch the error to stop that writer, and load the saved
+state before running the application again.
+
+The MongoDB persister relies on a unique index on ``(partition_key, app_id, sequence_id)``, which it
+creates on its first save. If it cannot create it, for example because the collection already holds
+duplicate documents, it logs a warning; until the index exists, two writers saving at once can both
+succeed.
+
 
 Customizing State Persistence
 -----------------------------
@@ -244,6 +263,8 @@ Customizing State Persistence
 Burr exposes two APIs :py:class:`BaseStatePersister <burr.core.persistence.BaseStatePersister>` (sync) and
 :py:class:`AsyncBaseStatePersister <burr.core.persistence.AsyncBaseStatePersister>` (async) for custom state persistence. Implement,
 pass into the above functions, and you can write to whatever database you want! Please contribute back to the community if you do so.
+If your database can tell that a step is already saved, raise
+:py:class:`PersistenceConflictError <burr.core.persistence.PersistenceConflictError>` from ``save`` as the built-in persisters do.
 
 
 Loading from the Tracker

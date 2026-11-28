@@ -418,6 +418,8 @@ class AsyncPostgreSQLPersister(persistence.AsyncBaseStatePersister, BaseCopyable
             await conn.execute(
                 query, partition_key, app_id, sequence_id, position, json_state, status
             )
+        except asyncpg.UniqueViolationError as e:
+            raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id) from e
         finally:
             await self._release_connection(conn, acquired)
 

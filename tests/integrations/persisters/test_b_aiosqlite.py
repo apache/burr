@@ -22,6 +22,7 @@ import aiosqlite
 import pytest
 
 from burr.core import ApplicationBuilder, State, action
+from burr.core.persistence import PersistenceConflictError
 from burr.integrations.persisters.b_aiosqlite import AsyncSQLitePersister
 
 
@@ -256,6 +257,25 @@ async def test_async_sqlite_from_values_as_context_manager(tmp_path):
         loaded = await persister.load("pk", "app1")
         assert loaded is not None
         assert loaded["state"] == State({"k": "v"})
+
+
+async def test_async_sqlite_save_of_a_saved_step_raises_conflict_and_releases_the_lock(tmp_path):
+    """Two persisters on one database file stand for two processes running the same app."""
+    db_path = str(tmp_path / "conflict.db")
+    # a short timeout makes a held write lock fail the test quickly instead of after 5 seconds
+    connect_kwargs = {"timeout": 0.1}
+    async with AsyncSQLitePersister.from_values(
+        db_path=db_path, connect_kwargs=connect_kwargs
+    ) as first, AsyncSQLitePersister.from_values(
+        db_path=db_path, connect_kwargs=connect_kwargs
+    ) as second:
+        await first.initialize()
+        await first.save("pk", "app", 0, "step", State({"writer": "first"}), "completed")
+        with pytest.raises(PersistenceConflictError):
+            await second.save("pk", "app", 0, "step", State({"writer": "second"}), "completed")
+        await first.save("pk", "app", 1, "step", State({"writer": "first"}), "completed")
+        await second.save("pk", "app", 2, "step", State({"writer": "second"}), "completed")
+        assert (await second.load("pk", "app", 0))["state"]["writer"] == "first"
 
 
 async def test_async_sqlite_from_config_as_context_manager(tmp_path):

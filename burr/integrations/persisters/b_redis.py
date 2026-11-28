@@ -181,23 +181,34 @@ class RedisBasePersister(persistence.BaseStatePersister):
         if partition_key is None:
             partition_key = self.PARTITION_KEY_DEFAULT
         key = self.create_key(app_id, partition_key, sequence_id)
-        if self.connection.exists(key):
-            raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        self.connection.hset(
-            key,
-            mapping={
-                "partition_key": partition_key,
-                "app_id": app_id,
-                "sequence_id": sequence_id,
-                "position": position,
-                "state": json_state,
-                "status": status,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
-        self.connection.zadd(namespaced_partition_key, {app_id: sequence_id})
+        # WATCH makes the existence check and the writes one step: if another writer saves this key
+        # in between, the transaction does not run.
+        with self.connection.pipeline() as pipe:
+            try:
+                pipe.watch(key)
+                if pipe.exists(key):
+                    raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id)
+                pipe.multi()
+                pipe.hset(
+                    key,
+                    mapping={
+                        "partition_key": partition_key,
+                        "app_id": app_id,
+                        "sequence_id": sequence_id,
+                        "position": position,
+                        "state": json_state,
+                        "status": status,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                pipe.zadd(namespaced_partition_key, {app_id: sequence_id})
+                pipe.execute()
+            except redis.WatchError as e:
+                raise persistence.PersistenceConflictError(
+                    partition_key, app_id, sequence_id
+                ) from e
 
     def cleanup(self):
         """Closes the connection to the database."""
@@ -370,23 +381,34 @@ class AsyncRedisBasePersister(persistence.AsyncBaseStatePersister):
         if partition_key is None:
             partition_key = self.PARTITION_KEY_DEFAULT
         key = self.create_key(app_id, partition_key, sequence_id)
-        if await self.connection.exists(key):
-            raise ValueError(f"partition_key:app_id:sequence_id[{key}] already exists.")
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        await self.connection.hset(
-            key,
-            mapping={
-                "partition_key": partition_key,
-                "app_id": app_id,
-                "sequence_id": sequence_id,
-                "position": position,
-                "state": json_state,
-                "status": status,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
         namespaced_partition_key = add_namespace_to_partition_key(partition_key, self.namespace)
-        await self.connection.zadd(namespaced_partition_key, {app_id: sequence_id})
+        # WATCH makes the existence check and the writes one step: if another writer saves this key
+        # in between, the transaction does not run.
+        async with self.connection.pipeline() as pipe:
+            try:
+                await pipe.watch(key)
+                if await pipe.exists(key):
+                    raise persistence.PersistenceConflictError(partition_key, app_id, sequence_id)
+                pipe.multi()
+                pipe.hset(
+                    key,
+                    mapping={
+                        "partition_key": partition_key,
+                        "app_id": app_id,
+                        "sequence_id": sequence_id,
+                        "position": position,
+                        "state": json_state,
+                        "status": status,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                pipe.zadd(namespaced_partition_key, {app_id: sequence_id})
+                await pipe.execute()
+            except redis.WatchError as e:
+                raise persistence.PersistenceConflictError(
+                    partition_key, app_id, sequence_id
+                ) from e
 
     async def cleanup(self):
         """Closes the connection to the database."""
