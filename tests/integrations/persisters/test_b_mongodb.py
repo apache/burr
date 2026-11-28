@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import logging
 import os
 import pickle
 
@@ -22,6 +23,7 @@ import pytest
 from pymongo.errors import InvalidOperation
 
 from burr.core import state
+from burr.core.persistence import PersistenceConflictError
 from burr.integrations.persisters.b_mongodb import MongoDBPersister
 from burr.integrations.persisters.b_pymongo import MongoDBBasePersister
 
@@ -120,3 +122,42 @@ def test_context_manager_closes_client():
         assert persister.load("pk", "app_id") is None
     with pytest.raises(InvalidOperation):
         persister.load("pk", "app_id")
+
+
+def test_save_of_a_saved_step_raises_conflict(mongodb_persister):
+    mongodb_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+    with pytest.raises(PersistenceConflictError):
+        mongodb_persister.save("pk", "app_id", 1, "pos", state.State({"a": 2}), "completed")
+    assert mongodb_persister.load("pk", "app_id", 1)["state"].get_all() == {"a": 1}
+
+
+def test_first_save_creates_a_unique_index_on_the_step(mongodb_persister):
+    mongodb_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+    indexes = mongodb_persister.collection.index_information().values()
+    step_key = [("partition_key", 1), ("app_id", 1), ("sequence_id", 1)]
+    assert any(index["key"] == step_key and index.get("unique") for index in indexes)
+
+
+def test_concurrent_saves_of_one_step_save_it_once(
+    mongodb_persister, assert_one_concurrent_save_wins
+):
+    other = MongoDBBasePersister.from_values(
+        uri="mongodb://localhost:27017", db_name="testdb", collection_name="testcollection"
+    )
+    try:
+        assert_one_concurrent_save_wins([mongodb_persister, other])
+    finally:
+        other.cleanup()
+
+
+def test_save_warns_once_when_duplicates_prevent_the_unique_index(mongodb_persister, caplog):
+    """A collection written before the index existed can hold the same step twice."""
+    duplicate = {"partition_key": "pk", "app_id": "old_app", "sequence_id": 0}
+    mongodb_persister.collection.insert_many([dict(duplicate), dict(duplicate)])
+    with caplog.at_level(logging.WARNING, logger="burr.integrations.persisters.b_pymongo"):
+        mongodb_persister.save("pk", "app_id", 1, "pos", state.State({"a": 1}), "completed")
+        mongodb_persister.save("pk", "app_id", 2, "pos", state.State({"a": 2}), "completed")
+    assert len([r for r in caplog.records if "unique index" in r.getMessage()]) == 1
+    assert mongodb_persister.load("pk", "app_id")["state"].get_all() == {"a": 2}
+    with pytest.raises(PersistenceConflictError):
+        mongodb_persister.save("pk", "app_id", 2, "pos", state.State({"a": 3}), "completed")

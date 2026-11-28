@@ -96,6 +96,11 @@ Internally, this interface combines the following two interfaces:
 
     .. automethod:: __init__
 
+``save`` raises this error when the step is already saved:
+
+.. autoclass:: burr.core.persistence.PersistenceConflictError
+   :show-inheritance:
+
 
 
 Supported Sync Implementations

@@ -24,7 +24,11 @@ import aiosqlite
 from burr.common.async_utils import _AsyncPersisterContextManager
 from burr.common.types import BaseCopyable
 from burr.core import State
-from burr.core.persistence import AsyncBaseStatePersister, PersistedStateData
+from burr.core.persistence import (
+    AsyncBaseStatePersister,
+    PersistedStateData,
+    PersistenceConflictError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -311,11 +315,18 @@ class AsyncSQLitePersister(AsyncBaseStatePersister, BaseCopyable):
         )
         cursor = await self.connection.cursor()
         json_state = json.dumps(state.serialize(**self.serde_kwargs))
-        await cursor.execute(
-            f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
-            f"VALUES (?, ?, ?, ?, ?, ?)",
-            (partition_key, app_id, sequence_id, position, json_state, status),
-        )
+        try:
+            await cursor.execute(
+                f"INSERT INTO {self.table_name} (partition_key, app_id, sequence_id, position, state, status) "
+                f"VALUES (?, ?, ?, ?, ?, ?)",
+                (partition_key, app_id, sequence_id, position, json_state, status),
+            )
+        except aiosqlite.IntegrityError as e:
+            # the failed INSERT leaves a transaction open, which holds the database's write lock
+            await self.connection.rollback()
+            if "UNIQUE constraint failed" in str(e):
+                raise PersistenceConflictError(partition_key, app_id, sequence_id) from e
+            raise
         await self.connection.commit()
 
     async def cleanup(self):
