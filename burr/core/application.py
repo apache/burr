@@ -2759,6 +2759,15 @@ class ApplicationBuilder(Generic[StateType]):
             self.sequence_id = load_result["sequence_id"]
             status = load_result["status"]
             if self.resume_at_next_action:
+                if last_position is not None and self.graph_builder and self.graph_builder.actions:
+                    action_names = {action.name for action in self.graph_builder.actions}
+                    if last_position not in action_names:
+                        raise ValueError(
+                            f"Cannot resume from saved action {last_position!r}: it is not in the "
+                            f"application graph (partition_key={partition_key!r}, "
+                            f"app_id={app_id!r}, sequence_id={self.sequence_id}). "
+                            f"Available actions: {', '.join(sorted(action_names))}."
+                        )
                 # if we're supposed to resume where we saved from
                 if status == "completed":
                     # completed means we set prior step to current to go to next action

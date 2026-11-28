@@ -71,6 +71,7 @@ from burr.core.persistence import (
     BaseStateLoader,
     BaseStatePersister,
     DevNullPersister,
+    InMemoryPersister,
     PersistedStateData,
     PersisterHookAsync,
     SQLLitePersister,
@@ -5101,6 +5102,33 @@ def test_application__process_control_flow_params():
     assert sorted(halt_after) == ["test_action", "test_action_2"]
     assert halt_before == ["test_action"]
     assert inputs == {}
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_initialize_from_rejects_unknown_saved_action(status):
+    @action(reads=[], writes=[])
+    def current_action(state: State) -> State:
+        return state
+
+    persister = InMemoryPersister()
+    persister.save("my-partition", "my-app", 3, "old_action", State(), status)
+    builder = (
+        ApplicationBuilder()
+        .with_actions(current_action)
+        .initialize_from(
+            initializer=persister,
+            resume_at_next_action=True,
+            default_state={},
+            default_entrypoint="current_action",
+        )
+        .with_identifiers(partition_key="my-partition", app_id="my-app")
+    )
+
+    with pytest.raises(ValueError, match="Cannot resume from saved action 'old_action'") as exc:
+        builder.build()
+
+    for detail in ("my-partition", "my-app", "sequence_id=3", "current_action"):
+        assert detail in str(exc.value)
 
 
 def test_initialize_from_applies_override_state_values():
